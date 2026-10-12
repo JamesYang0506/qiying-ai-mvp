@@ -26,6 +26,17 @@ python server.py --port 8765
 
 运行验证：`python -m unittest discover -s tests -v`。
 
+页面默认保持空白，等待导入数据，不自动加载演示样例。`data/samples/demo.json` 仅用于开发验证，内容全部为合成数据。
+
+团队成员查看本版源码时，请切换到 `feat/profit-model-dashboard` 分支。首次下载可执行：
+
+```powershell
+git clone --branch feat/profit-model-dashboard https://github.com/JamesYang0506/qiying-ai-mvp.git
+cd qiying-ai-mvp
+python -m pip install -r requirements.txt
+python server.py --port 8765
+```
+
 字段、计算边界及模板说明见 [输入格式与使用说明](docs/input_format.md)。计算模块入口为 `profit_model.engine.calculate(dataset)`，与页面及服务分离；现有团队公共接口文档未改动。
 
 ## 分工

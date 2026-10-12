@@ -43,7 +43,7 @@ function details(){const r=result.orders.find(r=>r.order_id===selected);if(!r){$
   const messages=result.issues.filter(x=>x.order_id===selected&&x.code!=='LOSS').map(x=>x.message);$('detail-missing').textContent=messages.length?messages.join('；'):r.estimates.length?'估算项：'+r.estimates.map(c=>names[c]).join('、'):'适用成本范围已声明完整。实际准确性仍以企业认可结果核对。';
   $('layers').innerHTML=[['场内暂算利润',r.inside_profit,'阶段观察；仅扣已归集场内生产成本'],['生产毛利',r.production_profit,states[r.production_status]+' · 扣除完整生产成本'],['订单管理利润',r.management_profit,states[r.management_status]+' · 再扣期间及其他订单费用']].map(([title,v,sub])=>`<div class="layer"><div><span>${title}</span><small>${sub}</small></div><strong class="${sign(v)}">${v===null?'待补':money(v)}</strong></div>`).join('');trace();
 }
-function trace(){const rows=result[traceMode].filter(x=>x.order_id===selected);const columns=traceMode==='costs'?[['record_id','成本记录'],['category','类别'],['amount','金额/元'],['status','状态'],['source','来源'],['method','方法']]:[['pool_id','费用池'],['period','期间'],['pool_amount','池金额'],['base','订单基数'],['total_base','完整分母'],['base_unit','单位'],['amount','本单分摊'],['unallocated','池未分摊余额'],['rounding_adjustment','尾差调整']];
+function trace(){if(!result)return;const rows=result[traceMode].filter(x=>x.order_id===selected);const columns=traceMode==='costs'?[['record_id','成本记录'],['category','类别'],['amount','金额/元'],['status','状态'],['source','来源'],['method','方法']]:[['pool_id','费用池'],['period','期间'],['pool_amount','池金额'],['base','订单基数'],['total_base','完整分母'],['base_unit','单位'],['amount','本单分摊'],['unallocated','池未分摊余额'],['rounding_adjustment','尾差调整']];
   const display=(key,v)=>v===null?'—':key==='category'?names[v]:key==='status'?recordStates[v]:key==='method'?({actual:'实际净耗用',bom:'BOM估算',direct:'直接归集',allocation:'费用分摊'}[v]||v):v;
   $('trace-table').innerHTML=rows.length?`<table><thead><tr>${columns.map(([,title])=>`<th>${title}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${columns.map(([key])=>`<td>${esc(display(key,r[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<div class="empty">该订单没有此类明细</div>';
 }
@@ -51,4 +51,17 @@ async function exportCurrent(){if(!result||busy)return;setBusy(true);try{const r
 $('demo').addEventListener('click',demo);$('upload').addEventListener('change',e=>upload(e.target.files[0]));$('export').addEventListener('click',exportCurrent);
 for(const id of ['mode','state'])$(id).addEventListener('change',render);$('search').addEventListener('input',render);
 $('cost-tab').addEventListener('click',()=>{traceMode='costs';trace();});$('allocation-tab').addEventListener('click',()=>{traceMode='allocations';trace();});
-demo();
+// Start empty; importing a file is the only automatic calculation trigger.
+$('notice').textContent='暂无订单数据 · 请导入真实数据后开始计算。';
+$('scope').textContent='等待导入 · 当前 0 笔订单';
+$('metric-scope').textContent='尚未导入数据';
+$('complete').textContent='0 / 0';
+$('completeness').textContent='等待导入后检查成本完整度';
+$('order-count').textContent='0';
+$('empty').hidden=false;
+$('empty').textContent='暂无订单数据，请先导入 Excel 或 JSON 文件';
+$('chart').innerHTML='<div class="empty">导入数据后显示订单利润对比</div>';
+$('attention').innerHTML='<div class="empty">导入数据后检查亏损与缺失项</div>';
+$('breakdown').innerHTML='<div class="empty">暂无成本数据</div>';
+$('layers').innerHTML='<div class="empty">导入数据后计算三层利润</div>';
+setBusy(false);
