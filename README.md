@@ -25,6 +25,10 @@
 
 ## 启动网站
 
+Windows 10/11 64位使用者可直接下载 [v0.3.0免安装版](https://github.com/JamesYang0506/qiying-ai-mvp/releases/tag/v0.3.0)，完整解压后双击 `QiYingProfit.exe`。不需要另外安装Python、Node.js或Excel；本地Qwen分析仍需自行安装Ollama和模型。使用说明及数据备份见 [下载版说明](docs/windows-release-guide.txt)。
+
+以下为从源码运行的方式：
+
 需要 Python 3.10+。Excel 导入导出使用 openpyxl：
 
 ```powershell
@@ -88,7 +92,9 @@ node --check web/app.js
 node --check web/source.js
 ```
 
-当前51项自动测试通过；另已实测页面切换、图表、明细跳转、手机布局及本地 Qwen 分析。计算隔离测试覆盖修改/删除源表利润和汇总单元格后结果不变，以及成本输入变更后利润相应改变。
+当前53项自动测试通过；另已实测页面切换、图表、明细跳转、手机布局及本地 Qwen 分析。计算隔离测试覆盖修改/删除源表利润和汇总单元格后结果不变，以及成本输入变更后利润相应改变。
+
+Windows发布包使用独立构建环境：安装 `requirements-build.txt` 后执行 `python scripts/build_windows_release.py`。需要64位Windows及64位Python，且源码已提交、工作区干净。构建只包含程序、网页及合成样例，不包含本机业务数据；输出ZIP及SHA256校验文件在Git忽略的 `dist/` 中。
 
 ## 本地数据与配置
 
