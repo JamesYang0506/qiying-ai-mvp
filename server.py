@@ -7,13 +7,18 @@ import re
 from urllib.parse import urlparse
 from profit_model.engine import calculate
 from profit_model.files import empty_template, workbook_bytes, read_workbook, export_bundle
+from profit_model.analysis_gateway import run_analysis
+from profit_model.ollama_client import OllamaClient
+import threading
 
 ROOT=Path(__file__).resolve().parent
 MAX_BODY=10*1024*1024
 
 
-def create_server(port=8765, snapshot_dir=None):
+def create_server(port=8765, snapshot_dir=None, analysis_client=None):
     storage=Path(snapshot_dir) if snapshot_dir else ROOT/'reports'/'snapshots'
+    client=analysis_client if analysis_client is not None else OllamaClient()
+    analysis_lock=threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args): pass
@@ -44,6 +49,7 @@ def create_server(port=8765, snapshot_dir=None):
                 if path=='/api/current':
                     current=storage/'latest.json'
                     return self.send(json.loads(current.read_text(encoding='utf-8')) if current.exists() else {'current':None})
+                if path=='/api/ai/status': return self.send(client.status())
                 if path=='/api/template': return self.send(empty_template(),filename='profit-template.json')
                 if path in ('/api/template.xlsx','/api/example.xlsx'):
                     data=empty_template() if path=='/api/template.xlsx' else json.loads((ROOT/'data/samples/demo.json').read_text(encoding='utf-8'))
@@ -59,9 +65,13 @@ def create_server(port=8765, snapshot_dir=None):
                 length=int(self.headers.get('Content-Length','0'))
                 if length<=0 or length>MAX_BODY: return self.send({'error':'文件须在 0～10MB 之间'},413)
                 path=urlparse(self.path).path
-                if path not in ('/api/calculate','/api/import-xlsx','/api/export'):
+                if path not in ('/api/calculate','/api/import-xlsx','/api/export','/api/ai/analyze'):
                     return self.send({'error':'接口不存在'},404)
                 content=self.rfile.read(length)
+                if path=='/api/ai/analyze':
+                    if not analysis_lock.acquire(blocking=False):return self.send({'error':'本地模型正在分析另一请求，请稍后再试'},409)
+                    try:return self.send(run_analysis(json.loads(content),storage,client))
+                    finally:analysis_lock.release()
                 if path=='/api/export':
                     request=json.loads(content)
                     sid=request.get('snapshot_id','')

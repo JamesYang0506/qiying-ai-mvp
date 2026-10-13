@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation, DecimalException, ROUND_HALF_UP, 
 import hashlib
 import json
 
-VERSION = 'profit-v0.2-20261013'
+VERSION = 'profit-v0.3-independent-20261013'
 CATEGORIES = ('material', 'labor', 'manufacturing', 'production_other',
               'management', 'sales', 'finance', 'order_other')
 PRODUCTION = CATEGORIES[:4]

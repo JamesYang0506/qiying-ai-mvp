@@ -1,26 +1,29 @@
-# 模块接口草案
+# 当前模型接口
 
-以下仅约定候选输入输出内容，实际 Python 接口及类型由 A B C 联合确认后实现。
+## 标准计算
 
-## A 向 B 提供
+`profit_model.engine.calculate(dataset)` 接收 metadata、orders、materials、labor、costs、pools、bases、coverage 等标准结构，返回 orders、costs、allocations、issues、snapshot，可附带 source_analysis。金额使用Decimal，输出金额字符串；缺失为null，不与零混淆。
 
-导入批次标识、企业标识、文件名、工作表名、解析后的各张表，以及可追溯至原始行的信息。解析失败与业务检查失败分开处理。
+字段和模板见 [输入格式](input_format.md)，公式见 [公式说明](formula_v0.2.md)。
 
-## B 向 A 和 C 返回
+## 源表适配
 
-| 字段组 | 内容 |
-| --- | --- |
-| metadata | 批次、计算截止时间、公式及规则版本 |
-| summary | 输入订单数、可计算数、估算数、阻止计算数；汇总金额注明覆盖范围 |
-| orders | 订单编号、收入、各成本项、毛利、毛利率、计算状态、缺失项和估算假设 |
-| checks | 规则编号、对象、来源行、检查结果、实际值、参考值、差异、原因、严重程度 |
-| anomalies | 关联订单、异常类型、规则及证据引用 |
-| errors | 无法继续处理的原因及用户可采取的操作 |
+`profit_model.eva_source.read_eva_workbook(content)` 接收工作簿字节，识别原订单用量、补单用量、生产周期、成本计算四张表，生成标准输入和source_analysis。
 
-缺失数值在对外结构化输出中用 null，保持与零值的区别；不可计算的毛利率同样返回 null。金额、单位、币种和时间格式保持一致，具体精度随算例确认。
+source_analysis含 metrics、profit_layers、cost_rows、materials、production、remaining_checks、unit_notes、audit、trust_review及来源指纹。试算和严格利润字段分开保存。先由数量与成本独立计算，再对照保存利润。
 
-## A 调用 AI 并向 C 返回
+## HTTP
 
-只发送经允许的必要字段及异常证据。AI 输出包括分析说明、证据引用、待核实原因、建议和限制；未经核实的原因标为推测。金额和利润来自 B 的计算结果。调用失败时保留规则分析结果并提示 AI 不可用。
+| 接口 | 行为 |
+|---|---|
+| GET /api/current | 读取本机最新计算快照，无快照时返回空状态 |
+| POST /api/calculate | 按标准JSON计算并保存快照 |
+| POST /api/import-xlsx | 导入Excel、计算及保存快照 |
+| POST /api/export | 按快照和订单范围导出结果 |
+| GET /api/template、/api/template.xlsx | 下载空白输入模板 |
+| GET /api/ai/status | 检查本机Ollama及指定模型状态 |
+| POST /api/ai/analyze | 从订单快照读取事实，调用本地模型并验证结果 |
 
-API 密钥在服务端环境配置中读取，不输出到页面或日志。前端明确区分可信状态、业务异常及计算可用状态，并能查看检查依据。
+AI请求与结果说明见 [本地接入](local-qwen-integration.md)。模型输出包含summary、risks、recommendations和unknowns；风险和建议引用有效事实id。分析独立保存，reviewed=false，不改写计算结果。模型未就绪、失败和结构/引用错误均明确反馈，不以模拟结论替代。
+
+服务仅绑定本机地址，支持10MB内输入并限制同源操作。本地模型一次只处理一个生成请求。前端显示精度不改变底层计算及导出精度。
