@@ -5,7 +5,7 @@ from profit_model.engine import calculate
 
 def fixture():
     return {
-        'metadata': {'is_demo': True, 'currency': 'CNY', 'cutoff_date': '2026-09-30'},
+        'metadata': {'is_demo': True, 'currency': 'CNY', 'cutoff_date': '2026-09-30','management_enabled':True},
         'orders': [{'order_id': 'A', 'product': '演示鞋底', 'customer': '演示客户',
                     'quantity': '1000', 'unit': '双', 'unit_price': '20', 'discount': '200',
                     'mode': 'forecast', 'scope_aligned': True}],
@@ -127,6 +127,35 @@ class EngineTests(unittest.TestCase):
 
     def test_excessively_small_numeric_scale_is_rejected(self):
         d=fixture();d['orders'][0].update(quantity='1e-1000000',unit_price='1e-1000000',discount='0')
+        with self.assertRaises(ValueError):calculate(d)
+
+    def test_management_module_disabled_by_default(self):
+        d=fixture();del d['metadata']['management_enabled']
+        r=calculate(d)['orders'][0]
+        self.assertIsNone(r['management_profit'])
+        self.assertEqual(r['management_status'],'disabled')
+        self.assertEqual(r['production_profit'],'6050.00')
+
+    def test_unconfirmed_tax_marks_revenue_and_profit_estimated(self):
+        d=fixture();d['materials'][0]['method']='actual';d['orders'][0]['revenue_status']='estimated'
+        r=calculate(d)['orders'][0]
+        self.assertEqual(r['production_status'],'estimated')
+        self.assertEqual(r['revenue_status'],'estimated')
+
+    def test_missing_discount_blocks_income_and_profits(self):
+        d=fixture();d['orders'][0]['discount']=None
+        r=calculate(d)['orders'][0]
+        self.assertIsNone(r['revenue']);self.assertIsNone(r['production_profit'])
+
+    def test_multiple_order_lines_sum_once(self):
+        d=fixture();d['order_lines']=[{'order_id':'A','line_id':'1','quantity':'400','unit':'双','unit_price':'20','discount':'80'},
+            {'order_id':'A','line_id':'2','quantity':'600','unit':'双','unit_price':'30','discount':'120'}]
+        r=calculate(d)['orders'][0]
+        self.assertEqual(r['revenue'],'25800.00')
+        self.assertEqual(len(r['line_revenues']),2)
+
+    def test_order_lines_inconsistent_unit_rejected(self):
+        d=fixture();d['order_lines']=[{'order_id':'A','line_id':'1','quantity':'1000','unit':'kg','unit_price':'20','discount':'0'}]
         with self.assertRaises(ValueError):calculate(d)
 
 

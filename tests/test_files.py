@@ -21,3 +21,9 @@ class FileTests(unittest.TestCase):
 
     def test_invalid_excel_rejected(self):
         with self.assertRaises(ValueError): read_workbook(b'not a workbook')
+
+    def test_excel_roundtrip_preserves_unconfirmed_revenue(self):
+        d=fixture();d['orders'][0]['revenue_status']='estimated';d['materials'][0]['method']='actual'
+        r=calculate(read_workbook(workbook_bytes(d)))['orders'][0]
+        self.assertEqual(r['revenue_status'],'estimated')
+        self.assertEqual(r['production_status'],'estimated')

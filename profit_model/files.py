@@ -5,7 +5,8 @@ import json
 import zipfile
 
 HEADERS = {
-    'orders': ['order_id','product','customer','quantity','unit','unit_price','discount','mode','scope_aligned'],
+    'orders': ['order_id','product','customer','quantity','unit','unit_price','discount','mode','scope_aligned','revenue_status'],
+    'order_lines':['order_id','line_id','product','quantity','unit','unit_price','discount'],
     'materials':['record_id','order_id','quantity','unit_price','method','loss_rate','loss_definition','status','stage','period','source'],
     'labor':['record_id','order_id','quantity','rate','status','stage','period','source'],
     'costs':['record_id','order_id','category','amount','status','stage','period','included_elsewhere','source'],
@@ -16,7 +17,7 @@ HEADERS = {
 
 
 def empty_template():
-    return dict(metadata={'is_demo':False,'currency':'CNY','cutoff_date':'2026-09-30'},
+    return dict(metadata={'is_demo':False,'currency':'CNY','cutoff_date':'2026-10-13','management_enabled':False},
                 **{key:[] for key in HEADERS})
 
 
@@ -32,7 +33,7 @@ def workbook_bytes(data):
     for table,headers in HEADERS.items():
         ws=wb.create_sheet(table); ws.append(headers)
         for row in data.get(table,[]):
-            ws.append([row.get(key) for key in headers])
+            ws.append([row.get(key,'confirmed' if key=='revenue_status' else None) for key in headers])
         ws.freeze_panes='A2'; ws.auto_filter.ref=ws.dimensions
     for ws in wb:
         for cell in ws[1]:
@@ -56,6 +57,9 @@ def read_workbook(content):
                 raise ValueError('Excel 解压大小超过 50MB')
         wb=load_workbook(io.BytesIO(content),read_only=True,data_only=False)
         try:
+            if all(s in wb.sheetnames for s in ('原订单用量','补单用量','生产周期','成本计算')):
+                from .eva_source import read_eva_workbook
+                return read_eva_workbook(content)
             if 'metadata' not in wb.sheetnames or 'orders' not in wb.sheetnames:
                 raise ValueError('需要标准模板中的 metadata 和 orders 工作表')
             result={'metadata':{}}

@@ -8,16 +8,17 @@
   <a class="nav active" href="#overview"><span>◫</span> 利润总览</a>
   <a class="nav" href="#orders"><span>▤</span> 订单明细</a>
   <a class="nav" href="#quality"><span>◎</span> 数据与口径</a>
-  <div class="sidebar-bottom"><span class="live-dot"></span> 本地计算 · 数据留在本机<small>确定性计算引擎 / v0.1</small></div>
+  <div class="sidebar-bottom"><span class="live-dot"></span> 本地计算 · 数据留在本机<small>确定性计算引擎 / v0.2</small></div>
 </aside>
 <main>
-  <header><div class="breadcrumb">工作空间 <span>/</span> 订单利润分析</div><div class="version">MODEL V0.1 <span>● 本地运行</span></div></header>
+  <header><div class="breadcrumb">工作空间 <span>/</span> 订单利润分析</div><div class="version">MODEL V0.2 <span>● 本地运行</span></div></header>
   <section class="page-title" id="overview"><div><div class="eyebrow">MAKE EVERY ORDER COUNT</div><h1>看清每一笔订单的利润。</h1><p>从材料、人工到期间费用，让利润有据可查。</p></div><div class="actions"><button id="demo" class="secondary" hidden>加载演示数据</button><label class="button primary" for="upload">＋ 导入数据</label><input id="upload" type="file" accept=".json,.xlsx" hidden></div></section>
   <div id="notice" class="notice" role="status">暂无订单数据 · 请导入真实数据后开始计算。</div>
   <div id="error" class="error" role="alert" hidden></div>
-  <section class="toolbar"><div class="filters"><label>计算口径<select id="mode"><option value="forecast">整单预测</option><option value="actual">已交付实际</option></select></label><label>结果范围<select id="state"><option value="all">全部状态</option><option value="complete">可计算</option><option value="estimated">估算</option><option value="blocked">无法计算</option><option value="loss">订单管理利润为负</option></select></label></div><span id="scope" class="muted"></span></section>
+  <section id="source-analysis" class="panel source-panel" hidden></section>
+  <section class="toolbar"><div class="filters"><label>计算口径<select id="mode"><option value="forecast">整单预测</option><option value="actual">已交付实际</option></select></label><label>结果范围<select id="state"><option value="all">全部状态</option><option value="complete">可计算</option><option value="estimated">估算</option><option value="blocked">无法计算</option><option value="disabled">经营模块未启用</option><option value="loss">订单管理利润为负</option></select></label></div><span id="scope" class="muted"></span></section>
   <section class="metrics" aria-label="利润关键指标">
-    <article class="metric"><div>可比订单收入 <span>¥</span></div><strong id="revenue">—</strong><small id="metric-scope">仅纳入管理利润可计算或估算的订单</small></article>
+    <article class="metric"><div>可比生产收入 <span>¥</span></div><strong id="revenue">—</strong><small id="metric-scope">仅纳入生产毛利可计算或估算的订单</small></article>
     <article class="metric"><div>生产毛利 <span>↗</span></div><strong id="gross">—</strong><small>与收入指标采用相同订单范围</small></article>
     <article class="metric highlight"><div>订单管理利润 <span>↗</span></div><strong id="profit">—</strong><small id="margin">加权利润率 —</small></article>
     <article class="metric"><div>计算完整度 <span>◎</span></div><strong id="complete">—</strong><small id="completeness">—</small></article>
@@ -31,4 +32,4 @@
   <section class="panel trace"><details><summary>计算依据与费用追溯 <span>查看选中订单的成本明细 / 分摊记录</span></summary><div class="trace-tabs"><button id="cost-tab" class="secondary">成本明细</button><button id="allocation-tab" class="secondary">费用分摊</button></div><div id="trace-table" class="table-scroll"></div></details></section>
   <section class="quality-grid" id="quality"><article class="panel"><div class="panel-head"><div><h2>数据与计算口径</h2><p>缺失保留未知，估算保留依据</p></div><span class="pill">可追溯</span></div><dl id="snapshot"></dl><div class="rules"><span>01</span><p><b>实际耗用与 BOM 分开计算</b>实际净耗用不再加损耗；BOM 结果标为估算。</p><span>02</span><p><b>费用按完整期间基数分摊</b>按月计算并汇总，保留未分摊余额。</p><span>03</span><p><b>客户提供模具，不计摊销</b>维修费用如适用，需单独确认和归集。</p></div></article><article class="panel"><div class="panel-head"><div><h2>准备你的第一批数据</h2><p>下载模板，按标准字段填入后导入</p></div></div><div class="template-links"><a href="/api/template.xlsx" download>↙ Excel 空白模板 <span>.xlsx</span></a><a href="/api/example.xlsx" download hidden>↙ Excel 演示样例 <span>合成数据</span></a><a href="/api/template" download>↙ JSON 空白模板 <span>.json</span></a></div><p class="help">包括订单、材料、人工、费用、费用池、分摊基数和完整度声明。原始企业表格到位后，可再建立字段映射。</p><div class="local-note">◎ 仅在本机处理，不调用外部 AI 服务。</div></article></section>
   <footer>企盈智擎 · 让经营数字回到业务现场<span id="footer-snapshot"></span></footer>
-</main><script src="/app.js"></script></body></html>
+</main><script src="/source.js"></script><script src="/app.js"></script></body></html>

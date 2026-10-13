@@ -36,11 +36,14 @@ def create_server(port=8765, snapshot_dir=None):
         def do_GET(self):
             if not self.valid_host(): return self.send({'error':'无效本地主机'},403)
             path=urlparse(self.path).path
-            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8')}
+            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/source.js':('source.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8')}
             try:
                 if path in static:
                     name,mime=static[path]; return self.send((ROOT/'web'/name).read_bytes(),content_type=mime)
                 if path=='/api/demo': return self.send(json.loads((ROOT/'data/samples/demo.json').read_text(encoding='utf-8')))
+                if path=='/api/current':
+                    current=storage/'latest.json'
+                    return self.send(json.loads(current.read_text(encoding='utf-8')) if current.exists() else {'current':None})
                 if path=='/api/template': return self.send(empty_template(),filename='profit-template.json')
                 if path in ('/api/template.xlsx','/api/example.xlsx'):
                     data=empty_template() if path=='/api/template.xlsx' else json.loads((ROOT/'data/samples/demo.json').read_text(encoding='utf-8'))
@@ -74,6 +77,7 @@ def create_server(port=8765, snapshot_dir=None):
                     if not ids.issubset({x['order_id'] for x in result['orders']}): raise ValueError('导出包含未知订单')
                     for table in ('orders','costs','allocations','issues'):
                         result[table]=[x for x in result[table] if x.get('order_id') in ids]
+                    if result.get('source_analysis',{}).get('order_id') not in ids:result.pop('source_analysis',None)
                     result['snapshot']['export_scope']=selected
                     return self.send(export_bundle(result),content_type='application/zip',filename='profit-results.zip')
                 data=read_workbook(content) if path=='/api/import-xlsx' else json.loads(content)
@@ -82,6 +86,10 @@ def create_server(port=8765, snapshot_dir=None):
                 target=storage/(result['snapshot']['snapshot_id']+'.json')
                 temp=target.with_suffix('.tmp')
                 temp.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8'); temp.replace(target)
+                if not result['snapshot']['is_demo']:
+                    current=storage/'latest.json'
+                    current_temp=current.with_suffix('.tmp')
+                    current_temp.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8');current_temp.replace(current)
                 self.send(result)
             except (ValueError,TypeError,KeyError,AttributeError,RecursionError) as e:
                 self.send({'error':str(e) or '输入结构不合法'},400)

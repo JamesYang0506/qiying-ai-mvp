@@ -39,3 +39,10 @@ class ServerTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as e: urllib.request.urlopen(req)
         self.assertEqual(e.exception.code,400)
         self.assertIn('error',json.load(e.exception))
+
+    def test_real_input_current_snapshot_restores_without_recalculation(self):
+        d=fixture();d['metadata']['is_demo']=False
+        req=urllib.request.Request(self.url+'/api/calculate',data=json.dumps(d).encode())
+        with urllib.request.urlopen(req) as response:r=json.load(response)
+        with urllib.request.urlopen(self.url+'/api/current') as response:restored=json.load(response)
+        self.assertEqual(restored['snapshot']['snapshot_id'],r['snapshot']['snapshot_id'])

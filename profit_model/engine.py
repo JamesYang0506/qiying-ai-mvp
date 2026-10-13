@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation, DecimalException, ROUND_HALF_UP, 
 import hashlib
 import json
 
-VERSION = 'profit-v0.1'
+VERSION = 'profit-v0.2-20261013'
 CATEGORIES = ('material', 'labor', 'manufacturing', 'production_other',
               'management', 'sales', 'finance', 'order_other')
 PRODUCTION = CATEGORIES[:4]
@@ -35,7 +35,7 @@ def money(n):
 
 
 def ratio(a, b):
-    return None if a is None or b == 0 else str((a/b).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP))
+    return None if a is None or b is None or b <= 0 else str((a/b).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP))
 
 
 def calculate(dataset):
@@ -50,7 +50,7 @@ def calculate(dataset):
 def _calculate(data):
     if not isinstance(data, dict):
         raise ValueError('输入必须是包含 orders 等表的对象')
-    tables = ('orders', 'materials', 'labor', 'costs', 'pools', 'bases', 'coverage')
+    tables = ('orders', 'order_lines', 'materials', 'labor', 'costs', 'pools', 'bases', 'coverage')
     for table in tables:
         if not isinstance(data.get(table, []), list) or any(not isinstance(r,dict) for r in data.get(table,[])):
             raise ValueError(f'{table} 必须为记录数组')
@@ -61,7 +61,20 @@ def _calculate(data):
         datetime.strptime(str(meta.get('cutoff_date','')), '%Y-%m-%d')
     except ValueError:
         raise ValueError('metadata.cutoff_date 必须为 YYYY-MM-DD') from None
-    orders = {}
+    orders = {}; lines=defaultdict(list); line_ids=set()
+    for line in data.get('order_lines',[]):
+        key=(line.get('order_id'),line.get('line_id'))
+        if any(not isinstance(x,str) or not x.strip() for x in key) or key in line_ids:
+            raise ValueError('订单行编号缺失或重复')
+        line_ids.add(key);lines[key[0]].append(line)
+
+    def line_revenue(line,label):
+        q=number(line.get('quantity'),label+' 数量',optional=True)
+        p=number(line.get('unit_price'),label+' 单价',optional=True)
+        d=number(line.get('discount'),label+' 折扣',optional=True)
+        if any(x is not None and x<0 for x in (q,p,d)) or (None not in (q,p,d) and d>q*p):
+            raise ValueError(label+' 数量、单价及折扣范围不合法')
+        return None if None in (q,p,d) else (q*p-d).quantize(CENT,rounding=ROUND_HALF_UP)
     for row in data.get('orders',[]):
         oid = row.get('order_id')
         if not isinstance(oid,str) or not oid.strip() or oid in orders:
@@ -69,13 +82,23 @@ def _calculate(data):
         if row.get('mode') not in ('forecast','actual'):
             raise ValueError(f'{oid}: mode 应为 forecast 或 actual')
         q=number(row.get('quantity'),f'{oid} 数量')
-        p=number(row.get('unit_price'),f'{oid} 单价')
-        discount=number(row.get('discount'),f'{oid} 折扣')
-        if q<0 or p<0 or discount<0 or discount>q*p:
-            raise ValueError(f'{oid}: 数量、单价及折扣范围不合法')
+        if q<0: raise ValueError(f'{oid}: 数量不能为负')
         if not row.get('unit'):
             raise ValueError(f'{oid}: 缺少数量单位')
-        orders[oid] = dict(row, _q=q, _revenue=q*p-discount)
+        revenues=[]
+        if lines[oid]:
+            for line in lines[oid]:
+                if line.get('unit')!=row['unit']:raise ValueError(f'{oid}: 明细行单位与订单汇总单位不一致')
+                revenues.append({'line_id':line['line_id'],'revenue':money(line_revenue(line,oid+'/'+line['line_id']))})
+            qs=[number(x.get('quantity'),'明细数量',optional=True) for x in lines[oid]]
+            if all(x is not None for x in qs) and sum(qs)!=q:raise ValueError(f'{oid}: 明细数量合计与订单数量不符')
+            r=None if any(x['revenue'] is None for x in revenues) else sum(Decimal(x['revenue']) for x in revenues)
+        else:r=line_revenue(row,oid)
+        rstate=row.get('revenue_status','confirmed')
+        if rstate not in ('confirmed','estimated','missing'):raise ValueError('收入状态无效')
+        if rstate=='missing':r=None
+        orders[oid] = dict(row, _q=q, _revenue=r,_revenue_status=rstate,_lines=revenues)
+    if set(lines)-set(orders):raise ValueError('订单行关联了不存在的订单')
     if not orders:
         raise ValueError('至少需要一笔订单')
     totals=defaultdict(lambda: ZERO)
@@ -252,18 +275,22 @@ def _calculate(data):
         aligned=order.get('scope_aligned') is True
         if not aligned: issue(oid,'scope','收入与成本覆盖范围未确认一致','SCOPE')
         r=order['_revenue']
+        if r is None:issue(oid,'revenue','收入单价、数量、折扣或状态缺失，不默认扣减额为零','REVENUE')
+        elif order['_revenue_status']=='estimated':issue(oid,'revenue','价格税口径或收入依据待核验','REVIEW')
         def layer(cats):
-            if not aligned or blocked[oid].intersection(cats): return None,'blocked'
+            if r is None or not aligned or blocked[oid].intersection(cats): return None,'blocked'
             value=r-sum(totals[oid,c] for c in cats)
-            return value,'estimated' if estimated[oid].intersection(cats) else 'complete'
+            return value,'estimated' if order['_revenue_status']=='estimated' or estimated[oid].intersection(cats) else 'complete'
         gp,gps=layer(PRODUCTION); mp,mps=layer(CATEGORIES)
-        ip=None if not aligned or blocked[oid].intersection(PRODUCTION) or oid in unknown_stage else r-inside[oid]
+        if meta.get('management_enabled') is not True:mp=None;mps='disabled'
+        ip=None if r is None or not aligned or blocked[oid].intersection(PRODUCTION) or oid in unknown_stage else r-inside[oid]
         cats={c:None if c in blocked[oid] else money(totals[oid,c]) for c in CATEGORIES}
         for key,value in [('production_profit',gp),('management_profit',mp)]:
             if value is not None and value<0: issue(oid,key,'当前口径利润为负','LOSS')
         results.append({'order_id':oid,'product':order.get('product',''),'customer':order.get('customer',''),
             'quantity':str(order['_q']),'unit':order['unit'],'mode':order['mode'],
-            'revenue':money(r),'categories':cats,'known_cost':money(sum(totals[oid,c] for c in CATEGORIES)),
+            'revenue':money(r),'revenue_status':'missing' if r is None else order['_revenue_status'],
+            'line_revenues':order['_lines'],'categories':cats,'known_cost':money(sum(totals[oid,c] for c in CATEGORIES)),
             'inside_profit':money(ip),'production_profit':money(gp),'management_profit':money(mp),
             'production_margin':ratio(gp,r),'management_margin':ratio(mp,r),
             'unit_production_profit':money(None if gp is None or order['_q']==0 else gp/order['_q']),
@@ -274,7 +301,11 @@ def _calculate(data):
     snapshot={'snapshot_id':datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'-'+digest[:8],
               'input_hash':digest,'formula_version':VERSION,'created_at':datetime.now(timezone.utc).isoformat(),
               'cutoff_date':meta['cutoff_date'],'currency':'CNY','is_demo':meta.get('is_demo') is True,
+              'management_enabled':meta.get('management_enabled') is True,
+              'formula_source':meta.get('formula_source','2026-10-13 算法公式与说明汇总'),
               'rounding':'Decimal / ROUND_HALF_UP / 最终金额0.01元',
               'scope':'输入方声明的同数量范围、同截止日期；forecast/actual分组展示',
               'assumptions':['BOM按理论净用量估算','不计客户提供模具摊销','费用池直接费用已剔除后分摊']}
-    return {'orders':results,'costs':costs,'allocations':allocations,'issues':issues,'snapshot':snapshot}
+    result={'orders':results,'costs':costs,'allocations':allocations,'issues':issues,'snapshot':snapshot}
+    if isinstance(data.get('source_analysis'),dict):result['source_analysis']=data['source_analysis']
+    return result
