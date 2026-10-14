@@ -2,6 +2,7 @@
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import base64
 from pathlib import Path
 import re
 from urllib.parse import urlparse, parse_qs
@@ -10,6 +11,7 @@ from profit_model.files import empty_template, workbook_bytes, read_workbook, ex
 from profit_model.analysis_gateway import run_analysis
 from profit_model.ollama_client import OllamaClient
 from profit_model.history import list_history, read_history
+from profit_model.excel_import import preview_excel, confirmed_excel
 import threading
 
 ROOT=Path(__file__).resolve().parent
@@ -42,7 +44,7 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
         def do_GET(self):
             if not self.valid_host(): return self.send({'error':'无效本地主机'},403)
             path=urlparse(self.path).path
-            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/source.js':('source.js','text/javascript; charset=utf-8'),'/history.js':('history.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8')}
+            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/source.js':('source.js','text/javascript; charset=utf-8'),'/history.js':('history.js','text/javascript; charset=utf-8'),'/import.js':('import.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8')}
             try:
                 if path in static:
                     name,mime=static[path]; return self.send((ROOT/'web'/name).read_bytes(),content_type=mime)
@@ -68,12 +70,21 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
             if not self.valid_host() or (origin is not None and origin not in (f'http://127.0.0.1:{self.server.server_port}',f'http://localhost:{self.server.server_port}')):
                 return self.send({'error':'仅允许本机同源操作'},403)
             try:
-                length=int(self.headers.get('Content-Length','0'))
-                if length<=0 or length>MAX_BODY: return self.send({'error':'文件须在 0～10MB 之间'},413)
                 path=urlparse(self.path).path
-                if path not in ('/api/calculate','/api/import-xlsx','/api/export','/api/export-training','/api/ai/analyze'):
+                length=int(self.headers.get('Content-Length','0'))
+                limit=15*1024*1024 if path in ('/api/preview-xlsx','/api/import-reviewed-xlsx') else MAX_BODY
+                if length<=0 or length>limit: return self.send({'error':'文件须在 0～10MB 之间'},413)
+                if path not in ('/api/calculate','/api/import-xlsx','/api/export','/api/export-training','/api/ai/analyze','/api/preview-xlsx','/api/import-reviewed-xlsx'):
                     return self.send({'error':'接口不存在'},404)
                 content=self.rfile.read(length)
+                reviewed_data=None
+                if path in ('/api/preview-xlsx','/api/import-reviewed-xlsx'):
+                    payload=json.loads(content)
+                    if not isinstance(payload,dict) or not isinstance(payload.get('workbook_base64'),str):raise ValueError('请选择有效Excel文件')
+                    binary=base64.b64decode(payload['workbook_base64'],validate=True)
+                    if path=='/api/preview-xlsx':return self.send(preview_excel(binary,payload.get('mapping')))
+                    if payload.get('confirmed') is not True:raise ValueError('请先预览并确认字段和单位')
+                    reviewed_data=confirmed_excel(binary,payload.get('mapping',{}),payload.get('source_hash'))
                 if path=='/api/ai/analyze':
                     if not analysis_lock.acquire(blocking=False):return self.send({'error':'本地模型正在分析另一请求，请稍后再试'},409)
                     try:return self.send(run_analysis(json.loads(content),storage,client))
@@ -100,7 +111,7 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                     if path=='/api/export-training':
                         return self.send(export_training_bundle(result),content_type='application/zip',filename='order-training-candidates.zip')
                     return self.send(export_bundle(result),content_type='application/zip',filename='profit-results.zip')
-                data=read_workbook(content) if path=='/api/import-xlsx' else json.loads(content)
+                data=reviewed_data if reviewed_data is not None else read_workbook(content) if path=='/api/import-xlsx' else json.loads(content)
                 result=calculate(data)
                 storage.mkdir(parents=True,exist_ok=True)
                 target=storage/(result['snapshot']['snapshot_id']+'.json')

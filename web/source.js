@@ -47,19 +47,26 @@ function renderSource(analysis,rows){
   ${renderProfitLayers(analysis)}
   ${renderTrustReview(analysis.trust_review)}
   ${renderCalculationEvidence(analysis)}
+  ${renderImportEvidence(analysis)}
   <h2 class="source-heading">生产与补单核对</h2><p>生产日期 ${esc(p.start)} 至 ${esc(p.end)}。总生产 ${esc(p.gross_quantity)} 双，不良 ${esc(p.defect_quantity)} 双，合格 ${esc(p.qualified_quantity)} 双。</p>
   <div class="table-scroll"><table><thead><tr><th>码号</th><th>生产数量</th><th>不良数量</th><th>补单材料数量</th><th>不良−补单</th></tr></thead><tbody>${p.sizes.map(x=>`<tr><td>${esc(x.size)}</td><td>${esc(x.produced)}</td><td>${esc(x.defects)}</td><td>${esc(x.replenishment)}</td><td class="${Number(x.difference)!==0?'negative':''}">${esc(x.difference)}</td></tr>`).join('')}</tbody></table></div>
   <p class="detail-missing">不良 ${esc(p.defect_quantity)} 双，补单表 ${esc(p.replenishment_quantity)} 双，差额 ${esc(p.difference)} 双。不自动补增材料，也不推断为损耗率。</p>
   <details class="source-details"><summary>查看材料重量与金额</summary><div class="table-scroll"><table><thead><tr><th>工作表</th><th>数量/双</th><th>材料重量/kg</th><th>配方均价/元每kg</th><th>金额/元</th></tr></thead><tbody>${analysis.materials.map(x=>`<tr><td>${esc(x.sheet)}</td><td>${esc(x.quantity)}</td><td>${esc(x.weight)}</td><td>${Number(x.price_per_kg).toFixed(6)}</td><td>${money(x.amount)}</td></tr>`).join('')}</tbody></table></div><p class="chart-note">总材料金额按原表未舍入值汇总后保留分位；分表显示值相加可能相差0.01元。</p></details>
-  <details class="source-details"><summary>查看加工与行政费用单价和来源</summary><div class="table-scroll"><table><thead><tr><th>费用</th><th>分组</th><th>源单元格</th><th>元/双</th><th>总额/元</th><th>数据依据</th></tr></thead><tbody>${analysis.cost_rows.map(x=>`<tr><td>${esc(x.label)}</td><td>${esc(x.group)}</td><td>${esc(x.cell)}</td><td>${x.unit_rate===null?'待补':Number(x.unit_rate).toFixed(6)}</td><td>${money(x.amount)}</td><td>${esc(x.method)}</td></tr>`).join('')}</tbody></table></div></details>
+  <details class="source-details"><summary>查看加工与行政费用单价和来源</summary><div class="table-scroll"><table><thead><tr><th>费用</th><th>分组</th><th>源单元格</th><th>元/双</th><th>总额/元</th><th>数据依据</th></tr></thead><tbody>${analysis.cost_rows.map(x=>`<tr><td>${esc(x.label)}</td><td>${esc(x.group)}</td><td>${esc(x.source_cell||x.cell)}</td><td>${x.unit_rate===null?'待补':Number(x.unit_rate).toFixed(6)}</td><td>${money(x.amount)}</td><td>${esc(x.method)}</td></tr>`).join('')}</tbody></table></div></details>
   <details class="source-details"><summary>查看生产日报（${p.days.length} 天）</summary><div class="table-scroll"><table><thead><tr><th>日期</th><th>生产/双</th><th>不良/双</th><th>合格/双</th></tr></thead><tbody>${p.days.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.produced)}</td><td>${esc(x.defects)}</td><td>${esc(x.qualified)}</td></tr>`).join('')}</tbody></table></div></details>
   <h2 class="source-heading">来源说明与后续核验</h2><p>下列来源提示不表示已知费用未计入。已有表内费率均用于试算；尚缺的是原始凭证或分摊依据。</p><ul class="source-warnings">${analysis.warnings.map(x=>`<li>${esc(x.message)}</li>`).join('')}</ul>`;
+}
+
+function renderImportEvidence(a){
+  const review=a.import_review;if(!review)return '';
+  const units={quantity:'双',per_pair:'元/双',total:'元/整单'};
+  return `<details class="source-details" id="import-evidence"><summary>查看本次确认的 Excel 读取位置和单位</summary><p>${esc(review.scope)}</p><div class="table-scroll"><table><thead><tr><th>字段</th><th>实际读取位置</th><th>读取数值</th><th>确认单位</th></tr></thead><tbody>${Object.entries(review.fields).map(([id,x])=>`<tr><td>${esc(x.label||id)}</td><td>${esc(review.cost_sheet)}!${esc(x.source_cell||x.cell)}</td><td>${x.read_value===null?'缺失':esc(x.read_value)}</td><td>${esc(units[x.unit]||x.unit)}</td></tr>`).join('')}</tbody></table></div></details>`;
 }
 
 function renderProfitLayers(a){
   const v=a.profit_layers;if(!v)return '';
   const m=a.metrics;
-  function costRows(group){return a.cost_rows.filter(x=>x.group===group).map(x=>`<tr><td>${esc(x.label)}</td><td>${x.amount===null?'待补':money(x.amount)}</td><td>${esc(x.cell)} · ${esc(x.method)}</td></tr>`).join('');}
+  function costRows(group){return a.cost_rows.filter(x=>x.group===group).map(x=>`<tr><td>${esc(x.label)}</td><td>${x.amount===null?'待补':money(x.amount)}</td><td>${esc(x.source_cell||x.cell)} · ${esc(x.method)}</td></tr>`).join('');}
   return `<h2 class="source-heading" id="profit-layers">生产毛利与经营净利</h2><p>${esc(v.classification)} 经营净利暂按已列费用试算，财务费用、税费及其他适用项目仍需确认。</p>
   <div class="profit-layer-grid">
   <article class="profit-stage"><h3>① 生产毛利</h3><p>收入 − 生产成本</p><strong>${money(v.production_profit)} 元</strong><p>毛利率 ${percent(m.production_margin)}</p><dl><dt>收入</dt><dd>${money(m.revenue)} 元</dd><dt>材料费</dt><dd>${money(m.material_total)} 元</dd><dt>人工及加工费</dt><dd>${money(m.processing_total)} 元</dd><dt>生产成本合计</dt><dd>${money(v.production_cost)} 元</dd></dl><details class="source-details"><summary>展开生产成本开销</summary><div class="table-scroll"><table><thead><tr><th>费用</th><th>金额 / 元</th><th>来源</th></tr></thead><tbody><tr><td>材料成本</td><td>${money(m.material_total)}</td><td>原单及补单配方 × SOP重量 × 数量</td></tr>${costRows('加工成本')}</tbody></table></div></details></article>

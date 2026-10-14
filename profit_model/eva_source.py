@@ -96,10 +96,10 @@ class FormulaReader:
         except SyntaxError:raise ValueError('无法解析源表公式') from None
 
 
-def read_eva_workbook(content):
+def read_eva_workbook(content, prepared=None):
     with localcontext() as ctx:
         ctx.prec=80
-        data=_read(content)
+        data=_read(content,prepared)
         a=data['source_analysis'];m=a['metrics']
         def total(*keys):
             values=[m[k] for k in keys]
@@ -117,16 +117,20 @@ def read_eva_workbook(content):
         return data
 
 
-def _read(content):
+def _read(content,prepared=None):
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as z:
             if sum(i.file_size for i in z.infolist())>50*1024*1024:raise ValueError('源工作簿过大')
-        w=load_workbook(io.BytesIO(content),data_only=False,keep_links=False)
-        c=load_workbook(io.BytesIO(content),data_only=True,keep_links=False)
+        if prepared is None:
+            w=load_workbook(io.BytesIO(content),data_only=False,keep_links=False)
+            c=load_workbook(io.BytesIO(content),data_only=True,keep_links=False)
+        else:w,c=prepared[:2]
     except Exception:raise ValueError('无法读取中底成本源工作簿') from None
     try:
         if not all(s in w.sheetnames for s in SHEETS):raise ValueError('中底成本源表需要四张规定工作表')
         r=FormulaReader(w,c)
+        if prepared is not None:r.external.update(prepared[2]);r.traces.update(prepared[3])
+        if prepared is not None:r.values.update(prepared[4])
         r.excluded={('成本计算',cell) for cell in ('H5','H10','E9','E10','H23','H24','H32','H33')}
         r.excluded.update((sheet,cell) for sheet in SHEETS[:2] for cell in ('B19','B20','K3','D18','E18'))
         qty=r.required('成本计算','E8')
