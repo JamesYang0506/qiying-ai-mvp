@@ -11,6 +11,34 @@ from unittest.mock import Mock
 
 
 class ServerTests(unittest.TestCase):
+    def test_training_export_uses_saved_snapshot_and_selected_orders(self):
+        import io
+        import zipfile
+        req=urllib.request.Request(self.url+'/api/calculate',data=json.dumps(fixture()).encode())
+        with urllib.request.urlopen(req) as response: result=json.load(response)
+        sid=result['snapshot']['snapshot_id']
+        path=Path(self.tmp.name)/(sid+'.json')
+        result['orders'].append(dict(result['orders'][0],order_id='OTHER'))
+        result['costs'].append({'order_id':'OTHER','record_id':'foreign','amount':'999'})
+        result['source_analysis']={'order_id':'OTHER','private':'not selected'}
+        path.write_text(json.dumps(result),encoding='utf-8')
+        before=path.read_bytes()
+        payload={'snapshot_id':sid,'order_ids':['A']}
+        req=urllib.request.Request(self.url+'/api/export-training',data=json.dumps(payload).encode())
+        with urllib.request.urlopen(req) as response:
+            self.assertEqual(response.headers['Content-Type'],'application/zip')
+            with zipfile.ZipFile(io.BytesIO(response.read())) as z:
+                records=[json.loads(line) for line in z.read('orders.jsonl').decode().splitlines()]
+                self.assertEqual(len(records),1)
+                self.assertEqual(records[0]['input']['order']['order_id'],'A')
+                self.assertNotIn('source_analysis',records[0]['input'])
+                self.assertNotIn('foreign',z.read('orders.jsonl').decode())
+        self.assertEqual(path.read_bytes(),before)
+        for order_ids in ([],['UNKNOWN'],['A','A']):
+            req=urllib.request.Request(self.url+'/api/export-training',data=json.dumps(dict(payload,order_ids=order_ids)).encode())
+            with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(req)
+            self.assertEqual(error.exception.code,400)
+
     def test_ai_gateway_prepares_snapshot_without_fake_result(self):
         with urllib.request.urlopen(self.url+'/api/ai/status') as response:status=json.load(response)
         self.assertFalse(status['configured'])

@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import zipfile
+from .training_export import export_training_bundle
 
 HEADERS = {
     'orders': ['order_id','product','customer','quantity','unit','unit_price','discount','mode','scope_aligned','revenue_status'],

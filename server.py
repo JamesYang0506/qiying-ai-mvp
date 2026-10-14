@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 from urllib.parse import urlparse
 from profit_model.engine import calculate
-from profit_model.files import empty_template, workbook_bytes, read_workbook, export_bundle
+from profit_model.files import empty_template, workbook_bytes, read_workbook, export_bundle, export_training_bundle
 from profit_model.analysis_gateway import run_analysis
 from profit_model.ollama_client import OllamaClient
 import threading
@@ -65,14 +65,14 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 length=int(self.headers.get('Content-Length','0'))
                 if length<=0 or length>MAX_BODY: return self.send({'error':'文件须在 0～10MB 之间'},413)
                 path=urlparse(self.path).path
-                if path not in ('/api/calculate','/api/import-xlsx','/api/export','/api/ai/analyze'):
+                if path not in ('/api/calculate','/api/import-xlsx','/api/export','/api/export-training','/api/ai/analyze'):
                     return self.send({'error':'接口不存在'},404)
                 content=self.rfile.read(length)
                 if path=='/api/ai/analyze':
                     if not analysis_lock.acquire(blocking=False):return self.send({'error':'本地模型正在分析另一请求，请稍后再试'},409)
                     try:return self.send(run_analysis(json.loads(content),storage,client))
                     finally:analysis_lock.release()
-                if path=='/api/export':
+                if path in ('/api/export','/api/export-training'):
                     request=json.loads(content)
                     sid=request.get('snapshot_id','')
                     if not isinstance(sid,str) or not re.fullmatch(r'[A-Za-z0-9-]{10,80}',sid):
@@ -84,11 +84,15 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                     if not isinstance(selected,list) or any(not isinstance(x,str) for x in selected):
                         raise ValueError('导出订单范围无效')
                     ids=set(selected)
+                    if path=='/api/export-training' and (not ids or len(ids)!=len(selected)):
+                        raise ValueError('请导出至少一笔订单，订单编号不能重复')
                     if not ids.issubset({x['order_id'] for x in result['orders']}): raise ValueError('导出包含未知订单')
                     for table in ('orders','costs','allocations','issues'):
                         result[table]=[x for x in result[table] if x.get('order_id') in ids]
                     if result.get('source_analysis',{}).get('order_id') not in ids:result.pop('source_analysis',None)
                     result['snapshot']['export_scope']=selected
+                    if path=='/api/export-training':
+                        return self.send(export_training_bundle(result),content_type='application/zip',filename='order-training-candidates.zip')
                     return self.send(export_bundle(result),content_type='application/zip',filename='profit-results.zip')
                 data=read_workbook(content) if path=='/api/import-xlsx' else json.loads(content)
                 result=calculate(data)

@@ -83,6 +83,7 @@ data/samples/                合成开发样例
 - [决策首页与详细数据](docs/executive-and-detail-views.md)
 - [实际模块接口](docs/interfaces.md)与[本地Qwen接入](docs/local-qwen-integration.md)
 - [订单训练数据与微调建议](docs/qwen-order-training-roadmap.md)
+- [训练候选资料导出与专家标注](docs/training-data-export.md)：详细数据页导出当前筛选订单，保留严格核算/参考试算及缺失状态，不自动生成训练答案。
 
 ## 验证
 
