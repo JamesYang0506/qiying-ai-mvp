@@ -81,6 +81,7 @@ setBusy(false);
 let pendingAnchor=location.hash.slice(1);
 function switchView(view,target=null){
   const home=view==='home',ai=view==='ai';
+  $('back-to-lobby').hidden=view==='lobby';
   $('lobby-view').hidden=view!=='lobby';$('history-view').hidden=view!=='history';
   const analysis=['home','detail','ai'].includes(view);
   $('analysis-tabs').hidden=!analysis;$('import-actions').hidden=!analysis||historyViewing;
