@@ -131,7 +131,7 @@ function comparisonTrend(trend) {
         35 + (i * 410) / (values.length - 1),
         110 - ((v - lo) * 80) / span,
       ]);
-      return `<article><h3>${label} · 已存检测</h3><svg viewBox="0 0 480 145" role="img" aria-label="${label}趋势；完整数据见下表"><line x1="35" y1="115" x2="445" y2="115" stroke="#ccd9cf"/><polyline points="${coords.map((p) => p.join(',')).join(' ')}" fill="none" stroke="#28644b" stroke-width="2"/>${coords.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#28644b"><title>${comparisonTime(pts[i].created_at)}：${comparisonNumber(values[i], '%')}</title></circle>`).join('')}<text x="35" y="135">${comparisonNumber(values[0], '%')}</text><text x="445" y="135" text-anchor="end">${comparisonNumber(values.at(-1), '%')}</text></svg><details><summary>查看 ${pts.length} 次观测数据</summary>${pts.map((c) => `<p>${comparisonTime(c.created_at)} · ${comparisonNumber(c.metrics[metric].value_pct, '%')} · ${esc(c.snapshot_id)} · ${esc(c.rules?.version || '')}</p>`).join('')}</details></article>`;
+      return `<article><h3>${label} · 已存检测</h3><svg viewBox="0 0 480 145" role="img" aria-label="${label}趋势；完整数据见下表"><line x1="35" y1="115" x2="445" y2="115" stroke="${PALETTE.trendAxis}"/><polyline points="${coords.map((p) => p.join(',')).join(' ')}" fill="none" stroke="${PALETTE.trend}" stroke-width="2"/>${coords.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${PALETTE.trend}"><title>${comparisonTime(pts[i].created_at)}：${comparisonNumber(values[i], '%')}</title></circle>`).join('')}<text x="35" y="135">${comparisonNumber(values[0], '%')}</text><text x="445" y="135" text-anchor="end">${comparisonNumber(values.at(-1), '%')}</text></svg><details><summary>查看 ${pts.length} 次观测数据</summary>${pts.map((c) => `<p>${comparisonTime(c.created_at)} · ${comparisonNumber(c.metrics[metric].value_pct, '%')} · ${esc(c.snapshot_id)} · ${esc(c.rules?.version || '')}</p>`).join('')}</details></article>`;
     })
     .join('');
 }
@@ -387,8 +387,9 @@ $('comparison-view').addEventListener('change', async (e) => {
     return;
   const file = e.target.files[0];
   if (!file) return;
-  if (file.size > 10 * 1024 * 1024) {
-    $('comparison-preview').textContent = '文件超过 10MB，请使用标准模板。';
+  // 理论利润 Excel 走 /api/theory/preview，与服务端大文件接口同限 15MB。
+  if (file.size > XLSX_LIMIT) {
+    $('comparison-preview').textContent = `文件超过 ${XLSX_LIMIT / 1048576}MB，请使用标准模板。`;
     return;
   }
   const key = comparisonKey(),

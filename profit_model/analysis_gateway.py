@@ -15,15 +15,6 @@ FOCUSES = {
 }
 
 
-def status():
-    return {
-        'schema_version': 'order-analysis.v1',
-        'configured': False,
-        'status': 'not_configured',
-        'message': '大模型尚未接入。可准备本地订单资料，暂不生成模型分析。',
-    }
-
-
 def prepare_analysis(request, storage):
     if not isinstance(request, dict):
         raise ValueError('分析请求必须是对象')

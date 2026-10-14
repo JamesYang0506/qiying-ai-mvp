@@ -5,7 +5,7 @@ import unittest
 import urllib.request
 import urllib.error
 from pathlib import Path
-from server import create_server
+from server import create_server, POST_ROUTES, LARGE_BODY_PATHS
 from test_engine import fixture
 from unittest.mock import Mock
 
@@ -124,3 +124,15 @@ class ServerTests(unittest.TestCase):
         req=urllib.request.Request(self.url+'/api/ai/analyze',data=json.dumps(payload).encode())
         with self.assertRaises(urllib.error.HTTPError) as e:urllib.request.urlopen(req)
         self.assertEqual(e.exception.code,400)
+
+    def test_post_route_table_dispatches_every_registered_path(self):
+        # 路由表与分派同源：登记即进入处理函数，不会静默落到兜底分支；未登记一律 404。
+        self.assertTrue(LARGE_BODY_PATHS <= set(POST_ROUTES),'放宽上限的路径必须已登记')
+        for path in POST_ROUTES:
+            req=urllib.request.Request(self.url+path,data=b'{}')
+            with self.assertRaises(urllib.error.HTTPError) as e: urllib.request.urlopen(req)
+            self.assertNotIn('接口不存在',e.exception.read().decode(),f'{path} 未进入处理函数')
+        req=urllib.request.Request(self.url+'/api/not-a-route',data=b'{}')
+        with self.assertRaises(urllib.error.HTTPError) as e: urllib.request.urlopen(req)
+        self.assertEqual(e.exception.code,404)
+        self.assertIn('接口不存在',e.exception.read().decode())

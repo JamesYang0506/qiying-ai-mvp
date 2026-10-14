@@ -37,6 +37,36 @@ from profit_model.comparison_store import (
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 10 * 1024 * 1024
+# Excel 直接解析、不经网关，放宽上限；前端 UPLOAD_LIMIT / XLSX_LIMIT 与此对应。
+LARGE_BODY = 15 * 1024 * 1024
+LARGE_BODY_PATHS = frozenset(
+    {
+        '/api/preview-xlsx',
+        '/api/import-reviewed-xlsx',
+        '/api/auto-import-xlsx',
+        '/api/theory/preview',
+    }
+)
+
+# POST 路由表：路径 -> Handler 方法名。允许清单与分派同源，避免两处清单不同步。
+POST_ROUTES = {
+    '/api/calculate': 'handle_calculation',
+    '/api/import-xlsx': 'handle_calculation',
+    '/api/preview-xlsx': 'handle_excel',
+    '/api/import-reviewed-xlsx': 'handle_excel',
+    '/api/auto-import-xlsx': 'handle_excel',
+    '/api/export': 'handle_export',
+    '/api/export-training': 'handle_export',
+    '/api/ai/analyze': 'handle_analysis',
+    '/api/history/delete': 'handle_history',
+    '/api/history/restore': 'handle_history',
+    '/api/theory': 'handle_theory_comparison',
+    '/api/theory/bind': 'handle_theory_comparison',
+    '/api/theory/preview': 'handle_theory_comparison',
+    '/api/comparison/check': 'handle_theory_comparison',
+    '/api/comparison/rules': 'handle_theory_comparison',
+    '/api/comparison/event': 'handle_theory_comparison',
+}
 
 
 def create_server(port=8765, snapshot_dir=None, analysis_client=None):
@@ -89,6 +119,7 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
             path = urlparse(self.path).path
             static = {
                 '/': ('index.html', 'text/html; charset=utf-8'),
+                '/util.js': ('util.js', 'text/javascript; charset=utf-8'),
                 '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
                 '/source.js': ('source.js', 'text/javascript; charset=utf-8'),
                 '/history.js': ('history.js', 'text/javascript; charset=utf-8'),
@@ -192,57 +223,18 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 return self.send({'error': '仅允许本机同源操作'}, 403)
             try:
                 path = urlparse(self.path).path
-                length = int(self.headers.get('Content-Length', '0'))
-                limit = (
-                    15 * 1024 * 1024
-                    if path
-                    in (
-                        '/api/preview-xlsx',
-                        '/api/import-reviewed-xlsx',
-                        '/api/auto-import-xlsx',
-                        '/api/theory/preview',
-                    )
-                    else MAX_BODY
-                )
-                if length <= 0 or length > limit:
-                    return self.send({'error': '文件须在 0～10MB 之间'}, 413)
-                if path not in (
-                    '/api/calculate',
-                    '/api/import-xlsx',
-                    '/api/export',
-                    '/api/export-training',
-                    '/api/ai/analyze',
-                    '/api/preview-xlsx',
-                    '/api/import-reviewed-xlsx',
-                    '/api/auto-import-xlsx',
-                    '/api/history/delete',
-                    '/api/history/restore',
-                    '/api/theory/preview',
-                    '/api/theory',
-                    '/api/theory/bind',
-                    '/api/comparison/check',
-                    '/api/comparison/rules',
-                    '/api/comparison/event',
-                ):
+                handler = POST_ROUTES.get(path)
+                if handler is None:
                     return self.send({'error': '接口不存在'}, 404)
+                length = int(self.headers.get('Content-Length', '0'))
+                limit = LARGE_BODY if path in LARGE_BODY_PATHS else MAX_BODY
+                if length <= 0 or length > limit:
+                    return self.send(
+                        {'error': f'文件须在 0～{limit // (1024 * 1024)}MB 之间'},
+                        413,
+                    )
                 content = self.rfile.read(length)
-                if path.startswith('/api/theory') or path.startswith(
-                    '/api/comparison/'
-                ):
-                    return self.handle_comparison(path, content)
-                if path in ('/api/history/delete', '/api/history/restore'):
-                    return self.handle_history(path, content)
-                if path in ('/api/calculate', '/api/import-xlsx'):
-                    return self.handle_calculation(path, content)
-                if path in (
-                    '/api/preview-xlsx',
-                    '/api/import-reviewed-xlsx',
-                    '/api/auto-import-xlsx',
-                ):
-                    return self.handle_excel(path, content)
-                if path == '/api/ai/analyze':
-                    return self.handle_analysis(content)
-                return self.handle_export(path, content)
+                return getattr(self, handler)(path, content)
             except (
                 ValueError,
                 TypeError,
@@ -267,7 +259,7 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 )
             )
 
-        def handle_comparison(self, path, content):
+        def handle_theory_comparison(self, path, content):
             payload = json.loads(content)
             if not isinstance(payload, dict):
                 raise ValueError('请求必须是对象')
@@ -334,7 +326,7 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 outcome = {'status': 'imported', 'result': outcome}
             return self.send(outcome)
 
-        def handle_analysis(self, content):
+        def handle_analysis(self, path, content):
             if not analysis_lock.acquire(blocking=False):
                 return self.send({'error': '本地模型正在分析另一请求，请稍后再试'}, 409)
             try:

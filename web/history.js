@@ -17,8 +17,7 @@ const historyMoney = (value) =>
     : (Number(value) / 10000).toFixed(2) + ' 万元';
 
 function updateWorkspace(analysis = !$('analysis-tabs').hidden) {
-  if (typeof updateAdaptationStatus === 'function')
-    updateAdaptationStatus(analysis);
+  updateAdaptationStatus(analysis);
   $('back-to-history').hidden = !historyViewing || !analysis;
   $('return-current').hidden = !historyViewing;
   $('return-current').disabled = busy || !currentResult;

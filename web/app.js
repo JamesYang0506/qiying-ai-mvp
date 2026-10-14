@@ -1,63 +1,11 @@
 'use strict';
-const $ = (id) => document.getElementById(id);
-const names = {
-  material: '直接材料',
-  labor: '直接人工',
-  manufacturing: '制造费用',
-  production_other: '其他生产成本',
-  management: '管理费用',
-  sales: '销售费用',
-  finance: '财务费用',
-  order_other: '其他订单费用',
-};
-const states = {
-  complete: '可计算',
-  estimated: '估算',
-  blocked: '无法计算',
-  disabled: '未启用',
-};
-const recordStates = {
-  confirmed: '已确认',
-  estimated: '暂估',
-  missing: '待补',
-  not_applicable: '不适用',
-};
+// $ esc money percent sign badge sum request、领域词汇与图表配色见 util.js，先于本文件加载。
 let result = null,
   selected = null,
   traceMode = 'costs',
   busy = false;
 let currentResult = null,
   historyViewing = false;
-const esc = (x) =>
-  String(x ?? '').replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ],
-  );
-function money(value) {
-  if (value === null || value === undefined) return '—';
-  let [i, f = '00'] = String(value).split('.');
-  return i.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + f.padEnd(2, '0');
-}
-const percent = (value) =>
-  value === null || value === undefined
-    ? '—'
-    : (Number(value) * 100).toFixed(2) + '%';
-const sign = (value) => (value !== null && Number(value) < 0 ? 'negative' : '');
-const badge = (s) =>
-  `<span class="badge ${esc(s)}">${esc(states[s] || s)}</span>`;
-function sum(rows, key) {
-  const cents = rows.reduce(
-    (s, r) => s + BigInt(String(r[key]).replace('.', '')),
-    0n,
-  );
-  const a = cents < 0n ? -cents : cents;
-  return (
-    (cents < 0n ? '-' : '') + a / 100n + '.' + String(a % 100n).padStart(2, '0')
-  );
-}
 function rowsFiltered() {
   if (!result) return [];
   const query = $('search').value.trim().toLowerCase();
@@ -91,17 +39,6 @@ function setBusy(value) {
     $(id).disabled = value || !result || rowsFiltered().length === 0;
   $('notice').setAttribute('aria-busy', String(value));
 }
-async function request(path, options = {}) {
-  const response = await fetch(path, options);
-  if (!response.ok) {
-    let text = '请求失败';
-    try {
-      text = (await response.json()).error || text;
-    } catch {}
-    throw new Error(text);
-  }
-  return response;
-}
 async function calculate(data) {
   return (
     await request('/api/calculate', {
@@ -124,7 +61,7 @@ function accept(data, { historical = false } = {}) {
   $('search').value = '';
   setError('');
   render();
-  if (typeof updateWorkspace === 'function') updateWorkspace();
+  updateWorkspace();
 }
 async function demo() {
   if (busy) return;
@@ -144,17 +81,18 @@ async function upload(file) {
   setError('');
   $('duplicate-notice').hidden = true;
   try {
-    if (file.size > 10 * 1024 * 1024)
-      throw new Error('文件超过 10MB，请拆分后导入');
-    if (file.name.toLowerCase().endsWith('.xlsx')) {
+    const name = file.name.toLowerCase();
+    // Excel 与服务端大文件接口同限 15MB；JSON 仍走 10MB 网关。
+    const limit = name.endsWith('.xlsx') ? XLSX_LIMIT : UPLOAD_LIMIT;
+    if (file.size > limit)
+      throw new Error(`文件超过 ${limit / 1048576}MB，请拆分后导入`);
+    if (name.endsWith('.xlsx')) {
       await beginExcelImport(file);
       return;
     }
-    let data;
-    if (file.name.toLowerCase().endsWith('.json'))
-      data = await calculate(JSON.parse(await file.text()));
-    else throw new Error('请导入 .xlsx 或 .json 标准数据文件');
-    acceptImport(data);
+    if (!name.endsWith('.json'))
+      throw new Error('请导入 .xlsx 或 .json 标准数据文件');
+    acceptImport(await calculate(JSON.parse(await file.text())));
   } catch (e) {
     setError('导入失败：' + e.message + '。当前看板保留上一份计算结果。');
   } finally {
@@ -167,10 +105,7 @@ function render() {
   const rows = rowsFiltered();
   const comparable = rows.filter((r) => r.production_profit !== null);
   const managementRows = rows.filter((r) => r.management_profit !== null);
-  const complete = rows.filter(
-      (r) => r.production_status === 'complete',
-    ).length,
-    estimate = rows.filter((r) => r.production_status === 'estimated').length;
+  const estimate = rows.filter((r) => r.production_status === 'estimated').length;
   const revenue = comparable.length ? sum(comparable, 'revenue') : null;
   const gross = comparable.length ? sum(comparable, 'production_profit') : null;
   const profit = managementRows.length
@@ -232,7 +167,7 @@ function render() {
   details();
   renderSource(result.source_analysis, rows);
   renderExecutive(result);
-  if (typeof refreshComparison === 'function') refreshComparison();
+  refreshComparison();
   updateAIOrders();
   if (pendingAnchor) {
     const target = document.getElementById(pendingAnchor);
@@ -279,23 +214,23 @@ function chart(rows) {
   const zero = negative ? 235 : 130;
   const scale = (negative ? 190 : 360) / max;
   const height = show.length * 37 + 25;
-  let svg = `<svg viewBox="0 0 650 ${height}" role="img" aria-label="当前订单生产毛利和管理利润比较"><line x1="${zero}" y1="0" x2="${zero}" y2="${height - 20}" stroke="#d8e0d2"/><text x="${zero}" y="${height - 3}" text-anchor="middle" fill="#99a68e" font-size="9">0 元</text>`;
+  let svg = `<svg viewBox="0 0 650 ${height}" role="img" aria-label="当前订单生产毛利和管理利润比较"><line x1="${zero}" y1="0" x2="${zero}" y2="${height - 20}" stroke="${PALETTE.axis}"/><text x="${zero}" y="${height - 3}" text-anchor="middle" fill="${PALETTE.axisText}" font-size="9">0 元</text>`;
   show.forEach((r, i) => {
     const y = i * 37 + 8;
-    svg += `<text x="0" y="${y + 12}" fill="#7a8a70" font-size="10">${esc(r.order_id)}</text>`;
+    svg += `<text x="0" y="${y + 12}" fill="${PALETTE.label}" font-size="10">${esc(r.order_id)}</text>`;
     for (const [key, color, dy] of [
-      ['production_profit', '#23583f', 0],
-      ['management_profit', '#a2c6a3', 12],
+      ['production_profit', PALETTE.production, 0],
+      ['management_profit', PALETTE.management, 12],
     ]) {
       const value = r[key];
       if (value === null) {
-        svg += `<text x="${zero + 8}" y="${y + dy + 8}" fill="#b5bdaa" font-size="8">${key === 'management_profit' && r.management_status === 'disabled' ? '未启用' : '依据待补'}</text>`;
+        svg += `<text x="${zero + 8}" y="${y + dy + 8}" fill="${PALETTE.missing}" font-size="8">${key === 'management_profit' && r.management_status === 'disabled' ? '未启用' : '依据待补'}</text>`;
         continue;
       }
       const n = Number(value),
         width = Math.abs(n) * scale;
       const x = n < 0 ? zero - width : zero;
-      svg += `<rect x="${x}" y="${y + dy}" width="${Math.max(1, width)}" height="8" rx="2" fill="${n < 0 ? '#c27f6c' : color}"><title>${esc(r.order_id)} ${key === 'production_profit' ? '生产毛利' : '管理利润'}：${money(value)} 元</title></rect><text x="${n < 0 ? x - 5 : x + width + 6}" y="${y + dy + 7}" text-anchor="${n < 0 ? 'end' : 'start'}" fill="${n < 0 ? '#b5806b' : '#8e9c80'}" font-size="8">${money(value)}</text>`;
+      svg += `<rect x="${x}" y="${y + dy}" width="${Math.max(1, width)}" height="8" rx="2" fill="${n < 0 ? PALETTE.negative : color}"><title>${esc(r.order_id)} ${key === 'production_profit' ? '生产毛利' : '管理利润'}：${money(value)} 元</title></rect><text x="${n < 0 ? x - 5 : x + width + 6}" y="${y + dy + 7}" text-anchor="${n < 0 ? 'end' : 'start'}" fill="${n < 0 ? PALETTE.negativeText : PALETTE.valueText}" font-size="8">${money(value)}</text>`;
     }
   });
   $('chart').innerHTML = svg + '</svg>';
@@ -375,16 +310,7 @@ function details() {
     1,
     ...Object.values(displayed).map((x) => Math.abs(Number(x))),
   );
-  const colors = [
-    '#376b4a',
-    '#648864',
-    '#8ea77a',
-    '#b1c19c',
-    '#94a98c',
-    '#b4c1a6',
-    '#cbd4bc',
-    '#dae1d0',
-  ];
+  const colors = PALETTE.costShades;
   $('breakdown').innerHTML = Object.entries(displayed)
     .map(
       ([key, value], i) =>
@@ -649,15 +575,15 @@ function switchView(view, target = null) {
   }
   for (const link of document.querySelectorAll('.sidebar .nav'))
     link.classList.toggle('active', link.getAttribute('href') === '#' + id);
-  if (typeof updateWorkspace === 'function') updateWorkspace(analysis);
+  updateWorkspace(analysis);
   if (view === 'comparison') {
     $('view-heading').textContent = '订单毛利与质量对照';
     $('view-description').textContent =
       '查看理论目标、当前表现与需要处理的偏差。';
     history.replaceState(null, '', '#comparison');
-    if (typeof refreshComparison === 'function') refreshComparison();
+    refreshComparison();
   }
-  if (view === 'history' && typeof loadHistory === 'function') loadHistory();
+  if (view === 'history') loadHistory();
 }
 for (const button of document.querySelectorAll('[data-view]'))
   button.addEventListener('click', () => {

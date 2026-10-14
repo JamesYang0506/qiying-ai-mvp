@@ -9,10 +9,7 @@ function renderExecutive(data) {
   const m = a.metrics,
     v = a.profit_layers,
     r = a.trust_review;
-  const wan = (x) =>
-    x === null || x === undefined ? '待补' : (Number(x) / 10000).toFixed(2);
-  const rate = (x) =>
-    x === null || x === undefined ? '待补' : (Number(x) * 100).toFixed(2) + '%';
+  // wan / percent 来自 util.js，空值文案与首页保持一致（待补）。
   const metric = (label, value, note, highlight = false) =>
     `<article class="executive-metric ${highlight ? 'executive-highlight' : ''} ${value != null && Number(value) < 0 ? 'metric-loss' : ''}"><span>${label}</span><strong>${wan(value)}${value === null || value === undefined ? '' : '<small>万元</small>'}</strong><p>${note}</p></article>`;
   const checks = r?.checks || [],
@@ -54,16 +51,16 @@ function renderExecutive(data) {
         ? '当前试算有利润，追加订单前先复核报价与成本边界。'
         : '当前费用不完整，先补齐关键成本再判断订单收益。';
   root.innerHTML = `<section id="executive-overview" class="executive-scope"><div><span class="eyebrow">当前订单经营概览</span><h2>${esc(a.product)} <span class="executive-order-count">${Number(m.quantity).toLocaleString('zh-CN')} 双</span></h2><p>生产期间 ${esc(a.production.start)} — ${esc(a.production.end)} · 当前仅展示本单，不代表公司全部经营情况</p></div><span class="review-state review-pending">参考试算 · 尚待核实</span></section>
-  <div class="executive-metrics">${metric('折后收入', m.revenue, '当前订单整单收入试算')}${metric('累计已列成本', v.cumulative_cost, `生产 ${wan(v.production_cost)} 万 + 经营费用 ${wan(v.operating_expense)} 万`)}${metric('生产毛利 · 试算', v.production_profit, `毛利率 ${rate(m.production_margin)}`, true)}${metric('经营净利 · 试算', v.operating_net_profit, `净利率 ${rate(m.management_reference_margin)}`)}</div>
+  <div class="executive-metrics">${metric('折后收入', m.revenue, '当前订单整单收入试算')}${metric('累计已列成本', v.cumulative_cost, `生产 ${wan(v.production_cost)} 万 + 经营费用 ${wan(v.operating_expense)} 万`)}${metric('生产毛利 · 试算', v.production_profit, `毛利率 ${percent(m.production_margin, '待补')}`, true)}${metric('经营净利 · 试算', v.operating_net_profit, `净利率 ${percent(m.management_reference_margin, '待补')}`)}</div>
   <section id="executive-risks"><div class="executive-section-head"><h2>需要核查的事项</h2><button class="executive-link" data-detail-target="trust-review">全部审查明细 ↗</button></div><p>${differences.length} 项发现差异 · ${r?.counts.pending || 0} 项待核验。待核验不等于数据错误；通过勾稽不等于业务凭证已核实。</p><div class="executive-risk-grid">${priorityRisks.map(riskCard).join('') || '<div class="panel">当前暂无已发现差异，仍需结合完整费用范围与原始凭证判断。</div>'}</div>${moreRisks.length ? `<details class="executive-more-risks"><summary>查看其余 ${moreRisks.length} 项核查提醒</summary><div class="executive-risk-grid">${moreRisks.map(riskCard).join('')}</div></details>` : ''}</section>
   <section id="executive-costs"><div class="executive-section-head"><h2>成本与利润构成</h2><button class="executive-link" data-detail-target="profit-layers">查看精确金额 ↗</button></div><div class="profit-pie-grid">
   ${renderProfitPie(
     '生产阶段',
     m.revenue,
     [
-      ['材料成本', m.material_total, '#476c9b'],
-      ['人工及加工', m.processing_total, '#bd8c49'],
-      ['生产毛利', v.production_profit, '#286b50'],
+      ['材料成本', m.material_total, PALETTE.revenue],
+      ['人工及加工', m.processing_total, PALETTE.expense],
+      ['生产毛利', v.production_profit, PALETTE.profit],
     ],
     true,
   )}
@@ -71,16 +68,16 @@ function renderExecutive(data) {
     '经营阶段',
     m.revenue,
     [
-      ['生产成本', v.production_cost, '#476c9b'],
-      ['管理费用', v.management_expense, '#bd8c49'],
-      ['销售费用', v.sales_expense, '#9d7aa3'],
-      ['经营净利试算', v.operating_net_profit, '#286b50'],
+      ['生产成本', v.production_cost, PALETTE.revenue],
+      ['管理费用', v.management_expense, PALETTE.expense],
+      ['销售费用', v.sales_expense, PALETTE.other],
+      ['经营净利试算', v.operating_net_profit, PALETTE.profit],
     ],
     true,
   )}
   </div><p class="chart-note">两图均以本单收入为100%，分别表示生产与经营阶段；不能跨图相加。首页金额约至0.01万元，计算及占比仍使用原始精度。费用范围尚未核实完整。</p></section>
   <section id="executive-decisions"><div class="executive-section-head"><h2>订单决策参考</h2><span class="muted">基于当前试算与审查规则</span></div>
-  <div class="executive-decision-lead"><span>决策提示</span><h3>${emphasis}</h3><p>${netAvailable ? `本单经营净利约 ${wan(v.operating_net_profit)} 万元，净利率约 ${rate(m.management_reference_margin)}。` : ''}税口径及费用范围尚待确认，当前结果不足以直接决定接单、拒单或降价。</p></div>
+  <div class="executive-decision-lead"><span>决策提示</span><h3>${emphasis}</h3><p>${netAvailable ? `本单经营净利约 ${wan(v.operating_net_profit)} 万元，净利率约 ${percent(m.management_reference_margin, '待补')}。` : ''}税口径及费用范围尚待确认，当前结果不足以直接决定接单、拒单或降价。</p></div>
   <div class="executive-decision-grid"><article><span>01 · 报价与成本控制</span><h3>${margins !== null && margins < 0 ? '先评估亏损原因' : '评估订单对成本变化的承受力'}</h3><p>${sensitivity === null ? '关键费用或利润待补后，再评估报价空间。' : `情景测算：收入不变、已列成本整体增加1%，将消耗约 ${(sensitivity * 100).toFixed(0)}% 的当前净利。追加单前核实新数量对应的材料、加工和运费报价。此情景不是实际预测。`}</p></article>
   <article><span>02 · 优先核查大额开销</span><h3>材料、工资及开发费用优先复核</h3><p>材料约 ${wan(m.material_total)} 万元，生产工资约 ${wan(wages?.amount)} 万元（已含在加工费内），开发费用约 ${wan(development?.amount)} 万元。确认耗用、工资分摊及开发费用应由本单承担的范围，再评估可优化空间。</p></article>
   <article><span>03 · 关闭数量差异</span><h3>${differences.some((x) => x.code === 'REPLENISHMENT') ? '解释不良与补单差额后再调整成本' : '持续核对生产、补料与交付数量'}</h3><p>${differences.find((x) => x.code === 'REPLENISHMENT') ? esc(differences.find((x) => x.code === 'REPLENISHMENT').evidence) : '当前不良与补单未发现数量差异。'}核对返工、回收及补料记录，确认是否存在未归集成本，不能把差额直接当作损失。</p></article></div>
@@ -162,15 +159,15 @@ function renderProfitLayers(a) {
   </div>
   <div class="profit-pie-grid">
   ${renderProfitPie('生产阶段 · 收入如何分配', m.revenue, [
-    ['材料成本', m.material_total, '#476c9b'],
-    ['人工及加工成本', m.processing_total, '#bd8c49'],
-    ['生产毛利', v.production_profit, '#286b50'],
+    ['材料成本', m.material_total, PALETTE.revenue],
+    ['人工及加工成本', m.processing_total, PALETTE.expense],
+    ['生产毛利', v.production_profit, PALETTE.profit],
   ])}
   ${renderProfitPie('经营阶段 · 收入最终去向', m.revenue, [
-    ['生产成本', v.production_cost, '#476c9b'],
-    ['管理费用', v.management_expense, '#bd8c49'],
-    ['销售费用（运费）', v.sales_expense, '#9d7aa3'],
-    ['经营净利试算', v.operating_net_profit, '#286b50'],
+    ['生产成本', v.production_cost, PALETTE.revenue],
+    ['管理费用', v.management_expense, PALETTE.expense],
+    ['销售费用（运费）', v.sales_expense, PALETTE.other],
+    ['经营净利试算', v.operating_net_profit, PALETTE.profit],
   ])}
   </div><p class="chart-note">两张图均以本单折后收入为100%，分别展示生产和经营阶段，不能把两张图的金额相加。生产工资已包含在人工及加工费中，不能再次扣除。逐项舍入与汇总舍入可能有分位尾差。经营净利试算的费用范围尚未确认完整。</p>`;
 }
@@ -187,7 +184,8 @@ function renderProfitPie(title, revenue, segments, compact = false) {
     revenue !== undefined &&
     segments.every(([, value]) => value !== null && value !== undefined);
   const total = Number(revenue),
-    sum = segments.reduce((s, [, value]) => s + Number(value), 0);
+    // 不与 util.js 的 sum(rows, key) 重名，避免误用成金额合计
+    segmentTotal = segments.reduce((s, [, value]) => s + Number(value), 0);
   const valid =
     present &&
     Number.isFinite(total) &&
@@ -195,12 +193,12 @@ function renderProfitPie(title, revenue, segments, compact = false) {
     segments.every(
       ([, value]) => Number.isFinite(Number(value)) && Number(value) >= 0,
     ) &&
-    Math.abs(sum - total) < 0.02;
+    Math.abs(segmentTotal - total) < 0.02;
   let offset = 0;
   const arcs = valid
     ? segments
         .map(([label, value, color]) => {
-          const share = (Number(value) / sum) * 100,
+          const share = (Number(value) / segmentTotal) * 100,
             start = offset;
           offset += share;
           return `<circle cx="110" cy="110" r="82" pathLength="100" fill="none" stroke="${color}" stroke-width="30" stroke-dasharray="${share} ${100 - share}" stroke-dashoffset="${-start}" transform="rotate(-90 110 110)"><title>${esc(label)}：${display(value)}，占收入 ${percent(Number(value) / total)}</title></circle>`;
@@ -215,7 +213,7 @@ function renderProfitPie(title, revenue, segments, compact = false) {
         ? '收入不大于零，暂不计算收入占比。'
         : '金额暂未勾稽平衡，暂不生成占比图。';
   return `<article class="profit-pie-card"><h3>${esc(title)}</h3><p>金额与占比均为当前参考试算</p><div class="profit-pie-body">
-  ${valid ? `<svg class="profit-donut" viewBox="0 0 220 220" role="img" aria-label="${esc(title)}，各项金额及占比见图例"><circle cx="110" cy="110" r="82" fill="none" stroke="#edf1ec" stroke-width="30"/>${arcs}<text x="110" y="101" text-anchor="middle" class="donut-caption">本单折后收入${compact ? '' : ' / 元'}</text><text x="110" y="126" text-anchor="middle" class="donut-total">${compact ? display(revenue) : money(revenue)}</text></svg>` : `<div class="profit-pie-unavailable">${reason}</div>`}
+  ${valid ? `<svg class="profit-donut" viewBox="0 0 220 220" role="img" aria-label="${esc(title)}，各项金额及占比见图例"><circle cx="110" cy="110" r="82" fill="none" stroke="${PALETTE.pieTrack}" stroke-width="30"/>${arcs}<text x="110" y="101" text-anchor="middle" class="donut-caption">本单折后收入${compact ? '' : ' / 元'}</text><text x="110" y="126" text-anchor="middle" class="donut-total">${compact ? display(revenue) : money(revenue)}</text></svg>` : `<div class="profit-pie-unavailable">${reason}</div>`}
   <ul class="profit-pie-legend">${segments.map(([label, value, color]) => `<li><span class="pie-key" style="background:${color}"></span><div><span>${esc(label)}</span><strong>${value === null || value === undefined ? '待补' : display(value)}</strong></div><b>${valid ? (compact ? ((Number(value) / total) * 100).toFixed(2) + '%' : percent(Number(value) / total)) : '—'}</b></li>`).join('')}</ul></div></article>`;
 }
 
