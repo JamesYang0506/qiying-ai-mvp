@@ -34,7 +34,7 @@
     <div class="lobby-summary"><div><strong id="lobby-order-count">—</strong><span>历史订单</span></div><div><strong id="lobby-version-count">—</strong><span>订单分析版本</span></div><p id="lobby-history-status" role="status">正在读取本机历史记录…</p></div>
   </section>
   <section id="history-view" aria-label="历史分析记录" hidden>
-    <div class="panel history-controls"><label for="history-search">查找订单<input id="history-search" type="search" placeholder="搜索订单编号、产品或客户"></label><label for="history-kind">数据类型<select id="history-kind"><option value="all">全部记录</option><option value="real">导入数据</option><option value="demo">模拟数据</option></select></label><label for="history-layout">展示方式<select id="history-layout"><option value="records">逐条分析记录</option><option value="orders">按订单汇总</option></select></label><button id="history-refresh" class="secondary">刷新记录</button></div>
+    <div class="panel history-controls"><label for="history-search">查找订单<input id="history-search" type="search" placeholder="搜索订单编号、产品或客户"></label><label for="history-kind">数据类型<select id="history-kind"><option value="all">全部记录</option><option value="real">导入数据</option><option value="demo">模拟数据</option></select></label><label for="history-layout">展示方式<select id="history-layout"><option value="records">逐条分析记录</option><option value="orders">按订单汇总</option><option value="trash">回收站</option></select></label><button id="history-refresh" class="secondary">刷新记录</button></div>
     <p class="help">每笔订单可选择不同分析版本。金额按该版本原口径展示，试算结果单独标注；查看历史不会改变当前分析。</p><p id="history-status" class="help" role="status" aria-live="polite"></p><div id="history-list" class="history-grid"></div>
   </section>
   <section id="decision-view" aria-label="经营概览" hidden><div class="empty">导入数据后显示经营概览与决策建议。</div></section>

@@ -20,3 +20,5 @@
 .import-advanced summary { cursor:pointer; padding:10px 0; font-weight:600; }
 
 .history-controls{flex-wrap:wrap}.history-record-time{font-size:13px;color:#607765;margin:18px 0}.history-card>.help{overflow-wrap:anywhere}
+
+.history-record-actions{display:flex;flex-wrap:wrap;gap:12px}.history-delete{color:#a74438;border-color:#ead1ca}

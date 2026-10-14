@@ -1,10 +1,53 @@
-"""Read-only order history backed by existing calculation snapshots."""
+"""Order history with reversible per-order deletion; snapshots remain unchanged."""
 import json
+import hashlib
+import threading
+from datetime import datetime,timezone
+from uuid import uuid4
 import re
 from pathlib import Path
 from .ollama_client import validate_result
 
 SNAPSHOT_ID=re.compile(r'[A-Za-z0-9-]{10,80}')
+
+TRASH_LOCK=threading.RLock()
+
+
+def deletion_path(storage,sid,oid):
+    if not isinstance(sid,str) or not SNAPSHOT_ID.fullmatch(sid):raise ValueError('无效历史版本编号')
+    if not isinstance(oid,str) or not oid or len(oid)>200:raise ValueError('请选择有效历史订单')
+    root=Path(storage).resolve();folder=root/'history-trash'
+    if folder.is_symlink() or folder.resolve().parent!=root:raise ValueError('回收站路径无效')
+    return folder/(sid+'-'+hashlib.sha256(oid.encode()).hexdigest()+'.json')
+
+
+def is_deleted(storage,sid,oid):
+    return deletion_path(storage,sid,oid).exists()
+
+
+def set_deleted(storage,sid,oid,deleted):
+    with TRASH_LOCK:
+        data=load_snapshot(storage,sid)
+        if not any(x['order_id']==oid for x in data['orders']):raise ValueError('所选订单不属于该历史版本')
+        target=deletion_path(storage,sid,oid)
+        if target.is_symlink():raise ValueError('回收站文件不可操作')
+        if deleted and not target.exists():
+            target.parent.mkdir(parents=True,exist_ok=True)
+            temp=target.with_suffix('.'+uuid4().hex+'.tmp')
+            temp.write_text(json.dumps({'snapshot_id':sid,'order_id':oid,'deleted_at':datetime.now(timezone.utc).isoformat()},ensure_ascii=False),encoding='utf-8')
+            temp.replace(target)
+        elif not deleted:target.unlink(missing_ok=True)
+    return {'status':'deleted' if deleted else 'restored','snapshot_id':sid,'order_id':oid}
+
+
+def visible_snapshot(storage,data):
+    sid=data['snapshot']['snapshot_id']
+    allowed={x['order_id'] for x in data['orders'] if not is_deleted(storage,sid,x['order_id'])}
+    if not allowed:return None
+    for table in ('orders','costs','allocations','issues'):
+        data[table]=[x for x in data[table] if x.get('order_id') in allowed]
+    if (data.get('source_analysis') or {}).get('order_id') not in allowed:data.pop('source_analysis',None)
+    return data
 
 
 def load_snapshot(storage,sid):
@@ -31,7 +74,7 @@ def load_snapshot(storage,sid):
         raise ValueError('历史版本文件损坏或格式不兼容') from None
 
 
-def list_history(storage):
+def list_history(storage,deleted=False):
     groups={};skipped=0
     for path in Path(storage).glob('*.json'):
         if not SNAPSHOT_ID.fullmatch(path.stem):continue
@@ -40,6 +83,7 @@ def list_history(storage):
         snap=data['snapshot'];source=data.get('source_analysis') or {}
         for order in data['orders']:
             oid=order['order_id']
+            if is_deleted(storage,snap['snapshot_id'],oid)!=deleted:continue
             group=groups.setdefault(oid,{'order_id':oid,'versions':[]})
             trial=source.get('metrics') if source.get('order_id')==oid else None
             group['versions'].append({
@@ -62,6 +106,7 @@ def read_history(storage,sid,order_id):
     if not isinstance(order_id,str) or not order_id or len(order_id)>200:
         raise ValueError('请选择要查看的历史订单')
     data=load_snapshot(storage,sid)
+    if is_deleted(storage,sid,order_id):raise ValueError('该分析记录已在回收站，请先恢复')
     if not any(x['order_id']==order_id for x in data['orders']):
         raise ValueError('所选订单不属于该历史版本')
     for table in ('orders','costs','allocations','issues'):

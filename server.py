@@ -10,7 +10,7 @@ from profit_model.engine import calculate
 from profit_model.files import empty_template, workbook_bytes, read_workbook, export_bundle, export_training_bundle
 from profit_model.analysis_gateway import run_analysis
 from profit_model.ollama_client import OllamaClient
-from profit_model.history import list_history, read_history
+from profit_model.history import list_history, read_history, set_deleted, visible_snapshot, is_deleted
 from profit_model.excel_import import preview_excel, confirmed_excel, auto_excel
 import threading
 
@@ -51,7 +51,9 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 if path=='/api/demo': return self.send(json.loads((ROOT/'data/samples/demo.json').read_text(encoding='utf-8')))
                 if path=='/api/current':
                     current=storage/'latest.json'
-                    return self.send(json.loads(current.read_text(encoding='utf-8')) if current.exists() else {'current':None})
+                    data=visible_snapshot(storage,json.loads(current.read_text(encoding='utf-8'))) if current.exists() else None
+                    return self.send(data or {'current':None})
+                if path=='/api/history/trash':return self.send(list_history(storage,deleted=True))
                 if path=='/api/history':return self.send(list_history(storage))
                 if path.startswith('/api/history/'):
                     values=parse_qs(urlparse(self.path).query).get('order_id',[])
@@ -74,9 +76,13 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 length=int(self.headers.get('Content-Length','0'))
                 limit=15*1024*1024 if path in ('/api/preview-xlsx','/api/import-reviewed-xlsx','/api/auto-import-xlsx') else MAX_BODY
                 if length<=0 or length>limit: return self.send({'error':'文件须在 0～10MB 之间'},413)
-                if path not in ('/api/calculate','/api/import-xlsx','/api/export','/api/export-training','/api/ai/analyze','/api/preview-xlsx','/api/import-reviewed-xlsx','/api/auto-import-xlsx'):
+                if path not in ('/api/calculate','/api/import-xlsx','/api/export','/api/export-training','/api/ai/analyze','/api/preview-xlsx','/api/import-reviewed-xlsx','/api/auto-import-xlsx','/api/history/delete','/api/history/restore'):
                     return self.send({'error':'接口不存在'},404)
                 content=self.rfile.read(length)
+                if path in ('/api/history/delete','/api/history/restore'):
+                    payload=json.loads(content)
+                    if not isinstance(payload,dict) or payload.get('confirmed') is not True:raise ValueError('请确认操作的订单及分析版本')
+                    return self.send(set_deleted(storage,payload.get('snapshot_id'),payload.get('order_id'),path.endswith('/delete')))
                 reviewed_data=None
                 if path in ('/api/preview-xlsx','/api/import-reviewed-xlsx','/api/auto-import-xlsx'):
                     payload=json.loads(content)
@@ -106,6 +112,7 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                     if not isinstance(selected,list) or any(not isinstance(x,str) for x in selected):
                         raise ValueError('导出订单范围无效')
                     ids=set(selected)
+                    if any(is_deleted(storage,sid,oid) for oid in ids):raise ValueError('所选记录已在回收站，请先恢复')
                     if path=='/api/export-training' and (not ids or len(ids)!=len(selected)):
                         raise ValueError('请导出至少一笔订单，订单编号不能重复')
                     if not ids.issubset({x['order_id'] for x in result['orders']}): raise ValueError('导出包含未知订单')

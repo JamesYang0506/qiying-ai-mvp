@@ -17,6 +17,9 @@ source_analysis含 metrics、profit_layers、cost_rows、materials、production�
 | 接口 | 行为 |
 |---|---|
 | GET /api/current | 读取本机最新计算快照，无快照时返回空状态 |
+| GET /api/history/trash | 列出已移入回收站的订单分析记录 |
+| POST /api/history/delete | 携带 snapshot_id、order_id、confirmed=true，将指定订单的指定分析版本移入回收站 |
+| POST /api/history/restore | 同样携带订单与版本定位，恢复回收站记录；重复操作幂等 |
 | GET /api/history | 按订单汇总历史版本摘要，返回 orders 和 skipped_files；跳过损坏或不兼容快照 |
 | GET /api/history/{snapshot_id}?order_id={order_id} | 只读获取指定版本的单笔订单及其成本、分摊、问题和对应来源；analysis_records 仅包含订单与快照均匹配的已保存模型结果 |
 | POST /api/calculate | 按标准JSON计算并保存快照 |
@@ -32,3 +35,5 @@ source_analysis含 metrics、profit_layers、cost_rows、materials、production�
 AI请求与结果说明见 [本地接入](local-qwen-integration.md)。模型输出包含summary、risks、recommendations和unknowns；风险和建议引用有效事实id。分析独立保存，reviewed=false，不改写计算结果。模型未就绪、失败和结构/引用错误均明确反馈，不以模拟结论替代。
 
 服务仅绑定本机地址，支持10MB内输入并限制同源操作。本地模型一次只处理一个生成请求。前端显示精度不改变底层计算及导出精度。
+
+回收站按订单和快照隔离，标记位于 reports/snapshots/history-trash；不改写计算快照或删除原始文件。正常历史、当前分析、导出及模型准备均排除已删除订单；恢复后原结果及对应已保存模型建议可重新读取。最新快照的全部订单均删除时，当前分析为空；不会自动将更早版本当作当前分析。

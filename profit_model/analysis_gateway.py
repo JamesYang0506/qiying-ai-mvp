@@ -4,6 +4,7 @@ import re
 from uuid import uuid4
 from datetime import datetime,timezone
 from .ollama_client import model_context,validate_result
+from .history import is_deleted
 
 FOCUSES={'decision':'订单决策','profit':'利润分析','cost':'成本优化','risk':'风险审查'}
 
@@ -20,6 +21,7 @@ def prepare_analysis(request,storage):
     if not isinstance(oid,str) or not oid or len(oid)>200:raise ValueError('请选择有效订单')
     if not isinstance(focus,str) or focus not in FOCUSES:raise ValueError('分析方向无效')
     if not isinstance(question,str) or len(question)>2000:raise ValueError('补充问题最多2000字')
+    if is_deleted(storage,sid,oid):raise ValueError('该分析记录已在回收站，请先恢复')
     file=storage/(sid+'.json')
     if not file.is_file():raise ValueError('订单快照不存在，请重新导入数据')
     snapshot=json.loads(file.read_text(encoding='utf-8'))
