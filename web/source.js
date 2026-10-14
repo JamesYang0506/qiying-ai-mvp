@@ -60,7 +60,7 @@ function renderSource(analysis,rows){
 function renderImportEvidence(a){
   const review=a.import_review;if(!review)return '';
   const units={quantity:'双',per_pair:'元/双',total:'元/整单'};
-  return `<details class="source-details" id="import-evidence"><summary>查看本次确认的 Excel 读取位置和单位</summary><p>${esc(review.scope)}</p><div class="table-scroll"><table><thead><tr><th>字段</th><th>实际读取位置</th><th>读取数值</th><th>确认单位</th></tr></thead><tbody>${Object.entries(review.fields).map(([id,x])=>`<tr><td>${esc(x.label||id)}</td><td>${esc(review.cost_sheet)}!${esc(x.source_cell||x.cell)}</td><td>${x.read_value===null?'缺失':esc(x.read_value)}</td><td>${esc(units[x.unit]||x.unit)}</td></tr>`).join('')}</tbody></table></div></details>`;
+  return `<details class="source-details" id="import-evidence"><summary>查看本次 Excel 读取位置和单位</summary><p>${esc(review.scope)}</p><div class="table-scroll"><table><thead><tr><th>字段</th><th>实际读取位置</th><th>读取数值</th><th>读取单位</th></tr></thead><tbody>${Object.entries(review.fields).map(([id,x])=>`<tr><td>${esc(x.label||id)}</td><td>${esc(review.cost_sheet)}!${esc(x.source_cell||x.cell)}</td><td>${x.read_value===null?'缺失':esc(x.read_value)}</td><td>${esc(units[x.unit]||x.unit)}</td></tr>`).join('')}</tbody></table></div></details>`;
 }
 
 function renderProfitLayers(a){

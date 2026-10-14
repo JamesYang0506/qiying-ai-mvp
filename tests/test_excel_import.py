@@ -150,3 +150,14 @@ class PreviewApiTests(unittest.TestCase):
         r=self.post('/api/import-reviewed-xlsx',dict(payload,mapping=p['mapping'],source_hash=p['source_hash'],confirmed=True))
         self.assertEqual(r['source_analysis']['metrics']['production_profit'],'1662.50')
         self.assertTrue((self.storage/(r['snapshot']['snapshot_id']+'.json')).is_file())
+
+    def test_automatic_import_saves_only_ready_result(self):
+        from test_auto_import import labeled_source
+        payload={'workbook_base64':base64.b64encode(source_bytes()).decode()}
+        held=self.post('/api/auto-import-xlsx',payload)
+        self.assertEqual(held['status'],'needs_review');self.assertEqual(list(self.storage.iterdir()),[])
+        payload['workbook_base64']=base64.b64encode(labeled_source()).decode()
+        done=self.post('/api/auto-import-xlsx',payload)
+        self.assertEqual(done['status'],'imported')
+        self.assertEqual(done['result']['snapshot']['import_review']['mode'],'automatic')
+        self.assertEqual(len(list(self.storage.glob('*.json'))),2)

@@ -11,7 +11,7 @@ from profit_model.files import empty_template, workbook_bytes, read_workbook, ex
 from profit_model.analysis_gateway import run_analysis
 from profit_model.ollama_client import OllamaClient
 from profit_model.history import list_history, read_history
-from profit_model.excel_import import preview_excel, confirmed_excel
+from profit_model.excel_import import preview_excel, confirmed_excel, auto_excel
 import threading
 
 ROOT=Path(__file__).resolve().parent
@@ -72,19 +72,24 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
             try:
                 path=urlparse(self.path).path
                 length=int(self.headers.get('Content-Length','0'))
-                limit=15*1024*1024 if path in ('/api/preview-xlsx','/api/import-reviewed-xlsx') else MAX_BODY
+                limit=15*1024*1024 if path in ('/api/preview-xlsx','/api/import-reviewed-xlsx','/api/auto-import-xlsx') else MAX_BODY
                 if length<=0 or length>limit: return self.send({'error':'文件须在 0～10MB 之间'},413)
-                if path not in ('/api/calculate','/api/import-xlsx','/api/export','/api/export-training','/api/ai/analyze','/api/preview-xlsx','/api/import-reviewed-xlsx'):
+                if path not in ('/api/calculate','/api/import-xlsx','/api/export','/api/export-training','/api/ai/analyze','/api/preview-xlsx','/api/import-reviewed-xlsx','/api/auto-import-xlsx'):
                     return self.send({'error':'接口不存在'},404)
                 content=self.rfile.read(length)
                 reviewed_data=None
-                if path in ('/api/preview-xlsx','/api/import-reviewed-xlsx'):
+                if path in ('/api/preview-xlsx','/api/import-reviewed-xlsx','/api/auto-import-xlsx'):
                     payload=json.loads(content)
                     if not isinstance(payload,dict) or not isinstance(payload.get('workbook_base64'),str):raise ValueError('请选择有效Excel文件')
                     binary=base64.b64decode(payload['workbook_base64'],validate=True)
                     if path=='/api/preview-xlsx':return self.send(preview_excel(binary,payload.get('mapping')))
-                    if payload.get('confirmed') is not True:raise ValueError('请先预览并确认字段和单位')
-                    reviewed_data=confirmed_excel(binary,payload.get('mapping',{}),payload.get('source_hash'))
+                    if path=='/api/auto-import-xlsx':
+                        adapted=auto_excel(binary,payload.get('profiles'))
+                        if adapted['status']=='needs_review':return self.send(adapted)
+                        reviewed_data=adapted['data']
+                    else:
+                        if payload.get('confirmed') is not True:raise ValueError('请先预览并确认字段和单位')
+                        reviewed_data=confirmed_excel(binary,payload.get('mapping',{}),payload.get('source_hash'))
                 if path=='/api/ai/analyze':
                     if not analysis_lock.acquire(blocking=False):return self.send({'error':'本地模型正在分析另一请求，请稍后再试'},409)
                     try:return self.send(run_analysis(json.loads(content),storage,client))
@@ -113,6 +118,8 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                     return self.send(export_bundle(result),content_type='application/zip',filename='profit-results.zip')
                 data=reviewed_data if reviewed_data is not None else read_workbook(content) if path=='/api/import-xlsx' else json.loads(content)
                 result=calculate(data)
+                if reviewed_data is not None:
+                    result['snapshot']['import_review']=data['metadata'].get('import_review',{'mode':'reviewed','source_hash':payload.get('source_hash')})
                 storage.mkdir(parents=True,exist_ok=True)
                 target=storage/(result['snapshot']['snapshot_id']+'.json')
                 temp=target.with_suffix('.tmp')
@@ -121,7 +128,7 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                     current=storage/'latest.json'
                     current_temp=current.with_suffix('.tmp')
                     current_temp.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8');current_temp.replace(current)
-                self.send(result)
+                self.send({'status':'imported','result':result} if path=='/api/auto-import-xlsx' else result)
             except (ValueError,TypeError,KeyError,AttributeError,RecursionError) as e:
                 self.send({'error':str(e) or '输入结构不合法'},400)
             except Exception:

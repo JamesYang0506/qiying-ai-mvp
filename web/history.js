@@ -6,6 +6,7 @@ const historyTime=value=>{const d=new Date(value);return Number.isNaN(d.getTime(
 const historyMoney=value=>value===null||value===undefined?'依据待补':(Number(value)/10000).toFixed(2)+' 万元';
 
 function updateWorkspace(analysis=!$('analysis-tabs').hidden){
+  if(typeof updateAdaptationStatus==='function')updateAdaptationStatus(analysis);
   $('back-to-history').hidden=!historyViewing||!analysis;
   $('return-current').hidden=!historyViewing;
   $('return-current').disabled=busy||!currentResult;

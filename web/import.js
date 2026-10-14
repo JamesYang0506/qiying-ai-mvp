@@ -13,12 +13,35 @@ function excelButtons(){
 }
 async function beginExcelImport(file){
   const s={fileName:file.name,encoded:null,preview:null,dirty:false,working:true,confirming:false};excelSession=s;
-  $('excel-import-filename').textContent=file.name;$('excel-import-content').innerHTML='';$('excel-cost-sheet-wrap').hidden=true;
-  $('excel-import-ack').checked=false;fillProfiles();$('excel-profile').value='';$('excel-profile-name').value=file.name.replace(/\.xlsx$/i,'').slice(0,60);
-  excelMessage('正在读取文件并准备预览…');excelButtons();$('excel-import-dialog').showModal();
-  const bytes=new Uint8Array(await file.arrayBuffer());let binary='';
-  for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
-  if(excelSession!==s)return;s.encoded=btoa(binary);await refreshExcelPreview({});
+  $('excel-adaptation-status').hidden=false;$('excel-adaptation-text').textContent='正在自动识别表格、校验字段并准备计算…';$('excel-adaptation-details').hidden=true;
+  try{
+    const bytes=new Uint8Array(await file.arrayBuffer());let binary='';
+    for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
+    if(excelSession!==s)return;s.encoded=btoa(binary);
+    const outcome=await(await request('/api/auto-import-xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workbook_base64:s.encoded,profiles:excelProfiles().filter(p=>p.approved===true)})})).json();
+    if(excelSession!==s)return;
+    if(outcome.status==='imported'){excelSession=null;accept(outcome.result);switchView('home');loadHistory();return;}
+    if(outcome.status!=='needs_review')throw new Error('自动导入返回状态无效');
+    showExcelReview(s,outcome.preview,outcome.reasons);
+  }catch(e){if(excelSession===s){excelSession=null;updateAdaptationStatus();}throw e;}
+}
+function showExcelReview(s,preview,reasons){
+  s.preview=preview;s.working=false;
+  $('excel-import-filename').textContent=s.fileName;$('excel-import-content').innerHTML='';$('excel-cost-sheet-wrap').hidden=true;
+  $('excel-import-ack').checked=false;$('excel-show-all').checked=false;fillProfiles();$('excel-profile').value='';$('excel-profile-name').value=s.fileName.replace(/\.xlsx$/i,'').slice(0,60);
+  renderExcelPreview(preview);excelMessage('需要确认：'+reasons.join('；'),true);excelButtons();$('excel-import-dialog').showModal();
+  updateAdaptationStatus();
+}
+function updateAdaptationStatus(analysis=!$('analysis-tabs').hidden){
+  const r=result?.snapshot?.import_review;
+  $('excel-adaptation-status').hidden=!analysis||!r;
+  $('excel-adaptation-details').hidden=false;
+  if(r)$('excel-adaptation-text').textContent=r.mode==='automatic_profile'?`已复用经过确认的导入方案「${r.profile_name}」并自动计算。业务待核验事项仍保留。`:r.mode==='automatic'?'已自动识别表格并完成计算，读取依据已保存；业务待核验事项仍保留。':'已按确认过的字段和单位完成计算，读取依据已保存。';
+}
+function rememberExcelMapping(s){
+  if(!s.preview)return;
+  const name=($('excel-profile').value||$('excel-profile-name').value||s.fileName).trim().slice(0,60);
+  try{const profiles=excelProfiles().filter(x=>x.name!==name);profiles.unshift({name,mapping:s.preview.mapping,layout_signature:s.preview.layout_signature,approved:true});localStorage.setItem(profileKey,JSON.stringify(profiles.slice(0,20)));}catch{}
 }
 function collectExcelMapping(){
   if(excelSession?.preview?.kind!=='eva')return {};
@@ -36,6 +59,7 @@ async function refreshExcelPreview(mapping){
   finally{if(excelSession===s){s.working=false;excelButtons();}}
 }
 function renderExcelPreview(p){
+  $('excel-review-filter').hidden=p.kind!=='eva';
   $('excel-cost-sheet-wrap').hidden=p.kind!=='eva';
   $('excel-cost-sheet').innerHTML=(p.sheet_names||[]).map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
   if(p.mapping.cost_sheet)$('excel-cost-sheet').value=p.mapping.cost_sheet;
@@ -46,11 +70,19 @@ function renderExcelPreview(p){
   const regions=p.regions.map(r=>`<details class="import-region"><summary>${esc(r.sheet)} · ${esc(r.range)} 读取区域</summary><p class="help">这里仍使用固定模板区域。请核对配方、SOP重量、尺码、数量和日报是否确实位于这些位置。</p><div class="table-scroll"><table><tbody>${r.rows.filter(row=>row.some(x=>x.value!=='')).map(row=>`<tr>${row.map(x=>`<td title="${esc(x.value)}"><small>${esc(x.cell)}</small>${esc(x.value)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`).join('');
   const samples=p.kind==='standard'?p.tables.map(t=>`<details class="import-region"><summary>${esc(t.name)} · 前3行数据样例</summary><div class="table-scroll"><table><thead><tr>${t.headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${(t.samples||[]).map(row=>`<tr>${row.map(x=>`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`).join(''):'';
   $('excel-import-content').innerHTML=warning+content+samples+regions;
+  for(const row of $('excel-import-content').querySelectorAll('.import-fields tbody tr')){
+    const id=row.querySelector('[data-excel-cell]').dataset.excelCell;
+    row.dataset.excelNeedsReview=String(p.fields.find(f=>f.id===id)?.requires_review!==false);
+  }
+  filterExcelFields();
 }
+function filterExcelFields(){for(const row of document.querySelectorAll('[data-excel-needs-review]'))row.hidden=!$('excel-show-all').checked&&row.dataset.excelNeedsReview==='false';}
 function closeExcelImport(){if(excelSession?.confirming)return;excelSession?.controller?.abort();excelSession=null;$('excel-import-dialog').close();setBusy(false);}
 function markExcelDirty(){if(!excelSession)return;excelSession.dirty=true;$('excel-import-ack').checked=false;excelMessage('字段或单位已修改，请先重新预览，核对新的读取值。');excelButtons();}
 $('excel-import-content').addEventListener('input',e=>{if(e.target.matches('[data-excel-cell],[data-excel-unit]'))markExcelDirty();});
 $('excel-import-ack').addEventListener('change',excelButtons);
+$('excel-show-all').addEventListener('change',filterExcelFields);
+$('excel-adaptation-details').addEventListener('click',()=>switchView('detail',result?.source_analysis?'import-evidence':'quality'));
 $('excel-import-recheck').addEventListener('click',()=>refreshExcelPreview(collectExcelMapping()));
 $('excel-cost-sheet').addEventListener('change',()=>refreshExcelPreview({cost_sheet:$('excel-cost-sheet').value}));
 $('excel-import-close').addEventListener('click',closeExcelImport);
@@ -60,7 +92,7 @@ $('excel-profile-save').addEventListener('click',()=>{
   const s=excelSession,name=$('excel-profile-name').value.trim();
   if(!s?.preview||s.dirty||s.preview.blocking.length)return excelMessage('请先完成没有阻塞问题的预览，再保存方案。',true);
   if(!name)return excelMessage('请填写方案名称。',true);
-  try{const profiles=excelProfiles().filter(x=>x.name!==name);profiles.unshift({name,mapping:s.preview.mapping});localStorage.setItem(profileKey,JSON.stringify(profiles.slice(0,20)));fillProfiles();$('excel-profile').value=name;excelMessage('导入方案已保存在本浏览器，只保存位置和单位，不保存订单数值。');}catch{excelMessage('浏览器本地存储不可用，方案未保存；仍可继续本次导入。',true);}
+  try{const profiles=excelProfiles().filter(x=>x.name!==name);profiles.unshift({name,mapping:s.preview.mapping,layout_signature:s.preview.layout_signature,approved:$('excel-import-ack').checked});localStorage.setItem(profileKey,JSON.stringify(profiles.slice(0,20)));fillProfiles();$('excel-profile').value=name;excelMessage('导入方案已保存；完成确认计算后，同结构文件可自动复用。');}catch{excelMessage('浏览器本地存储不可用，方案未保存；仍可继续本次导入。',true);}
 });
 $('excel-profile-delete').addEventListener('click',()=>{try{const name=$('excel-profile').value;localStorage.setItem(profileKey,JSON.stringify(excelProfiles().filter(x=>x.name!==name)));fillProfiles();excelMessage('已删除所选方案，本次字段设置仍保留。');}catch{excelMessage('删除失败：浏览器本地存储不可用。',true);}});
 $('excel-import-confirm').addEventListener('click',async()=>{
@@ -68,7 +100,7 @@ $('excel-import-confirm').addEventListener('click',async()=>{
   s.confirming=true;setBusy(true);excelButtons();excelMessage('正在按确认过的位置和单位计算…');
   try{
     const data=await(await request('/api/import-reviewed-xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workbook_base64:s.encoded,mapping:s.preview.mapping,source_hash:s.preview.source_hash,confirmed:true})})).json();
-    accept(data);switchView('home');loadHistory();excelSession=null;$('excel-import-dialog').close();
+    rememberExcelMapping(s);accept(data);switchView('home');loadHistory();excelSession=null;$('excel-import-dialog').close();
   }catch(e){excelMessage('计算未完成：'+e.message+'。原分析结果保留。',true);}
   finally{s.confirming=false;setBusy(false);excelButtons();}
 });

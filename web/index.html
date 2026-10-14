@@ -26,6 +26,7 @@
   <section class="page-title" id="overview"><div><div class="eyebrow">MAKE EVERY ORDER COUNT</div><h1 id="view-heading">每一笔订单，都有据可循。</h1><p id="view-description">开始订单分析，或回看历史记录。</p></div><div id="import-actions" class="actions" hidden><button id="demo" class="secondary" hidden>加载演示数据</button><label class="button primary" for="upload">＋ 导入数据</label><input id="upload" type="file" accept=".json,.xlsx" hidden></div></section>
   <div id="error" class="error" role="alert" hidden></div>
   <div id="history-banner" class="history-banner" role="status" hidden></div>
+  <div id="excel-adaptation-status" class="notice" role="status" hidden><span id="excel-adaptation-text"></span> <button id="excel-adaptation-details" class="executive-link">查看读取依据 ↗</button></div>
   <section id="lobby-view" aria-label="工作大厅">
     <div class="lobby-intro"><p>选择工作入口，开始分析新数据，或回看已有订单。</p></div>
     <div class="lobby-grid"><article class="lobby-card lobby-analysis"><span class="lobby-number">01 / ANALYZE</span><h2>订单分析</h2><p>导入订单数据，查看成本、生产毛利与经营净利试算，定位需要关注的风险。</p><div class="lobby-tags"><span>利润与成本</span><span>可信化审查</span><span>智能分析</span></div><button id="enter-analysis" class="primary">进入订单分析 ↗</button></article>
@@ -71,10 +72,12 @@
   <section class="panel trace"><details><summary>计算依据与费用追溯 <span>查看选中订单的成本明细 / 分摊记录</span></summary><div class="trace-tabs"><button id="cost-tab" class="secondary">成本明细</button><button id="allocation-tab" class="secondary">费用分摊</button></div><div id="trace-table" class="table-scroll"></div></details></section>
   <section class="quality-grid" id="quality"><article class="panel"><div class="panel-head"><div><h2>数据与计算口径</h2><p>缺失保留未知，估算保留依据</p></div><span class="pill">可追溯</span></div><dl id="snapshot"></dl><div class="rules"><span>01</span><p><b>实际耗用与 BOM 分开计算</b>实际净耗用不再加损耗；BOM 结果标为估算。</p><span>02</span><p><b>费用按完整期间基数分摊</b>按月计算并汇总，保留未分摊余额。</p><span>03</span><p><b>客户提供模具，不计摊销</b>维修费用如适用，需单独确认和归集。</p></div></article><article class="panel"><div class="panel-head"><div><h2>准备你的第一批数据</h2><p>下载模板，按标准字段填入后导入</p></div></div><div class="template-links"><a href="/api/template.xlsx" download>↙ Excel 空白模板 <span>.xlsx</span></a><a href="/api/example.xlsx" download hidden>↙ Excel 演示样例 <span>合成数据</span></a><a href="/api/template" download>↙ JSON 空白模板 <span>.json</span></a></div><p class="help">包括订单、材料、人工、费用、费用池、分摊基数和完整度声明。原始企业表格到位后，可再建立字段映射。</p><div class="local-note">◎ 仅在本机处理，不调用外部 AI 服务。</div></article></section>
   </div>
-  <dialog id="excel-import-dialog" aria-labelledby="excel-import-title"><div class="import-dialog-head"><div><h2 id="excel-import-title">确认 Excel 读取内容</h2><p id="excel-import-filename"></p></div><button id="excel-import-close" class="secondary" aria-label="关闭导入预览">关闭</button></div>
-    <div class="import-dialog-body"><p class="notice">预览期间不保存分析记录。请核对读取位置、数值和单位；修改后重新预览，再确认计算。</p>
+  <dialog id="excel-import-dialog" aria-labelledby="excel-import-title"><div class="import-dialog-head"><div><h2 id="excel-import-title">有少量内容需要确认</h2><p id="excel-import-filename"></p></div><button id="excel-import-close" class="secondary" aria-label="关闭导入预览">关闭</button></div>
+    <div class="import-dialog-body"><p class="notice">已完成自动识别，下面优先显示需要处理的部分。此时尚未保存分析记录。</p>
+    <details class="import-advanced"><summary>高级设置与导入方案</summary>
     <div class="import-profile-bar"><label>已保存的导入方案<select id="excel-profile"><option value="">自动识别</option></select></label><label>方案名称<input id="excel-profile-name" maxlength="60" placeholder="例如：中底成本表"></label><button id="excel-profile-save" class="secondary">保存方案</button><button id="excel-profile-delete" class="secondary">删除方案</button></div>
     <div id="excel-cost-sheet-wrap" hidden><label for="excel-cost-sheet">费用所在工作表</label><select id="excel-cost-sheet"></select></div>
+    </details><label id="excel-review-filter" class="import-confirm-label"><input id="excel-show-all" type="checkbox">显示全部费用字段</label>
     <div id="excel-import-message" role="status" aria-live="polite"></div><div id="excel-import-content"></div>
     </div><div class="import-dialog-foot"><label class="import-confirm-label"><input id="excel-import-ack" type="checkbox">我已核对位置、数值、单位及材料和日报的读取区域</label><div class="actions"><button id="excel-import-recheck" class="secondary">重新预览</button><button id="excel-import-confirm" class="primary" disabled>确认并计算</button></div></div>
   </dialog>

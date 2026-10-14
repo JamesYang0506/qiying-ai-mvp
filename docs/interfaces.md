@@ -21,6 +21,7 @@ source_analysis含 metrics、profit_layers、cost_rows、materials、production�
 | GET /api/history/{snapshot_id}?order_id={order_id} | 只读获取指定版本的单笔订单及其成本、分摊、问题和对应来源；analysis_records 仅包含订单与快照均匹配的已保存模型结果 |
 | POST /api/calculate | 按标准JSON计算并保存快照 |
 | POST /api/import-xlsx | 导入Excel、计算及保存快照 |
+| POST /api/auto-import-xlsx | 自动检查字段、单位和布局；通过后计算保存，否则返回 needs_review 预览而不写记录 |
 | POST /api/preview-xlsx | 只读读取Excel，返回字段位置、数值、单位及阻塞提示；不写快照 |
 | POST /api/import-reviewed-xlsx | 校验文件指纹及确认映射后计算；需 confirmed=true |
 | POST /api/export | 按快照和订单范围导出结果 |

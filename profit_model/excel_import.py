@@ -3,11 +3,12 @@ import hashlib
 import io
 import re
 import zipfile
+from datetime import date,datetime
 from decimal import Decimal, localcontext
 from openpyxl import load_workbook
 from openpyxl.utils.cell import coordinate_to_tuple
 from .eva_source import FormulaReader, SHEETS, read_eva_workbook
-from .files import read_workbook
+from .files import read_workbook, HEADERS
 from .trust import review_source
 
 FIELDS=[('E4','订单单价','订单',('订单单价','合同单价','报价','单价')),
@@ -62,6 +63,45 @@ def locate_sheet(w,mapping):
     if '成本计算' in w.sheetnames:return '成本计算'
     matches=[s.title for s in w if '成本' in s.title or str(s['A1'].value or '').startswith('订单成本')]
     return matches[0] if len(matches)==1 else None
+
+
+def layout_info(w,cost_sheet=None):
+    """Bind reused mappings to labels, units, positions and cell types, never amounts."""
+    structure=[]
+    for s in w:
+        if s.title not in SHEETS[:3] and s.title!=cost_sheet and not ('metadata' in w.sheetnames):continue
+        for row in s:
+            for cell in row:
+                v=cell.value
+                if v is None:continue
+                if isinstance(v,(date,datetime)):kind='date'
+                elif input_value(v):kind='formula' if str(v).startswith('=') else 'number'
+                else:
+                    header=(s.title in SHEETS[:2] and (cell.row==5 or cell.column==6 and 5<=cell.row<=15)) or s.title=='生产周期' and cell.row in (5,6)
+                    kind='text:'+norm(v) if header or s.title==cost_sheet and cell.coordinate!='A1' else 'text'
+                structure.append((s.title,cell.coordinate,kind))
+    signature=hashlib.sha256(repr(structure).encode('utf-8')).hexdigest()
+    reasons=[];overflow=[]
+    if not all(x in w.sheetnames for x in SHEETS[:3]):return signature,['材料或日报布局尚未确认'],overflow
+    for name in SHEETS[:2]:
+        s=w[name]
+        expected={'B5':{'材料编号','材料名称'},'C5':{'材料成本','材料单价'},'D5':{'配方用量'}}
+        if any(norm(s[cell].value) not in values for cell,values in expected.items()):reasons.append(name+'的配方表头位置不能自动确认')
+        for row in (5,9,13):
+            if norm(s[f'F{row}'].value)!='码号' or 'sop' not in norm(s[f'F{row+1}'].value) or norm(s[f'F{row+2}'].value)!='订单数量':
+                reasons.append(name+'的SOP和分码数量区域不能自动确认');break
+        for row in range(18,s.max_row+1):
+            if s[f'B{row}'].value is not None and input_value(s[f'C{row}'].value) and input_value(s[f'D{row}'].value):
+                overflow.append(name+'在第'+str(row)+'行存在模板范围外的材料明细，需调整布局后再导入');break
+    s=w['生产周期']
+    if any(norm(s[cell].value) not in allowed for cell,allowed in {'A5':{'生产日期','日期'},'B5':{'生产数量','生产数'},'F5':{'不良数','不良数量'},'J5':{'生产欠数','剩余数量'}}.items()):reasons.append('生产日报的日期、生产、不良及剩余数量表头不能自动确认')
+    for a,b,c in [('B','F','J'),('C','G','K'),('D','H','L')]:
+        if not s[a+'6'].value or not s[a+'6'].value==s[b+'6'].value==s[c+'6'].value:reasons.append('生产日报的分码列对应关系不能自动确认');break
+    for row in range(44,s.max_row+1):
+        value=s[f'A{row}'].value
+        if isinstance(value,(date,datetime)) or input_value(value) or isinstance(value,str) and re.match(r'^\s*\d{4}[-/年.]\d{1,2}',value):
+            overflow.append('生产日报第'+str(row)+'行超出当前读取区域，需扩展适配后再导入');break
+    return signature,list(dict.fromkeys(reasons)),overflow
 
 
 def inspect_eva(w,c,mapping):
@@ -144,8 +184,14 @@ def preview_excel(content,mapping=None):
     w,c=books(content)
     try:
         if 'metadata' in w.sheetnames and 'orders' in w.sheetnames:
-            read_workbook(content)
+            data=read_workbook(content)
+            signature,_,_=layout_info(w)
+            reasons=[]
+            for name,headers in HEADERS.items():
+                if name in w.sheetnames and {str(x.value or '') for x in w[name][1] if x.value is not None}!=set(headers):reasons.append(name+'的表头与标准模板不同')
+            if not data['orders']:reasons.append('没有可导入的订单')
             return {'kind':'standard','source_hash':hashlib.sha256(content).hexdigest(),'mapping':{},'blocking':[],
+                    'layout_signature':signature,'auto_eligible':not reasons,'review_reasons':reasons,
                     'fields':[],'sheet_names':w.sheetnames,'tables':[{'name':s.title,'rows':max(0,s.max_row-1),'headers':[str(x.value or '') for x in s[1]],'samples':[[str(x.value) if x.value is not None else '' for x in row] for row in s.iter_rows(min_row=2,max_row=min(s.max_row,4))]} for s in w],
                     'warnings':['标准模板按表头读取，允许列顺序变化。确认后将进行数据完整性检查和计算。'],'regions':[]}
         if not all(name in w.sheetnames for name in SHEETS[:3]):
@@ -153,8 +199,46 @@ def preview_excel(content,mapping=None):
         inspected=inspect_eva(w,c,mapping)
         result=inspected[0] if isinstance(inspected,tuple) else inspected
         result['source_hash']=hashlib.sha256(content).hexdigest()
+        signature,reasons,overflow=layout_info(w,result['mapping'].get('cost_sheet'))
+        result['layout_signature']=signature;result['blocking'].extend(overflow)
+        for field in result['fields']:
+            uncertain_position=field['status'] in ('template','ambiguous') or field['status']=='manual' and (len(field['candidates'])!=1 or field['cell']!=field['candidates'][0])
+            uncertain_unit=(norm(field['source_unit']) not in ('','双')) if field['id']=='E8' else norm(field['source_unit']) not in ('/双','元/双','元每双','元/单','元/整单','元/订单','元每单')
+            field['requires_review']=bool(field['error'] or field['value'] is None or uncertain_position or uncertain_unit)
+            if uncertain_position:reasons.append(field['label']+'的读取位置需要确认')
+            if field['value'] is None:reasons.append(field['label']+'缺少可用数值')
+            if field['id']!='E8' and norm(field['source_unit']) not in ('/双','元/双','元每双','元/单','元/整单','元/订单','元每单'):reasons.append(field['label']+'的单位需要确认')
+            if field['id']=='E8' and norm(field['source_unit']) not in ('','双'):reasons.append('订单数量单位需要确认')
+        result['auto_eligible']=not reasons and not result['blocking']
+        result['review_reasons']=list(dict.fromkeys(reasons+result['blocking']))
+        result['overflow_reasons']=overflow
         return result
     finally:w.close();c.close()
+
+
+def auto_excel(content,profiles=None):
+    """Auto-adapt only a known layout or an explicitly approved unchanged profile."""
+    p=preview_excel(content);mode='automatic';profile_name=None
+    if not p['auto_eligible']:
+        if profiles is not None and (not isinstance(profiles,list) or len(profiles)>20):raise ValueError('导入方案列表无效')
+        for profile in profiles or []:
+            if not isinstance(profile,dict) or profile.get('approved') is not True or profile.get('layout_signature')!=p['layout_signature']:continue
+            candidate=preview_excel(content,profile.get('mapping'))
+            if candidate['blocking'] or candidate.get('overflow_reasons') or any(f['value'] is None for f in candidate['fields']):continue
+            p=candidate;mode='automatic_profile';profile_name=str(profile.get('name','已确认方案'))[:60];break
+        else:
+            return {'status':'needs_review','preview':p,'reasons':p['review_reasons']}
+    try:data=confirmed_excel(content,p['mapping'],p['source_hash'])
+    except ValueError as e:
+        return {'status':'needs_review','preview':p,'reasons':[str(e)]}
+    review=data.get('source_analysis',{}).get('import_review') or {'source_hash':p['source_hash'],'fields':{}}
+    review.update(mode=mode,confirmed=False,profile_name=profile_name,layout_signature=p['layout_signature'],scope='程序已按字段、单位和表格结构自动适配；未据此核实业务真实性。')
+    if data.get('source_analysis'):
+        data['source_analysis']['import_review']=review
+        for record in data['costs']:
+            record['source']=record.get('source','').replace('位置和单位已确认','自动适配位置和单位')
+    data['metadata']['import_review']=review
+    return {'status':'ready','data':data,'mode':mode,'profile_name':profile_name}
 
 
 def confirmed_excel(content,mapping,source_hash):
@@ -193,7 +277,7 @@ def confirmed_excel(content,mapping,source_hash):
             c['成本计算']['H24']=None;c['成本计算']['H33']=None
         data=read_eva_workbook(content,prepared=(w,c,external,traces,{('成本计算',key):value for key,value in values.items()}))
         a=data['source_analysis']
-        review={'source_hash':p['source_hash'],'cost_sheet':actual,'fields':{f['id']:dict(p['mapping']['fields'][f['id']],label=f['label'],read_value=f['value'],source_unit=f['source_unit']) for f in p['fields']},'confirmed':True,'scope':'费用位置和单位已由导入方确认；材料与日报仍使用预览区域，业务真实性未据此核实。'}
+        review={'source_hash':p['source_hash'],'cost_sheet':actual,'fields':{f['id']:dict(p['mapping']['fields'][f['id']],label=f['label'],read_value=f['value'],source_unit=f['source_unit']) for f in p['fields']},'confirmed':True,'mode':'reviewed','layout_signature':p['layout_signature'],'scope':'费用位置和单位已由导入方确认；材料与日报仍使用预览区域，业务真实性未据此核实。'}
         a['import_review']=review
         for row in a['cost_rows']:
             row['source_sheet']=actual;row['source_cell']=p['mapping']['fields'][row['cell']]['cell']
