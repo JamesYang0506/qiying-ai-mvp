@@ -5,9 +5,9 @@
       name="viewport"
       content="width=device-width,initial-scale=1" /><title
       >企盈智擎 · 订单利润工作台</title
-    ><link rel="stylesheet" href="/comparison.css" /><link
+    ><link rel="stylesheet" href="/style.css" /><link
       rel="stylesheet"
-      href="/style.css"
+      href="/comparison.css"
   /></head>
   <body>
     <aside class="sidebar">
@@ -20,7 +20,7 @@
         ><button class="nav" data-view="lobby">⌂ 工作大厅</button
         ><button class="nav" data-view="history">◷ 历史分析记录</button></div
       >
-      <div class="nav-label">经营分析</div>
+      <div class="nav-label" id="analysis-nav-label" hidden>经营分析</div>
       <div id="detail-navigation" hidden>
         <a class="nav active" href="#overview"><span>◫</span> 利润总览</a>
         <a class="nav" href="#profit-layers"><span>◫</span> 毛利与净利</a>
@@ -38,6 +38,11 @@
           ><span>↗</span> 订单决策建议</a
         ></div
       >
+      <div id="comparison-navigation" hidden>
+        <a class="nav" href="#comparison-metrics"><span>◫</span> 指标对照</a>
+        <a class="nav" href="#comparison-alerts"><span>◎</span> 当前预警</a>
+        <a class="nav" href="#comparison-evidence"><span>▤</span> 版本与依据</a>
+      </div>
       <div id="ai-navigation" hidden
         ><a class="nav active" href="#ai-workspace"><span>✧</span> 订单分析</a
         ><a class="nav" href="#ai-output"><span>▤</span> 分析结果</a></div
@@ -99,8 +104,8 @@
       >
       <section class="page-title" id="overview"
         ><div
-          ><div class="eyebrow">MAKE EVERY ORDER COUNT</div
-          ><h1 id="view-heading">每一笔订单，都有据可循。</h1
+          ><div class="eyebrow">订单分析工作台</div
+          ><h1 id="view-heading">工作大厅</h1
           ><p id="view-description">开始订单分析，或回看历史记录。</p></div
         ><div id="import-actions" class="actions" hidden
           ><button id="demo" class="secondary" hidden>加载演示数据</button
@@ -120,12 +125,15 @@
         role="status"
         hidden
       ></div>
-      <div id="excel-adaptation-status" class="notice" role="status" hidden
-        ><span id="excel-adaptation-text"></span>
-        <button id="excel-adaptation-details" class="executive-link"
-          >查看读取依据 ↗</button
-        ></div
-      >
+      <details id="excel-adaptation-status" class="import-status" hidden>
+        <summary>导入状态与读取依据 <span>查看详情</span></summary>
+        <div
+          ><p id="excel-adaptation-text"></p
+          ><button id="excel-adaptation-details" class="executive-link"
+            >查看本次字段与单位 ↗</button
+          ></div
+        >
+      </details>
       <section id="lobby-view" aria-label="工作大厅">
         <div class="lobby-intro"
           ><p>选择工作入口，开始分析新数据，或回看已有订单。</p></div

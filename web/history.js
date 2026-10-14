@@ -256,7 +256,7 @@ switchView(
     ? 'lobby'
     : pendingAnchor === 'history'
       ? 'history'
-      : pendingAnchor === 'comparison'
+      : pendingAnchor.startsWith('comparison')
         ? 'comparison'
         : pendingAnchor.startsWith('ai-')
           ? 'ai'

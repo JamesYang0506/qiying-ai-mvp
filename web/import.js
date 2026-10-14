@@ -134,6 +134,7 @@ async function beginExcelImport(file) {
   };
   excelSession = s;
   $('excel-adaptation-status').hidden = false;
+  $('excel-adaptation-status').open = true;
   $('excel-adaptation-text').textContent =
     '正在自动识别表格、校验字段并准备计算…';
   $('excel-adaptation-details').hidden = true;
@@ -193,6 +194,11 @@ function showExcelReview(s, preview, reasons) {
 function updateAdaptationStatus(analysis = !$('analysis-tabs').hidden) {
   const r = result?.snapshot?.import_review;
   $('excel-adaptation-status').hidden = !analysis || !r;
+  const statusKey = r ? result.snapshot.snapshot_id + ':' + r.mode : '';
+  if (r && $('excel-adaptation-status').dataset.record !== statusKey) {
+    $('excel-adaptation-status').open = false;
+    $('excel-adaptation-status').dataset.record = statusKey;
+  }
   $('excel-adaptation-details').hidden = false;
   if (r)
     $('excel-adaptation-text').textContent =

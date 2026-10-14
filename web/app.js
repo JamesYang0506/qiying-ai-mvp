@@ -578,6 +578,7 @@ setBusy(false);
 
 let pendingAnchor = location.hash.slice(1);
 function switchView(view, target = null) {
+  document.body.dataset.view = view;
   const home = view === 'home',
     ai = view === 'ai';
   $('back-to-lobby').hidden = view === 'lobby';
@@ -593,20 +594,22 @@ function switchView(view, target = null) {
   $('home-navigation').hidden = !home;
   $('detail-navigation').hidden = view !== 'detail';
   $('ai-navigation').hidden = !ai;
+  $('comparison-navigation').hidden = view !== 'comparison';
+  $('analysis-nav-label').hidden = !analysis;
   for (const button of document.querySelectorAll('[data-view]')) {
     const active = button.dataset.view === view;
     button.classList.toggle('selected', active);
     button.setAttribute('aria-pressed', String(active));
   }
   $('view-heading').textContent = home
-    ? '经营决策，一眼看清。'
+    ? '订单经营概览'
     : ai
-      ? '智能分析，辅助订单决策。'
+      ? '智能订单分析'
       : view === 'detail'
-        ? '订单明细，逐项有据。'
+        ? '订单详细数据'
         : view === 'history'
-          ? '历史订单，随时回看。'
-          : '每一笔订单，都有据可循。';
+          ? '历史分析记录'
+          : '工作大厅';
   $('view-description').textContent = home
     ? '看利润、看成本、看风险，让订单决策有依据。'
     : ai
@@ -648,9 +651,9 @@ function switchView(view, target = null) {
     link.classList.toggle('active', link.getAttribute('href') === '#' + id);
   if (typeof updateWorkspace === 'function') updateWorkspace(analysis);
   if (view === 'comparison') {
-    $('view-heading').textContent = '理论与实际，偏差有据。';
+    $('view-heading').textContent = '订单毛利与质量对照';
     $('view-description').textContent =
-      '对照生产毛利与累计不良率，保留基线、规则和处理记录。';
+      '查看理论目标、当前表现与需要处理的偏差。';
     history.replaceState(null, '', '#comparison');
     if (typeof refreshComparison === 'function') refreshComparison();
   }

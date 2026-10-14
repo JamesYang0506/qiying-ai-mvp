@@ -14,7 +14,7 @@ function renderExecutive(data) {
   const rate = (x) =>
     x === null || x === undefined ? '待补' : (Number(x) * 100).toFixed(2) + '%';
   const metric = (label, value, note, highlight = false) =>
-    `<article class="executive-metric ${highlight ? 'executive-highlight' : ''}"><span>${label}</span><strong>${wan(value)}${value === null || value === undefined ? '' : '<small>万元</small>'}</strong><p>${note}</p></article>`;
+    `<article class="executive-metric ${highlight ? 'executive-highlight' : ''} ${value != null && Number(value) < 0 ? 'metric-loss' : ''}"><span>${label}</span><strong>${wan(value)}${value === null || value === undefined ? '' : '<small>万元</small>'}</strong><p>${note}</p></article>`;
   const checks = r?.checks || [],
     differences = checks.filter((x) => x.status === 'difference');
   const focusCodes = ['NET_SCOPE', 'TAX', 'EXTERNAL', 'ASSET', 'DEVELOPMENT'];
@@ -31,6 +31,9 @@ function renderExecutive(data) {
         : x.evidence;
   const riskCard = (x) =>
     `<article class="executive-risk review-${x.status}"><span class="review-state">${x.status === 'difference' ? '发现差异' : '待核验'}</span><h3>${esc(x.title)}</h3><p>${esc(riskText(x))}</p><button class="executive-link" data-detail-target="trust-review">查看依据与处理要求 ↗</button></article>`;
+  const visibleRisks = [...differences, ...unresolved.slice(0, 3)];
+  const priorityRisks = visibleRisks.slice(0, 2);
+  const moreRisks = visibleRisks.slice(2);
   const margins =
     m.management_reference_margin === null
       ? null
@@ -50,9 +53,10 @@ function renderExecutive(data) {
       : netAvailable
         ? '当前试算有利润，追加订单前先复核报价与成本边界。'
         : '当前费用不完整，先补齐关键成本再判断订单收益。';
-  root.innerHTML = `<section id="executive-overview" class="executive-scope"><div><span class="eyebrow">当前订单经营概览</span><h2>${esc(a.product)} · ${Number(m.quantity).toLocaleString('zh-CN')} 双</h2><p>生产期间 ${esc(a.production.start)} — ${esc(a.production.end)} · 当前仅展示本单，不代表公司全部经营情况</p></div><span class="review-state review-pending">参考试算 · 尚待核实</span></section>
-  <div class="executive-metrics">${metric('折后收入', m.revenue, '当前订单整单收入试算')}${metric('累计已列成本', v.cumulative_cost, `生产 ${wan(v.production_cost)} 万 + 经营费用 ${wan(v.operating_expense)} 万`)}${metric('生产毛利', v.production_profit, `毛利率 ${rate(m.production_margin)}`)}${metric('经营净利 · 试算', v.operating_net_profit, `净利率 ${rate(m.management_reference_margin)}`, true)}</div>
-  <section id="executive-costs"><div class="executive-section-head"><h2>成本花在哪里，利润剩多少</h2><button class="executive-link" data-detail-target="profit-layers">查看精确金额 ↗</button></div><div class="profit-pie-grid">
+  root.innerHTML = `<section id="executive-overview" class="executive-scope"><div><span class="eyebrow">当前订单经营概览</span><h2>${esc(a.product)} <span class="executive-order-count">${Number(m.quantity).toLocaleString('zh-CN')} 双</span></h2><p>生产期间 ${esc(a.production.start)} — ${esc(a.production.end)} · 当前仅展示本单，不代表公司全部经营情况</p></div><span class="review-state review-pending">参考试算 · 尚待核实</span></section>
+  <div class="executive-metrics">${metric('折后收入', m.revenue, '当前订单整单收入试算')}${metric('累计已列成本', v.cumulative_cost, `生产 ${wan(v.production_cost)} 万 + 经营费用 ${wan(v.operating_expense)} 万`)}${metric('生产毛利 · 试算', v.production_profit, `毛利率 ${rate(m.production_margin)}`, true)}${metric('经营净利 · 试算', v.operating_net_profit, `净利率 ${rate(m.management_reference_margin)}`)}</div>
+  <section id="executive-risks"><div class="executive-section-head"><h2>需要核查的事项</h2><button class="executive-link" data-detail-target="trust-review">全部审查明细 ↗</button></div><p>${differences.length} 项发现差异 · ${r?.counts.pending || 0} 项待核验。待核验不等于数据错误；通过勾稽不等于业务凭证已核实。</p><div class="executive-risk-grid">${priorityRisks.map(riskCard).join('') || '<div class="panel">当前暂无已发现差异，仍需结合完整费用范围与原始凭证判断。</div>'}</div>${moreRisks.length ? `<details class="executive-more-risks"><summary>查看其余 ${moreRisks.length} 项核查提醒</summary><div class="executive-risk-grid">${moreRisks.map(riskCard).join('')}</div></details>` : ''}</section>
+  <section id="executive-costs"><div class="executive-section-head"><h2>成本与利润构成</h2><button class="executive-link" data-detail-target="profit-layers">查看精确金额 ↗</button></div><div class="profit-pie-grid">
   ${renderProfitPie(
     '生产阶段',
     m.revenue,
@@ -75,8 +79,7 @@ function renderExecutive(data) {
     true,
   )}
   </div><p class="chart-note">两图均以本单收入为100%，分别表示生产与经营阶段；不能跨图相加。首页金额约至0.01万元，计算及占比仍使用原始精度。费用范围尚未核实完整。</p></section>
-  <section id="executive-risks"><div class="executive-section-head"><h2>可信度提醒 · 决策前先看</h2><button class="executive-link" data-detail-target="trust-review">全部审查明细 ↗</button></div><p>${differences.length} 项发现差异 · ${r?.counts.pending || 0} 项待核验。待核验不等于数据错误；通过勾稽不等于业务凭证已核实。</p><div class="executive-risk-grid">${[...differences, ...unresolved.slice(0, 3)].map(riskCard).join('') || '<div class="panel">当前暂无已发现差异，仍需结合完整费用范围与原始凭证判断。</div>'}</div></section>
-  <section id="executive-decisions"><div class="executive-section-head"><h2>订单建议决策</h2><span class="muted">基于当前试算与审查规则</span></div>
+  <section id="executive-decisions"><div class="executive-section-head"><h2>订单决策参考</h2><span class="muted">基于当前试算与审查规则</span></div>
   <div class="executive-decision-lead"><span>决策提示</span><h3>${emphasis}</h3><p>${netAvailable ? `本单经营净利约 ${wan(v.operating_net_profit)} 万元，净利率约 ${rate(m.management_reference_margin)}。` : ''}税口径及费用范围尚待确认，当前结果不足以直接决定接单、拒单或降价。</p></div>
   <div class="executive-decision-grid"><article><span>01 · 报价与成本控制</span><h3>${margins !== null && margins < 0 ? '先评估亏损原因' : '评估订单对成本变化的承受力'}</h3><p>${sensitivity === null ? '关键费用或利润待补后，再评估报价空间。' : `情景测算：收入不变、已列成本整体增加1%，将消耗约 ${(sensitivity * 100).toFixed(0)}% 的当前净利。追加单前核实新数量对应的材料、加工和运费报价。此情景不是实际预测。`}</p></article>
   <article><span>02 · 优先核查大额开销</span><h3>材料、工资及开发费用优先复核</h3><p>材料约 ${wan(m.material_total)} 万元，生产工资约 ${wan(wages?.amount)} 万元（已含在加工费内），开发费用约 ${wan(development?.amount)} 万元。确认耗用、工资分摊及开发费用应由本单承担的范围，再评估可优化空间。</p></article>
