@@ -13,6 +13,7 @@
 | 决策首页 | 收入、成本、生产毛利、经营净利试算；万元金额保留两位小数；饼图、可信度提醒及有条件的订单建议 |
 | 详细数据 | 精确金额、费用明细、独立计算过程、生产与补单核对、来源与快照、结果导出 |
 | 智能订单分析 | 选择订单和问题，通过本机 Ollama 调用 Qwen；展示解释、风险、建议、有效依据引用及待确认项 |
+| 理论与实际对照 | 导入/填写理论毛利基线，对照订单毛利和累计不良率，修改暂定阈值，回看预警及处理记录 |
 
 可信化审查按利润异常、数据一致性异常、质量异常、工艺异常分类，差异优先展示，待核验与核对通过分开。来源未核验不表示已有费用未计入；缺少质量阈值或工艺记录时不直接判异常。
 
@@ -50,6 +51,10 @@ Excel默认先自动识别并检查，明确的文件直接计算；有疑问时
 
 大厅开发前的版本已保存为本地标记 `checkpoint/pre-lobby-20261014`，设计见 [大厅与历史设计](docs/lobby-history-design.md)。现有 v0.3.0 下载包尚不包含本次新增大厅功能。
 
+## 理论毛利对照与预警
+
+理论对照预警已加入v1.0开发版：毛利下降3/5个百分点、不良率3%/5%为暂定提醒/严重阈值，可修改。实际数据更新后检测，范围不明或数据缺失不会标为正常；历史保留当时基线和规则。使用、SRC订单绑定及备份说明见 [理论毛利对照与预警](docs/theory-comparison.md)。新功能不包含在旧v0.3.0下载包内。
+
 ## 本地 Qwen 分析
 
 先安装并启动 Ollama，确保本机已有模型：
@@ -78,6 +83,11 @@ profit_model/trust.py         四类可信化审查
 profit_model/ollama_client.py 本地模型请求、结构化结果及引用校验
 profit_model/analysis_gateway.py 订单快照准备和分析记录
 profit_model/history.py       历史版本索引、单订单读取及已存建议筛选
+profit_model/snapshots.py     快照读取校验、订单范围裁剪和原子保存
+profit_model/workflows.py     计算查重保存和导出准备
+profit_model/theory.py        理论输入、成本计算和Excel预览/模板
+profit_model/comparison.py    可比性、毛利/质量偏差及暂定规则
+profit_model/comparison_store.py 基线/规则/检测版本和预警事件存储
 profit_model/excel_import.py  标签识别、自动适配、读取预览与字段映射
 server.py                    本地HTTP接口
 tests/                       计算、导入、审查和接口测试
@@ -103,9 +113,12 @@ data/samples/                合成开发样例
 python -m unittest discover -s tests -v
 node --check web/app.js
 node --check web/source.js
+node --check web/import.js
+node --check web/history.js
+node --check web/comparison.js
 ```
 
-当前99项自动测试通过；另已实测Excel预览与确认、方案复用、大厅、历史版本选择、页面切换、图表、明细跳转、手机布局及本地 Qwen 分析。计算隔离测试覆盖修改/删除源表利润和汇总单元格后结果不变，以及成本输入变更后利润相应改变。
+当前自动测试及浏览器验证记录见 [理论毛利对照与预警](docs/theory-comparison.md)。v1.0第一批整理已隔离复验查重、历史、删除恢复和手机布局，记录见 [代码整理审查](docs/v1.0-code-simplification-review.md)。此前另已实测Excel预览与确认、方案复用、大厅、页面切换、图表、明细跳转及本地 Qwen 分析。计算隔离测试覆盖修改/删除源表利润和汇总单元格后结果不变，以及成本输入变更后利润相应改变。
 
 Windows发布包使用独立构建环境：安装 `requirements-build.txt` 后执行 `python scripts/build_windows_release.py`。需要64位Windows及64位Python，且源码已提交、工作区干净。构建只包含程序、网页及合成样例，不包含本机业务数据；输出ZIP及SHA256校验文件在Git忽略的 `dist/` 中。
 

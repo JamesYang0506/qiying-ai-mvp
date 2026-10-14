@@ -1,4 +1,5 @@
 """Candidate order datasets; calculation results are not supervised answers."""
+
 import csv
 import hashlib
 import io
@@ -6,25 +7,64 @@ import json
 import zipfile
 from datetime import datetime, timezone
 
-
 ANNOTATION_FIELDS = [
-    'sample_id', 'order_id', 'snapshot_id', 'is_demo', 'review_status',
-    'task', 'decision_at', 'expert_answer', 'recommendation', 'reason',
-    'evidence_refs', 'conditions', 'missing_information', 'reviewer',
-    'reviewed_at', 'source_authorization', 'deidentification_status',
+    'sample_id',
+    'order_id',
+    'snapshot_id',
+    'is_demo',
+    'review_status',
+    'task',
+    'decision_at',
+    'expert_answer',
+    'recommendation',
+    'reason',
+    'evidence_refs',
+    'conditions',
+    'missing_information',
+    'reviewer',
+    'reviewed_at',
+    'source_authorization',
+    'deidentification_status',
 ]
 CSV_FIELDS = [
-    'sample_id', 'order_id', 'snapshot_id', 'product', 'customer', 'quantity',
-    'unit', 'mode', 'currency', 'cutoff_date', 'formula_version', 'is_demo',
-    'revenue', 'revenue_status', 'known_cost',
-    'material', 'labor', 'manufacturing', 'production_other',
-    'management', 'sales', 'finance', 'order_other',
-    'inside_profit', 'production_profit', 'management_profit',
-    'production_margin', 'management_margin', 'production_status',
-    'management_status', 'missing', 'estimates',
-    'reference_production_cost', 'reference_operating_expense',
-    'reference_cumulative_cost', 'reference_production_profit',
-    'reference_operating_net_profit', 'reference_status',
+    'sample_id',
+    'order_id',
+    'snapshot_id',
+    'product',
+    'customer',
+    'quantity',
+    'unit',
+    'mode',
+    'currency',
+    'cutoff_date',
+    'formula_version',
+    'is_demo',
+    'revenue',
+    'revenue_status',
+    'known_cost',
+    'material',
+    'labor',
+    'manufacturing',
+    'production_other',
+    'management',
+    'sales',
+    'finance',
+    'order_other',
+    'inside_profit',
+    'production_profit',
+    'management_profit',
+    'production_margin',
+    'management_margin',
+    'production_status',
+    'management_status',
+    'missing',
+    'estimates',
+    'reference_production_cost',
+    'reference_operating_expense',
+    'reference_cumulative_cost',
+    'reference_production_profit',
+    'reference_operating_net_profit',
+    'reference_status',
 ]
 
 
@@ -38,7 +78,9 @@ def csv_bytes(rows, fields):
             if isinstance(value, (list, dict)):
                 value = json.dumps(value, ensure_ascii=False, allow_nan=False)
             # Preserve JSON exactly; protect strings only in spreadsheet exports.
-            if isinstance(value, str) and value.startswith(('=', '+', '-', '@', '\t', '\r', '\n')):
+            if isinstance(value, str) and value.startswith(
+                ('=', '+', '-', '@', '\t', '\r', '\n')
+            ):
                 value = "'" + value
             safe[key] = value
         writer.writerow(safe)
@@ -95,35 +137,66 @@ def export_training_bundle(result):
         sample_id = hashlib.sha256(identity.encode('utf-8')).hexdigest()
         context = {'snapshot': snapshot, 'order': order}
         for table in ('costs', 'allocations', 'issues'):
-            context[table] = [row for row in result[table] if row.get('order_id') == oid]
+            context[table] = [
+                row for row in result[table] if row.get('order_id') == oid
+            ]
         source = result.get('source_analysis')
         if source and source.get('order_id') == oid:
             context['source_analysis'] = source
-        record = {'schema_version': 'order-training-candidate.v1', 'sample_id': sample_id,
-                  'group_id': oid, 'training_eligible': False, 'input': context,
-                  'annotation': {'status': 'unreviewed', 'answer': None}}
+        record = {
+            'schema_version': 'order-training-candidate.v1',
+            'sample_id': sample_id,
+            'group_id': oid,
+            'training_eligible': False,
+            'input': context,
+            'annotation': {'status': 'unreviewed', 'answer': None},
+        }
         records.append(record)
         row = dict(order, **order.get('categories', {}), sample_id=sample_id)
-        for key in ('snapshot_id', 'currency', 'cutoff_date', 'formula_version', 'is_demo'):
+        for key in (
+            'snapshot_id',
+            'currency',
+            'cutoff_date',
+            'formula_version',
+            'is_demo',
+        ):
             row[key] = snapshot.get(key)
         trial = context.get('source_analysis', {}).get('profit_layers', {})
-        for key in ('production_cost', 'operating_expense', 'cumulative_cost',
-                    'production_profit', 'operating_net_profit', 'status'):
+        for key in (
+            'production_cost',
+            'operating_expense',
+            'cumulative_cost',
+            'production_profit',
+            'operating_net_profit',
+            'status',
+        ):
             row['reference_' + key] = trial.get(key)
         csv_rows.append(row)
-        annotations.append({'sample_id': sample_id, 'order_id': oid,
-                            'snapshot_id': snapshot['snapshot_id'], 'is_demo': snapshot.get('is_demo'),
-                            'review_status': 'unreviewed', 'source_authorization': 'unconfirmed',
-                            'deidentification_status': 'unconfirmed'})
+        annotations.append(
+            {
+                'sample_id': sample_id,
+                'order_id': oid,
+                'snapshot_id': snapshot['snapshot_id'],
+                'is_demo': snapshot.get('is_demo'),
+                'review_status': 'unreviewed',
+                'source_authorization': 'unconfirmed',
+                'deidentification_status': 'unconfirmed',
+            }
+        )
 
     manifest = {
         'schema_version': 'order-training-candidate.v1',
         'exported_at': datetime.now(timezone.utc).isoformat(),
-        'snapshot_id': snapshot['snapshot_id'], 'formula_version': snapshot.get('formula_version'),
-        'cutoff_date': snapshot.get('cutoff_date'), 'currency': snapshot.get('currency'),
-        'is_demo': snapshot.get('is_demo'), 'order_ids': [x['order_id'] for x in result['orders']],
-        'candidate_count': len(records), 'sft_ready_count': 0,
-        'contains_model_answers': False, 'automatically_deidentified': False,
+        'snapshot_id': snapshot['snapshot_id'],
+        'formula_version': snapshot.get('formula_version'),
+        'cutoff_date': snapshot.get('cutoff_date'),
+        'currency': snapshot.get('currency'),
+        'is_demo': snapshot.get('is_demo'),
+        'order_ids': [x['order_id'] for x in result['orders']],
+        'candidate_count': len(records),
+        'sft_ready_count': 0,
+        'contains_model_answers': False,
+        'automatically_deidentified': False,
         'field_definitions': {
             'orders.jsonl': '每行一个订单计算快照，input 保留成本、分摊、异常及适用源表审查',
             'orders.csv': '同一快照的金额摘要；未知空白，金额单位元，利润率为比例',
@@ -135,13 +208,25 @@ def export_training_bundle(result):
             'sample_id': '由快照编号和订单编号生成，关联标注模板',
             'group_id': '订单分组，划分数据集时同一订单全部版本保持同组',
         },
-        'csv_columns': CSV_FIELDS, 'annotation_columns': ANNOTATION_FIELDS,
+        'csv_columns': CSV_FIELDS,
+        'annotation_columns': ANNOTATION_FIELDS,
     }
     output = io.BytesIO()
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('orders.csv', csv_bytes(csv_rows, CSV_FIELDS))
         archive.writestr('annotations.csv', csv_bytes(annotations, ANNOTATION_FIELDS))
-        archive.writestr('orders.jsonl', ''.join(json.dumps(x, ensure_ascii=False, allow_nan=False) + '\n' for x in records).encode('utf-8'))
-        archive.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2, allow_nan=False).encode('utf-8'))
+        archive.writestr(
+            'orders.jsonl',
+            ''.join(
+                json.dumps(x, ensure_ascii=False, allow_nan=False) + '\n'
+                for x in records
+            ).encode('utf-8'),
+        )
+        archive.writestr(
+            'manifest.json',
+            json.dumps(manifest, ensure_ascii=False, indent=2, allow_nan=False).encode(
+                'utf-8'
+            ),
+        )
         archive.writestr('README.md', README.encode('utf-8'))
     return output.getvalue()
