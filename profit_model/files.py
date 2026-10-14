@@ -4,7 +4,6 @@ import csv
 import io
 import json
 import zipfile
-from .training_export import export_training_bundle
 
 HEADERS = {
     'orders': [

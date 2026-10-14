@@ -145,7 +145,7 @@ function renderComparison() {
     readonly = historyViewing || !comparisonOrder || !w;
   const disabled = readonly || comparisonBusy ? 'disabled' : '';
   $('comparison-view').innerHTML =
-    `<div class="panel comparison-controls"><label>对照订单<select id="comparison-order">${orders.length ? orders.map((o) => `<option value="${esc(o.order_id)}" ${o.order_id === comparisonOrder ? 'selected' : ''}>${esc(o.order_id)} · ${esc(o.product || '')}</option>`).join('') : '<option value="">请先导入实际订单数据</option>'}</select></label><div class="comparison-actions"><button class="secondary" id="comparison-check" ${disabled}>重新检查</button><button class="primary" id="comparison-open-theory" data-comparison-dialog="comparison-theory-dialog" ${disabled}>创建 / 绑定理论</button><button class="secondary" id="comparison-open-rules" data-comparison-dialog="comparison-rules-dialog" ${disabled}>编辑暂定规则</button></div><div class="comparison-context"><div class="comparison-markers">${comparisonMarkers(c)}</div><span>数据截至 ${esc(c?.cutoff_date || result?.snapshot?.cutoff_date || '未记录')} · 检测 ${comparisonShortTime(c?.created_at)}</span></div></div><p id="comparison-message" class="help" role="status" aria-live="polite"></p>${comparisonWarning()}
+    `<div class="panel comparison-controls"><label>对照订单<select id="comparison-order">${orders.length ? orders.map((o) => `<option value="${esc(o.order_id)}" ${o.order_id === comparisonOrder ? 'selected' : ''}>${esc(o.order_id)} · ${esc(o.product || '')}</option>`).join('') : '<option value="">请先导入实际订单数据</option>'}</select></label><div class="comparison-actions"><button class="secondary" id="comparison-check" ${disabled}>重新检查</button><button class="primary" id="comparison-open-theory" data-comparison-dialog="comparison-theory-dialog" ${disabled}>导入 / 填写理论利润表</button><button class="secondary" id="comparison-open-rules" data-comparison-dialog="comparison-rules-dialog" ${disabled}>编辑暂定规则</button></div><div class="comparison-context"><div class="comparison-markers">${comparisonMarkers(c)}</div><span>数据截至 ${esc(c?.cutoff_date || result?.snapshot?.cutoff_date || '未记录')} · 检测 ${comparisonShortTime(c?.created_at)}</span></div></div><p id="comparison-message" class="help" role="status" aria-live="polite"></p>${comparisonWarning()}
   <section id="comparison-metrics" class="panel comparison-results"><div class="panel-head"><h2>生产毛利与质量 ${comparisonStatus(c?.severity)}</h2></div>${!c ? '<p class="help">尚无保存检测，不能据此认定正常。请导入订单并建立理论目标。</p>' : ''}<div class="comparison-kpis">${[
     [
       '理论毛利率',
@@ -234,7 +234,7 @@ function renderComparison() {
   }<p class="help">20% 降至 14% 为下降 6 个百分点。生产毛利为同范围收入减材料、直接人工、制造及其他生产成本，不含管理、销售和财务费用。日报不良 / 生产不等同最终报废率。</p></details>
   ${w?.records?.length > 1 ? `<section class="panel"><label>保存的检测版本<select id="comparison-record">${w.records.map((x, i) => `<option value="${esc(x.id)}" ${x.id === c?.id ? 'selected' : ''}>检测 ${i + 1} · ${comparisonShortTime(x.created_at)} · 理论 v${esc(x.baseline?.version || '—')}</option>`).join('')}</select></label><details class="comparison-evidence"><summary>完整版本编号</summary>${w.records.map((x) => `<p>${comparisonTime(x.created_at)} · 检测 ${esc(x.id)} · 基线 ${esc(x.baseline?.id || '未绑定')} · 规则 ${esc(x.rules?.version || '—')}</p>`).join('')}</details></section>` : ''}
   <section class="panel comparison-trends"><h2>观测趋势</h2><div class="comparison-grid">${comparisonTrend(w?.trend || [])}</div><p class="help">同一快照重检保留时间与规则版本，不代表新增生产进度。</p></section>
-  <dialog id="comparison-theory-dialog" class="comparison-dialog" aria-labelledby="comparison-theory-title"><div class="comparison-dialog-head"><h2 id="comparison-theory-title">创建 / 修订理论基线</h2><button type="button" class="secondary" data-comparison-close>关闭</button></div><p class="comparison-dialog-message help" role="status" aria-live="polite"></p><fieldset ${disabled}><div class="comparison-import"><a href="/api/theory/template.xlsx" download>下载理论 Excel 模板 ↙</a><label>导入标准模板（仅预览，最大 10MB）<input id="comparison-import" type="file" accept=".xlsx"></label></div><p class="help">首版仅支持标准字段，不支持公式。预览后仍可修改，点击保存才创建新版本。</p><div id="comparison-preview" role="status"></div><form id="comparison-theory"><div class="comparison-grid"><label>基线方式<select name="method"><option value="ratio">比例目标</option><option value="costs">填写收入与成本，独立计算</option></select></label>${comparisonField('business_order_id', '真实业务订单号', comparisonOrder.startsWith('SRC-') ? '' : comparisonOrder, 'text', true)}${comparisonField('batch_id', '批次（选填）')}<label>税口径<select name="tax_basis"><option value="unknown">未知（同口径确认后仅参考比较）</option><option value="included">含税</option><option value="excluded">不含税</option></select></label><label class="comparison-ratio">理论生产毛利率（%）<input name="target_margin_pct" type="number" step="any" required></label>${comparisonField('target_defect_pct', '理论不良率（%，选填）', '', 'number')}${comparisonField('quantity', '理论数量（比例目标可选）', '', 'number')}${comparisonField('unit', '数量单位', orders.find((o) => o.order_id === comparisonOrder)?.unit || '双', 'text', true)}</div><div id="comparison-cost-fields" class="comparison-grid" hidden>${[
+  <dialog id="comparison-theory-dialog" class="comparison-dialog" aria-labelledby="comparison-theory-title"><div class="comparison-dialog-head"><h2 id="comparison-theory-title">导入 / 填写理论利润表</h2><button type="button" class="secondary" data-comparison-close>关闭</button></div><p class="comparison-dialog-message help" role="status" aria-live="polite"></p><fieldset ${disabled}><div class="comparison-import"><a href="/api/theory/template.xlsx" download>下载理论 Excel 模板 ↙</a><label>导入标准模板（仅预览，最大 10MB）<input id="comparison-import" type="file" accept=".xlsx"></label></div><p class="help">首版仅支持标准字段，不支持公式。预览后仍可修改，点击保存才创建新版本。</p><div id="comparison-preview" role="status"></div><form id="comparison-theory"><div class="comparison-grid"><label>基线方式<select name="method"><option value="ratio">比例目标</option><option value="costs">填写收入与成本，独立计算</option></select></label>${comparisonField('business_order_id', '真实业务订单号', comparisonOrder.startsWith('SRC-') ? '' : comparisonOrder, 'text', true)}${comparisonField('batch_id', '批次（选填）')}<label>税口径<select name="tax_basis"><option value="unknown">未知（同口径确认后仅参考比较）</option><option value="included">含税</option><option value="excluded">不含税</option></select></label><label class="comparison-ratio">理论生产毛利率（%）<input name="target_margin_pct" type="number" step="any" required></label>${comparisonField('target_defect_pct', '理论不良率（%，选填）', '', 'number')}${comparisonField('quantity', '理论数量（比例目标可选）', '', 'number')}${comparisonField('unit', '数量单位', orders.find((o) => o.order_id === comparisonOrder)?.unit || '双', 'text', true)}</div><div id="comparison-cost-fields" class="comparison-grid" hidden>${[
     ['unit_price', '单价（元）'],
     ['discount_per_pair', '每双折扣（元）'],
     ['material_cost', '整单材料成本（元）'],
@@ -357,7 +357,11 @@ async function comparisonWrite(path, payload) {
   }
 }
 document.addEventListener('click', (e) => {
-  if (e.target.closest('[data-open-comparison]')) switchView('comparison');
+  if (e.target.closest('[data-open-comparison]')) {
+    defaultLandingPending = false;
+    pendingAnchor = null;
+    switchView('comparison');
+  }
   const opener = e.target.closest('[data-comparison-dialog]');
   if (opener && !opener.disabled) {
     const dialog = $(opener.dataset.comparisonDialog);
@@ -387,9 +391,10 @@ $('comparison-view').addEventListener('change', async (e) => {
     return;
   const file = e.target.files[0];
   if (!file) return;
-  // 理论利润 Excel 走 /api/theory/preview，与服务端大文件接口同限 15MB。
+  // 文件本体限制10MB，服务端15MB请求余量用于base64封装。
   if (file.size > XLSX_LIMIT) {
-    $('comparison-preview').textContent = `文件超过 ${XLSX_LIMIT / 1048576}MB，请使用标准模板。`;
+    $('comparison-preview').textContent =
+      `文件超过 ${XLSX_LIMIT / 1048576}MB，请使用标准模板。`;
     return;
   }
   const key = comparisonKey(),

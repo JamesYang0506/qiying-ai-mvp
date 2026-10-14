@@ -26,6 +26,12 @@ const recordStates = {
   missing: '待补',
   not_applicable: '不适用',
 };
+// 核验结果与计算状态、记录确认状态分别表达，不互相替代。
+const reviewStates = {
+  passed: '核对通过',
+  difference: '发现差异',
+  pending: '待核验',
+};
 
 const esc = (x) =>
   String(x ?? '').replace(
@@ -77,9 +83,9 @@ function sum(rows, key) {
   );
 }
 
-// 请求体上限：JSON 走网关 10MB，Excel 直接解析，服务端放宽到 15MB（见 server.py）。
+// 文件上限10MB；Excel的base64 JSON封装在服务端预留15MB运输余量。
 const UPLOAD_LIMIT = 10 * 1024 * 1024;
-const XLSX_LIMIT = 15 * 1024 * 1024;
+const XLSX_LIMIT = UPLOAD_LIMIT;
 
 // 返回原始 Response，供 ZIP 下载复用；非 2xx 时抛出服务端错误文案。
 async function request(path, options = {}) {

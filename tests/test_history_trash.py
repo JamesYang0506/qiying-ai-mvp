@@ -56,8 +56,10 @@ class HistoryTrashTests(unittest.TestCase):
         from profit_model.analysis_gateway import prepare_analysis
         sid=self.save()['snapshot']['snapshot_id'];self.post('/api/history/delete',sid)
         payload=json.dumps({'snapshot_id':sid,'order_ids':['A']}).encode()
-        for path in ('/api/export','/api/export-training'):
-            with self.assertRaises(urllib.error.HTTPError):self.opener.open(urllib.request.Request(self.url+path,data=payload))
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.opener.open(urllib.request.Request(self.url+'/api/export',data=payload))
+        self.assertEqual(error.exception.code,400)
+        self.assertIn('回收站',json.load(error.exception)['error'])
         with self.assertRaises(ValueError):prepare_analysis({'snapshot_id':sid,'order_id':'A','focus':'profit'},self.storage)
 
     def test_delete_and_restore_are_idempotent_and_survive_reloading(self):

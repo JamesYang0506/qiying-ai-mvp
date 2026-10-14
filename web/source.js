@@ -219,11 +219,7 @@ function renderProfitPie(title, revenue, segments, compact = false) {
 
 function renderTrustReview(r) {
   if (!r) return '';
-  const labels = {
-    passed: '核对通过',
-    difference: '发现差异',
-    pending: '待核验',
-  };
+  const labels = reviewStates;
   const categories = r.categories || [
     { id: 'consistency', label: '数据一致性异常', counts: r.counts },
   ];
@@ -235,7 +231,7 @@ function renderTrustReview(r) {
     return `<article class="review-item review-${x.status}"><div class="review-item-head"><h4>${esc(x.title)}</h4><span class="review-state">${esc(x.judgment || labels[x.status])}</span></div><p>${esc(x.evidence)}</p>${x.amount === null ? '' : `<p class="review-exposure">涉及核验范围 ${money(x.amount)} 元</p>`}<p class="review-next">下一步：${esc(x.needed)}</p></article>`;
   }
   const problems = ordered.filter((x) => x.status === 'difference');
-  return `<h2 class="source-heading" id="trust-review">数据可信化审查</h2><p>${esc(r.scope)}</p>
+  return `<h2 class="source-heading" id="trust-review">数据可信化审查</h2><p>${esc(r.scope)}</p><p class="help">计算状态表示能否核算，数据确认状态表示记录依据，核验结果表示勾稽检查。可计算或核对通过，均不代表业务凭证已核实。</p>
   <div class="trust-summary">${['difference', 'pending', 'passed'].map((key) => `<span class="review-state review-${key}">${labels[key]} ${r.counts[key] || 0} 项</span>`).join('')}</div>
   <p><b>${esc(r.conclusion)}</b></p>
   ${problems.length ? `<div class="review-priority"><h3>优先处理 · 已发现差异</h3>${problems.map(card).join('')}</div>` : ''}

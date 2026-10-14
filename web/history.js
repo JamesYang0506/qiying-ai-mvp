@@ -31,7 +31,7 @@ function updateWorkspace(analysis = !$('analysis-tabs').hidden) {
     ? `历史记录 · ${result.orders[0]?.order_id} · ${historyTime(result.snapshot.created_at)} · ${result.snapshot.is_demo ? '模拟数据' : '导入数据'} · 版本 ${result.snapshot.snapshot_id}。仅回看保存结果，未重新计算。`
     : '';
   $('import-actions').hidden = !analysis || historyViewing;
-  $('ai-form').hidden = historyViewing;
+  updateAIAvailability(analysis);
   $('saved-analysis').hidden = !historyViewing;
   if (!historyViewing) return;
   const records = result.analysis_records || [];
@@ -185,6 +185,8 @@ async function changeHistoryRecord(sid, oid, restore = false) {
 }
 
 async function openHistoricalOrder(sid, oid) {
+  defaultLandingPending = false;
+  pendingAnchor = null;
   if (busy) return;
   setBusy(true);
   renderHistory();
@@ -209,13 +211,19 @@ async function openHistoricalOrder(sid, oid) {
 }
 function enterCurrentAnalysis() {
   if (busy) return;
+  defaultLandingPending = false;
+  pendingAnchor = null;
   if (historyViewing && !currentResult) {
     location.hash = 'executive-overview';
     location.reload();
     return;
   }
   if (historyViewing) accept(currentResult);
-  switchView('home');
+  switchView(
+    result?.orders?.length && !result?.source_analysis?.profit_layers
+      ? 'detail'
+      : 'home',
+  );
 }
 $('enter-analysis').addEventListener('click', enterCurrentAnalysis);
 $('return-current').addEventListener('click', enterCurrentAnalysis);
@@ -253,15 +261,17 @@ try {
 switchView(
   !pendingAnchor || pendingAnchor === 'lobby'
     ? 'lobby'
-    : pendingAnchor === 'history'
-      ? 'history'
-      : pendingAnchor.startsWith('comparison')
-        ? 'comparison'
-        : pendingAnchor.startsWith('ai-')
-          ? 'ai'
-          : pendingAnchor.startsWith('executive-')
-            ? 'home'
-            : 'detail',
+    : pendingAnchor === 'home'
+      ? 'home'
+      : pendingAnchor === 'history'
+        ? 'history'
+        : pendingAnchor.startsWith('comparison')
+          ? 'comparison'
+          : pendingAnchor.startsWith('ai-')
+            ? 'ai'
+            : pendingAnchor.startsWith('executive-')
+              ? 'home'
+              : 'detail',
 );
 restoreCurrent();
 loadHistory();

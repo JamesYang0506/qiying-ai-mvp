@@ -11,7 +11,6 @@ from profit_model.files import (
     workbook_bytes,
     read_workbook,
     export_bundle,
-    export_training_bundle,
 )
 from profit_model.analysis_gateway import run_analysis
 from profit_model.ollama_client import OllamaClient
@@ -37,7 +36,7 @@ from profit_model.comparison_store import (
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 10 * 1024 * 1024
-# Excel 直接解析、不经网关，放宽上限；前端 UPLOAD_LIMIT / XLSX_LIMIT 与此对应。
+# Excel 文件仍限 10MB；JSON 内的 base64 约增大三分之一，15MB 仅作封装运输余量。
 LARGE_BODY = 15 * 1024 * 1024
 LARGE_BODY_PATHS = frozenset(
     {
@@ -51,12 +50,11 @@ LARGE_BODY_PATHS = frozenset(
 # POST 路由表：路径 -> Handler 方法名。允许清单与分派同源，避免两处清单不同步。
 POST_ROUTES = {
     '/api/calculate': 'handle_calculation',
-    '/api/import-xlsx': 'handle_calculation',
+    '/api/import-xlsx': 'handle_calculation',  # 仅内部/测试：标准模板直接导入。
     '/api/preview-xlsx': 'handle_excel',
     '/api/import-reviewed-xlsx': 'handle_excel',
     '/api/auto-import-xlsx': 'handle_excel',
     '/api/export': 'handle_export',
-    '/api/export-training': 'handle_export',
     '/api/ai/analyze': 'handle_analysis',
     '/api/history/delete': 'handle_history',
     '/api/history/restore': 'handle_history',
@@ -127,6 +125,10 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 '/style.css': ('style.css', 'text/css; charset=utf-8'),
                 '/comparison.js': ('comparison.js', 'text/javascript; charset=utf-8'),
                 '/comparison.css': ('comparison.css', 'text/css; charset=utf-8'),
+                '/report.js': ('report.js', 'text/javascript; charset=utf-8'),
+                '/report.css': ('report.css', 'text/css; charset=utf-8'),
+                '/favicon.svg': ('favicon.svg', 'image/svg+xml'),
+                '/favicon.ico': ('favicon.svg', 'image/svg+xml'),
             }
             try:
                 if path in static:
@@ -230,7 +232,7 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 limit = LARGE_BODY if path in LARGE_BODY_PATHS else MAX_BODY
                 if length <= 0 or length > limit:
                     return self.send(
-                        {'error': f'文件须在 0～{limit // (1024 * 1024)}MB 之间'},
+                        {'error': f'请求体须大于 0 且不超过 {limit // (1024 * 1024)}MB；Excel 文件上限为 10MB'},
                         413,
                     )
                 content = self.rfile.read(length)
@@ -335,15 +337,12 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 analysis_lock.release()
 
         def handle_export(self, path, content):
-            training = path == '/api/export-training'
-            result = prepare_export(json.loads(content), storage, training=training)
-            content = (
-                export_training_bundle(result) if training else export_bundle(result)
+            result = prepare_export(json.loads(content), storage)
+            return self.send(
+                export_bundle(result),
+                content_type='application/zip',
+                filename='profit-results.zip',
             )
-            filename = (
-                'order-training-candidates.zip' if training else 'profit-results.zip'
-            )
-            return self.send(content, content_type='application/zip', filename=filename)
 
     return ThreadingHTTPServer(('127.0.0.1', port), Handler)
 

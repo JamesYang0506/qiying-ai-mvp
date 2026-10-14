@@ -7,11 +7,37 @@ import urllib.error
 from pathlib import Path
 from server import create_server, POST_ROUTES, LARGE_BODY_PATHS
 from test_engine import fixture
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 
 class ServerTests(unittest.TestCase):
-    def test_training_export_uses_saved_snapshot_and_selected_orders(self):
+    def test_report_and_favicon_static_routes(self):
+        # Isolate static routing from files being authored by the frontend worker.
+        with tempfile.TemporaryDirectory() as static_dir:
+            root=Path(static_dir)
+            (root/'web').mkdir()
+            assets={'report.js':'text/javascript; charset=utf-8',
+                    'report.css':'text/css; charset=utf-8',
+                    'favicon.svg':'image/svg+xml'}
+            with patch('server.ROOT',root):
+                for filename,mime in assets.items():
+                    content=('test '+filename).encode()
+                    (root/'web'/filename).write_bytes(content)
+                    with urllib.request.urlopen(self.url+'/'+filename) as response:
+                        self.assertEqual(response.headers['Content-Type'],mime)
+                        self.assertEqual(response.read(),content)
+                with urllib.request.urlopen(self.url+'/favicon.ico') as response:
+                    self.assertEqual(response.headers['Content-Type'],'image/svg+xml')
+                    self.assertEqual(response.read(),(root/'web/favicon.svg').read_bytes())
+
+    def test_training_export_endpoint_is_removed(self):
+        req=urllib.request.Request(self.url+'/api/export-training',data=b'{}')
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(req)
+        self.assertEqual(error.exception.code,404)
+        self.assertEqual(json.load(error.exception),{'error':'接口不存在'})
+
+    def test_export_uses_saved_snapshot_and_selected_orders(self):
         import io
         import zipfile
         req=urllib.request.Request(self.url+'/api/calculate',data=json.dumps(fixture()).encode())
@@ -24,18 +50,20 @@ class ServerTests(unittest.TestCase):
         path.write_text(json.dumps(result),encoding='utf-8')
         before=path.read_bytes()
         payload={'snapshot_id':sid,'order_ids':['A']}
-        req=urllib.request.Request(self.url+'/api/export-training',data=json.dumps(payload).encode())
+        req=urllib.request.Request(self.url+'/api/export',data=json.dumps(payload).encode())
         with urllib.request.urlopen(req) as response:
             self.assertEqual(response.headers['Content-Type'],'application/zip')
             with zipfile.ZipFile(io.BytesIO(response.read())) as z:
-                records=[json.loads(line) for line in z.read('orders.jsonl').decode().splitlines()]
-                self.assertEqual(len(records),1)
-                self.assertEqual(records[0]['input']['order']['order_id'],'A')
-                self.assertNotIn('source_analysis',records[0]['input'])
-                self.assertNotIn('foreign',z.read('orders.jsonl').decode())
+                exported=json.loads(z.read('result.json'))
+                self.assertEqual([row['order_id'] for row in exported['orders']],['A'])
+                self.assertEqual(exported['snapshot']['export_scope'],['A'])
+                self.assertNotIn('source_analysis',exported)
+                self.assertNotIn('foreign',z.read('costs.csv').decode())
+                self.assertEqual(set(z.namelist()),{'orders.csv','costs.csv','allocations.csv','issues.csv','snapshot.json','result.json'})
+            self.assertIn('profit-results.zip',response.headers['Content-Disposition'])
         self.assertEqual(path.read_bytes(),before)
-        for order_ids in ([],['UNKNOWN'],['A','A']):
-            req=urllib.request.Request(self.url+'/api/export-training',data=json.dumps(dict(payload,order_ids=order_ids)).encode())
+        for order_ids in (['UNKNOWN'],None,'A'):
+            req=urllib.request.Request(self.url+'/api/export',data=json.dumps(dict(payload,order_ids=order_ids)).encode())
             with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(req)
             self.assertEqual(error.exception.code,400)
 

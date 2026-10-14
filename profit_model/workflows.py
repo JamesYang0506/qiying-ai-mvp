@@ -49,7 +49,7 @@ def calculate_and_save(data, storage, *, source_hash=None, import_review=None):
     return result
 
 
-def prepare_export(request, storage, *, training=False):
+def prepare_export(request, storage):
     sid = request.get('snapshot_id', '')
     result = load_snapshot(
         storage,
@@ -65,8 +65,6 @@ def prepare_export(request, storage, *, training=False):
     ids = set(selected)
     if any(is_deleted(storage, sid, oid) for oid in ids):
         raise ValueError('所选记录已在回收站，请先恢复')
-    if training and (not ids or len(ids) != len(selected)):
-        raise ValueError('请导出至少一笔订单，订单编号不能重复')
     if not ids.issubset({row['order_id'] for row in result['orders']}):
         raise ValueError('导出包含未知订单')
     result = select_orders(result, ids)

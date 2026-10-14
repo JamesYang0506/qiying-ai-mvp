@@ -8,7 +8,7 @@ GET /api/ai/status 返回 configured、status（ready/unavailable）、model、m
 
 模型可用时返回 status=completed、result（summary/risks/recommendations/unknowns）、evidence、模型摘要、提示版本、耗时和令牌统计。reviewed=false。不可用时只准备资料，返回not_configured/result=null；调用或验证失败返回400，并发生成返回409。
 
-分析独立保存在 reports/snapshots/ai-analyses/<request_id>.json，包含原计算快照、上下文指纹、模型版本、结果及未审核标记。不会改写订单、计算快照或首页规则建议，不自动作为训练标签。尚未开发人工审核或训练导出界面。
+分析独立保存在 reports/snapshots/ai-analyses/<request_id>.json，包含原计算快照、上下文指纹、模型版本、结果及未审核标记。不会改写订单、计算快照或首页规则建议，不自动作为训练标签。人工审核尚未开发；训练导出已移除，后续训练路线已暂缓。
 
 首版推理配置 num_ctx=8192、num_predict=1800、think=false、temperature=0.1，超时180秒；只允许一个生成请求。长订单后续需分块检索。当前主机实测确认后再调整，不视作通用性能保证。
 

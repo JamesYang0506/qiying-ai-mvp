@@ -7,7 +7,10 @@
       >企盈智擎 · 订单利润工作台</title
     ><link rel="stylesheet" href="/style.css" /><link
       rel="stylesheet"
-      href="/comparison.css"
+      href="/comparison.css" /><link rel="stylesheet" href="/report.css" /><link
+      rel="icon"
+      type="image/svg+xml"
+      href="/favicon.svg"
   /></head>
   <body>
     <aside class="sidebar">
@@ -18,7 +21,10 @@
       <div class="nav-label">工作空间</div>
       <div class="workspace-links"
         ><button class="nav" data-view="lobby">⌂ 工作大厅</button
-        ><button class="nav" data-view="history">◷ 历史分析记录</button></div
+        ><button class="nav" data-view="history">◷ 历史分析记录</button
+        ><button class="nav" data-view="comparison"
+          >◫ 理论与实际对照</button
+        ></div
       >
       <div class="nav-label" id="analysis-nav-label" hidden>经营分析</div>
       <div id="detail-navigation" hidden>
@@ -97,6 +103,7 @@
           class="view-button"
           data-view="ai"
           aria-pressed="false"
+          hidden
           >智能订单分析</button
         ><button class="view-button" data-view="comparison" aria-pressed="false"
           >理论与实际对照</button
@@ -112,6 +119,22 @@
           ><label class="button primary" for="upload">＋ 导入数据</label
           ><input id="upload" type="file" accept=".json,.xlsx" hidden /></div
       ></section>
+      <div id="report-actions" class="decision-delivery-actions" hidden
+        ><button id="decision-report" class="secondary" disabled
+          >↓ 一页决策报告</button
+        ><span>选择单笔订单预览，可打印或保存为 PDF</span></div
+      >
+      <section
+        id="ai-availability"
+        class="ai-availability-card"
+        hidden
+        aria-label="智能分析连接说明"
+        ><strong>智能订单分析</strong
+        ><p id="ai-availability-message">正在检查本地模型连接…</p
+        ><button id="ai-retry" class="secondary" type="button"
+          >重新检查连接</button
+        ></section
+      >
       <div id="error" class="error" role="alert" hidden></div>
       <section
         id="duplicate-notice"
@@ -376,28 +399,16 @@
                 id="search"
                 placeholder="搜索订单 / 产品 / 客户"
                 aria-label="搜索订单"
-              /><button id="export" class="secondary">↓ 导出当前范围</button
-              ><button
-                id="export-training"
-                class="secondary"
-                aria-describedby="training-export-help"
-                >↓ 导出训练资料</button
+              /><button id="export" class="secondary"
+                >↓ 导出当前范围数据</button
               ></div
             ></div
-          ><p id="training-export-help" class="training-export-help"
-            >训练资料包含当前筛选订单的成本、利润、核验状态和专家建议标注模板。试算与严格核算分开，未知不填零；标注审核后再转换为训练样本。导出保留企业原字段，请在对外使用前脱敏。</p
-          ><p
-            id="training-export-status"
-            class="training-export-status"
-            role="status"
-            aria-live="polite"
-          ></p
           ><div class="table-scroll"
             ><table
               ><thead
                 ><tr
                   ><th>订单 / 产品</th><th>收入</th><th>生产毛利</th
-                  ><th>管理利润</th><th>管理利润率</th><th>结果状态</th></tr
+                  ><th>管理利润</th><th>管理利润率</th><th>计算状态</th></tr
                 ></thead
               ><tbody id="order-table"></tbody></table></div
           ><div id="empty" class="empty" hidden
@@ -550,5 +561,6 @@
     ><script src="/app.js"></script
     ><script src="/import.js"></script
     ><script src="/comparison.js"></script
-    ><script src="/history.js"></script></body
+    ><script src="/history.js"></script
+    ><script src="/report.js"></script></body
 ></html>

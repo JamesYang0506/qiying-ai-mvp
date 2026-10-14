@@ -65,7 +65,9 @@ function acceptImport(outcome) {
   }
   const data = outcome.status === 'imported' ? outcome.result : outcome;
   accept(data);
-  switchView('home');
+  defaultLandingPending = false;
+  pendingAnchor = null;
+  switchView(result?.source_analysis?.profit_layers ? 'home' : 'detail');
   loadHistory();
   if (data.snapshot.duplicates_skipped)
     showDuplicateNotice(data.snapshot.duplicates_skipped, true);

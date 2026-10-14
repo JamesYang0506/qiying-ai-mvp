@@ -35,8 +35,8 @@ function setError(message) {
 function setBusy(value) {
   busy = value;
   for (const id of ['demo', 'upload']) $(id).disabled = value;
-  for (const id of ['export', 'export-training'])
-    $(id).disabled = value || !result || rowsFiltered().length === 0;
+  $('export').disabled = value || !result || rowsFiltered().length === 0;
+  $('decision-report').disabled = value || !result?.orders?.length;
   $('notice').setAttribute('aria-busy', String(value));
 }
 async function calculate(data) {
@@ -82,7 +82,7 @@ async function upload(file) {
   $('duplicate-notice').hidden = true;
   try {
     const name = file.name.toLowerCase();
-    // Excel 与服务端大文件接口同限 15MB；JSON 仍走 10MB 网关。
+    // 文件本体均限制10MB；Excel接口的15MB余量用于base64封装。
     const limit = name.endsWith('.xlsx') ? XLSX_LIMIT : UPLOAD_LIMIT;
     if (file.size > limit)
       throw new Error(`文件超过 ${limit / 1048576}MB，请拆分后导入`);
@@ -105,7 +105,9 @@ function render() {
   const rows = rowsFiltered();
   const comparable = rows.filter((r) => r.production_profit !== null);
   const managementRows = rows.filter((r) => r.management_profit !== null);
-  const estimate = rows.filter((r) => r.production_status === 'estimated').length;
+  const estimate = rows.filter(
+    (r) => r.production_status === 'estimated',
+  ).length;
   const revenue = comparable.length ? sum(comparable, 'revenue') : null;
   const gross = comparable.length ? sum(comparable, 'production_profit') : null;
   const profit = managementRows.length
@@ -192,8 +194,8 @@ function render() {
     .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`)
     .join('');
   $('footer-snapshot').textContent = '快照 ' + snap.snapshot_id;
-  for (const id of ['export', 'export-training'])
-    $(id).disabled = busy || rows.length === 0;
+  $('export').disabled = busy || rows.length === 0;
+  $('decision-report').disabled = busy || !result.orders.length;
 }
 function chart(rows) {
   const show = rows.slice(0, 8);
@@ -400,7 +402,7 @@ function trace() {
           ['record_id', '成本记录'],
           ['category', '类别'],
           ['amount', '金额/元'],
-          ['status', '状态'],
+          ['status', '数据确认状态'],
           ['source', '来源'],
           ['method', '方法'],
         ]
@@ -434,40 +436,29 @@ function trace() {
     ? `<table><thead><tr>${columns.map(([, title]) => `<th>${title}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${columns.map(([key]) => `<td>${esc(display(key, r[key]))}</td>`).join('')}</tr>`).join('')}</tbody></table>`
     : '<div class="empty">该订单没有此类明细</div>';
 }
-async function exportCurrent(training = false) {
+async function exportCurrent() {
   if (!result || busy) return;
   const orderIds = rowsFiltered().map((r) => r.order_id),
     snapshotId = result.snapshot.snapshot_id,
     cutoffDate = result.snapshot.cutoff_date;
   if (!orderIds.length) return;
   setBusy(true);
-  if (training)
-    $('training-export-status').textContent = '正在打包当前筛选范围…';
   try {
-    const response = await request(
-      training ? '/api/export-training' : '/api/export',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ snapshot_id: snapshotId, order_ids: orderIds }),
-      },
-    );
+    const response = await request('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshot_id: snapshotId, order_ids: orderIds }),
+    });
     const url = URL.createObjectURL(await response.blob());
     const a = document.createElement('a');
     a.href = url;
-    a.download =
-      (training ? '订单训练候选资料_' : '订单利润结果_') + cutoffDate + '.zip';
+    a.download = '订单利润结果_' + cutoffDate + '.zip';
     document.body.append(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    if (training)
-      $('training-export-status').textContent =
-        `已生成 ${orderIds.length} 笔订单的训练候选资料，请在浏览器下载中查看。建议答案尚待专家填写和审核。`;
   } catch (e) {
     setError(e.message);
-    if (training)
-      $('training-export-status').textContent = '导出失败：' + e.message;
   } finally {
     setBusy(false);
   }
@@ -475,7 +466,6 @@ async function exportCurrent(training = false) {
 $('demo').addEventListener('click', demo);
 $('upload').addEventListener('change', (e) => upload(e.target.files[0]));
 $('export').addEventListener('click', () => exportCurrent());
-$('export-training').addEventListener('click', () => exportCurrent(true));
 for (const id of ['mode', 'state']) $(id).addEventListener('change', render);
 $('search').addEventListener('input', render);
 $('cost-tab').addEventListener('click', () => {
@@ -503,6 +493,8 @@ $('layers').innerHTML = '<div class="empty">导入数据后计算三层利润</d
 setBusy(false);
 
 let pendingAnchor = location.hash.slice(1);
+// 仅空地址自动选落点；显式链接和恢复期间的用户操作优先。
+let defaultLandingPending = !pendingAnchor;
 function switchView(view, target = null) {
   document.body.dataset.view = view;
   const home = view === 'home',
@@ -512,6 +504,7 @@ function switchView(view, target = null) {
   $('history-view').hidden = view !== 'history';
   const analysis = ['home', 'detail', 'ai', 'comparison'].includes(view);
   $('analysis-tabs').hidden = !analysis;
+  $('report-actions').hidden = !analysis;
   $('import-actions').hidden = !analysis || historyViewing;
   $('decision-view').hidden = !home;
   $('detail-view').hidden = view !== 'detail';
@@ -560,7 +553,7 @@ function switchView(view, target = null) {
       : view === 'history'
         ? 'history'
         : home
-          ? 'executive-overview'
+          ? 'home'
           : ai
             ? 'ai-workspace'
             : 'overview');
@@ -587,12 +580,14 @@ function switchView(view, target = null) {
 }
 for (const button of document.querySelectorAll('[data-view]'))
   button.addEventListener('click', () => {
+    defaultLandingPending = false;
     pendingAnchor = null;
     switchView(button.dataset.view);
   });
 $('decision-view').addEventListener('click', (event) => {
   const button = event.target.closest('[data-detail-target]');
   if (button) {
+    defaultLandingPending = false;
     pendingAnchor = null;
     if (result) {
       $('state').value = 'all';
@@ -603,11 +598,14 @@ $('decision-view').addEventListener('click', (event) => {
       if (sourceOrder) $('mode').value = sourceOrder.mode;
       render();
     }
-    switchView('detail', button.dataset.detailTarget);
+    if (button.dataset.detailTarget.startsWith('comparison'))
+      switchView('comparison');
+    else switchView('detail', button.dataset.detailTarget);
   }
 });
 for (const link of document.querySelectorAll('.sidebar .nav'))
   link.addEventListener('click', () => {
+    defaultLandingPending = false;
     for (const other of document.querySelectorAll('.sidebar .nav'))
       other.classList.toggle('active', other === link);
   });
@@ -618,6 +616,16 @@ async function restoreCurrent() {
       currentResult = data;
       if (!historyViewing) accept(data);
     }
+    if (defaultLandingPending && !historyViewing) {
+      defaultLandingPending = false;
+      switchView(
+        data.orders?.length
+          ? data.source_analysis?.profit_layers
+            ? 'home'
+            : 'detail'
+          : 'lobby',
+      );
+    }
   } catch (e) {
     setError('无法恢复本地结果：' + e.message);
   }
@@ -626,6 +634,26 @@ let aiSnapshot = null,
   aiRequestSequence = 0,
   aiReady = false,
   aiWorking = false;
+let aiStatusLoaded = false,
+  aiStatusMessage = '正在检查本地模型连接…';
+function updateAIAvailability(analysis = !$('analysis-tabs').hidden) {
+  const hasSaved = historyViewing && Boolean(result?.analysis_records?.length);
+  $('ai-view-button').hidden = !aiReady && !hasSaved;
+  $('ai-view-button').textContent = historyViewing
+    ? '历史模型建议'
+    : '智能订单分析';
+  $('ai-availability').hidden = !analysis || aiReady;
+  $('ai-availability-message').textContent = aiStatusLoaded
+    ? aiStatusMessage + '。成本、毛利对照和决策报告仍可使用。'
+    : aiStatusMessage;
+  $('ai-form').hidden = historyViewing || !aiReady;
+  $('ai-workspace').hidden = !aiReady && !hasSaved;
+  $('ai-output').hidden = !aiReady && !hasSaved;
+  $('ai-connection').hidden = !aiReady && !hasSaved;
+  $('ai-navigation').hidden =
+    document.body.dataset.view !== 'ai' || (!aiReady && !hasSaved);
+  document.querySelector('.ai-contract').hidden = !aiReady && !hasSaved;
+}
 function updateAIOrders() {
   if (!result) return;
   const old = $('ai-order').value;
@@ -657,7 +685,14 @@ for (const id of ['ai-order', 'ai-focus', 'ai-question'])
   });
 $('ai-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (historyViewing || !result || !$('ai-order').value || aiWorking) return;
+  if (
+    historyViewing ||
+    !aiReady ||
+    !result ||
+    !$('ai-order').value ||
+    aiWorking
+  )
+    return;
   const sequence = ++aiRequestSequence;
   aiWorking = true;
   $('ai-submit').disabled = true;
@@ -710,6 +745,8 @@ async function loadAIStatus() {
   try {
     const status = await (await request('/api/ai/status')).json();
     aiReady = Boolean(status.configured);
+    aiStatusLoaded = true;
+    aiStatusMessage = aiReady ? status.message : '智能分析暂未连接本地模型';
     $('ai-connection').textContent = status.message;
     $('ai-model-badge').textContent = aiReady ? status.model : '模型未就绪';
     $('ai-model-badge').className =
@@ -718,6 +755,18 @@ async function loadAIStatus() {
     if (historyViewing) showSavedAnalysis();
     else if (!aiWorking) resetAIOutput();
   } catch (e) {
+    aiStatusLoaded = true;
+    aiReady = false;
+    aiStatusMessage = '暂时无法读取本地模型状态';
     $('ai-connection').textContent = '无法读取模型接入状态：' + e.message;
   }
+  updateAIAvailability();
 }
+$('ai-retry').addEventListener('click', async () => {
+  $('ai-retry').disabled = true;
+  try {
+    await loadAIStatus();
+  } finally {
+    $('ai-retry').disabled = false;
+  }
+});
