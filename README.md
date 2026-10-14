@@ -87,6 +87,8 @@ data/samples/                合成开发样例
 
 ## 文档
 
+- [最新开发交接（2026-10-14）](docs/开发交接_2026-10-14.md)：新聊天接续开发先读，包含现状、计算边界、资料、未解决事项和接续提示词。
+
 - [输入格式](docs/input_format.md)与[当前公式](docs/formula_v0.2.md)
 - [独立计算与事后对照](docs/independent-calculation.md)
 - [利润分层及可信化](docs/profit-layers-and-trust.md)
