@@ -17,6 +17,8 @@ source_analysis含 metrics、profit_layers、cost_rows、materials、production�
 | 接口 | 行为 |
 |---|---|
 | GET /api/current | 读取本机最新计算快照，无快照时返回空状态 |
+| GET /api/history | 按订单汇总历史版本摘要，返回 orders 和 skipped_files；跳过损坏或不兼容快照 |
+| GET /api/history/{snapshot_id}?order_id={order_id} | 只读获取指定版本的单笔订单及其成本、分摊、问题和对应来源；analysis_records 仅包含订单与快照均匹配的已保存模型结果 |
 | POST /api/calculate | 按标准JSON计算并保存快照 |
 | POST /api/import-xlsx | 导入Excel、计算及保存快照 |
 | POST /api/export | 按快照和订单范围导出结果 |

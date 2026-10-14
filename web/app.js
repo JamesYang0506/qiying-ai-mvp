@@ -4,6 +4,7 @@ const names={material:'直接材料',labor:'直接人工',manufacturing:'制造�
 const states={complete:'可计算',estimated:'估算',blocked:'无法计算',disabled:'未启用'};
 const recordStates={confirmed:'已确认',estimated:'暂估',missing:'待补',not_applicable:'不适用'};
 let result=null,selected=null,traceMode='costs',busy=false;
+let currentResult=null,historyViewing=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function money(value){if(value===null||value===undefined)return '—';let [i,f='00']=String(value).split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+f.padEnd(2,'0');}
 const percent=value=>value===null||value===undefined?'—':(Number(value)*100).toFixed(2)+'%';
@@ -15,9 +16,9 @@ function setError(message){$('error').hidden=!message;$('error').textContent=mes
 function setBusy(value){busy=value;for(const id of ['demo','upload'])$(id).disabled=value;for(const id of ['export','export-training'])$(id).disabled=value||!result||rowsFiltered().length===0;$('notice').setAttribute('aria-busy',String(value));}
 async function request(path,options={}){const response=await fetch(path,options);if(!response.ok){let text='请求失败';try{text=(await response.json()).error||text;}catch{}throw new Error(text);}return response;}
 async function calculate(data){return (await request('/api/calculate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})).json();}
-function accept(data){result=data;selected=null;const modes=new Set(result.orders.map(r=>r.mode));if(!modes.has($('mode').value))$('mode').value=[...modes][0];$('state').value='all';$('search').value='';setError('');render();}
+function accept(data,{historical=false}={}){aiRequestSequence++;aiSnapshot=null;result=data;historyViewing=historical;if(!historical)currentResult=data;selected=null;const modes=new Set(result.orders.map(r=>r.mode));if(!modes.has($('mode').value))$('mode').value=[...modes][0];$('state').value='all';$('search').value='';setError('');render();if(typeof updateWorkspace==='function')updateWorkspace();}
 async function demo(){if(busy)return;setBusy(true);try{const data=await (await request('/api/demo')).json();accept(await calculate(data));}catch(e){setError(e.message);}finally{setBusy(false);}}
-async function upload(file){if(!file||busy)return;setBusy(true);setError('');try{if(file.size>10*1024*1024)throw new Error('文件超过 10MB，请拆分后导入');let data;if(file.name.toLowerCase().endsWith('.xlsx'))data=await (await request('/api/import-xlsx',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file})).json();else if(file.name.toLowerCase().endsWith('.json'))data=await calculate(JSON.parse(await file.text()));else throw new Error('请导入 .xlsx 或 .json 标准数据文件');accept(data);}catch(e){setError('导入失败：'+e.message+'。当前看板保留上一份计算结果。');}finally{setBusy(false);$('upload').value='';}}
+async function upload(file){if(!file||busy)return;setBusy(true);setError('');try{if(file.size>10*1024*1024)throw new Error('文件超过 10MB，请拆分后导入');let data;if(file.name.toLowerCase().endsWith('.xlsx'))data=await (await request('/api/import-xlsx',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file})).json();else if(file.name.toLowerCase().endsWith('.json'))data=await calculate(JSON.parse(await file.text()));else throw new Error('请导入 .xlsx 或 .json 标准数据文件');accept(data);switchView('home');loadHistory();}catch(e){setError('导入失败：'+e.message+'。当前看板保留上一份计算结果。');}finally{setBusy(false);$('upload').value='';}}
 function render(){if(!result)return;const rows=rowsFiltered();const comparable=rows.filter(r=>r.production_profit!==null);const managementRows=rows.filter(r=>r.management_profit!==null);const complete=rows.filter(r=>r.production_status==='complete').length,estimate=rows.filter(r=>r.production_status==='estimated').length;const revenue=comparable.length?sum(comparable,'revenue'):null;const gross=comparable.length?sum(comparable,'production_profit'):null;const profit=managementRows.length?sum(managementRows,'management_profit'):null;const snap=result.snapshot;
   $('notice').classList.toggle('real',!snap.is_demo);$('notice').textContent=(snap.is_demo?'演示模式 · 当前全部为合成数据，仅用于验证模型与展示，不代表企业经营状况。':'导入模式 · 当前为你导入的数据；计算口径仍需结合企业手工结果核对。')+' BOM 成本自动标为估算，未知费用不会按零处理。';
   $('scope').textContent=`截止 ${snap.cutoff_date} · CNY · 当前 ${rows.length} 笔订单`;
@@ -80,22 +81,25 @@ setBusy(false);
 let pendingAnchor=location.hash.slice(1);
 function switchView(view,target=null){
   const home=view==='home',ai=view==='ai';
+  $('lobby-view').hidden=view!=='lobby';$('history-view').hidden=view!=='history';
+  const analysis=['home','detail','ai'].includes(view);
+  $('analysis-tabs').hidden=!analysis;$('import-actions').hidden=!analysis||historyViewing;
   $('decision-view').hidden=!home;$('detail-view').hidden=view!=='detail';$('ai-view').hidden=!ai;
   $('home-navigation').hidden=!home;$('detail-navigation').hidden=view!=='detail';$('ai-navigation').hidden=!ai;
   for(const button of document.querySelectorAll('[data-view]')){const active=button.dataset.view===view;button.classList.toggle('selected',active);button.setAttribute('aria-pressed',String(active));}
-  $('view-heading').textContent=home?'经营决策，一眼看清。':ai?'智能分析，辅助订单决策。':'订单明细，逐项有据。';
-  $('view-description').textContent=home?'看利润、看成本、看风险，让订单决策有依据。':ai?'围绕具体订单提出问题，结合成本、利润与可信度资料开展分析。':'核查精确金额、计算过程、数据来源与费用分摊。';
-  const id=target||(home?'executive-overview':ai?'ai-workspace':'overview');
+  $('view-heading').textContent=home?'经营决策，一眼看清。':ai?'智能分析，辅助订单决策。':view==='detail'?'订单明细，逐项有据。':view==='history'?'历史订单，随时回看。':'每一笔订单，都有据可循。';
+  $('view-description').textContent=home?'看利润、看成本、看风险，让订单决策有依据。':ai?'围绕具体订单提出问题，结合成本、利润与可信度资料开展分析。':view==='detail'?'核查精确金额、计算过程、数据来源与费用分摊。':view==='history'?'选择订单和分析版本，查看当时的结果与依据。':'开始订单分析，或回看历史记录。';
+  $('breadcrumb-page').textContent=view==='lobby'?'大厅':view==='history'?'历史分析记录':historyViewing?'历史订单分析':'订单分析';
+  const id=target||(view==='lobby'?'lobby':view==='history'?'history':home?'executive-overview':ai?'ai-workspace':'overview');
   if(target){history.replaceState(null,'','#'+id);requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({behavior:'instant'}));}else{history.replaceState(null,'','#'+id);window.scrollTo({top:0,behavior:'instant'});}
   for(const link of document.querySelectorAll('.sidebar .nav'))link.classList.toggle('active',link.getAttribute('href')==='#'+id);
+  if(typeof updateWorkspace==='function')updateWorkspace(analysis);
+  if(view==='history'&&typeof loadHistory==='function')loadHistory();
 }
 for(const button of document.querySelectorAll('[data-view]'))button.addEventListener('click',()=>{pendingAnchor=null;switchView(button.dataset.view);});
 $('decision-view').addEventListener('click',event=>{const button=event.target.closest('[data-detail-target]');if(button){pendingAnchor=null;if(result){$('state').value='all';$('search').value='';const sourceOrder=result.orders.find(x=>x.order_id===result.source_analysis?.order_id);if(sourceOrder)$('mode').value=sourceOrder.mode;render();}switchView('detail',button.dataset.detailTarget);}});
 for(const link of document.querySelectorAll('.sidebar .nav'))link.addEventListener('click',()=>{for(const other of document.querySelectorAll('.sidebar .nav'))other.classList.toggle('active',other===link);});
-const initialHome=!pendingAnchor||pendingAnchor.startsWith('executive-');
-switchView(pendingAnchor.startsWith('ai-')?'ai':initialHome?'home':'detail');
-if(pendingAnchor)history.replaceState(null,'','#'+pendingAnchor);
-async function restoreCurrent(){try{const data=await (await request('/api/current')).json();if(data.orders)accept(data);}catch(e){setError('无法恢复本地结果：'+e.message);}}
+async function restoreCurrent(){try{const data=await (await request('/api/current')).json();if(data.orders){currentResult=data;if(!historyViewing)accept(data);}}catch(e){setError('无法恢复本地结果：'+e.message);}}
 let aiSnapshot=null,aiRequestSequence=0,aiReady=false,aiWorking=false;
 function updateAIOrders(){
   if(!result)return;
@@ -109,7 +113,7 @@ function updateAIOrders(){
 function resetAIOutput(){$('ai-feedback').innerHTML=`<div class="ai-placeholder"><span>✧</span><h3>${aiReady?'准备分析你的订单':'等待连接本地模型'}</h3><p>${aiReady?'选择订单和分析方向，点击开始分析。':'可准备订单资料；模型服务可用后生成分析。'}</p></div>`;document.querySelector('.ai-result-outline').hidden=false;}
 for(const id of ['ai-order','ai-focus','ai-question'])$(id).addEventListener('input',()=>{aiRequestSequence++;resetAIOutput();});
 $('ai-form').addEventListener('submit',async event=>{
-  event.preventDefault();if(!result||!$('ai-order').value||aiWorking)return;
+  event.preventDefault();if(historyViewing||!result||!$('ai-order').value||aiWorking)return;
   const sequence=++aiRequestSequence;aiWorking=true;$('ai-submit').disabled=true;
   $('ai-feedback').textContent=aiReady?'本地 Qwen 正在分析…首次加载模型可能需要一些时间。':'正在准备本地订单资料…';
   try{
@@ -129,5 +133,4 @@ function renderAIResult(response){
   $('ai-feedback').innerHTML=`<div class="notice"><b>本地模型分析 · 待人工复核</b><p>模型 ${esc(response.model)} · 用时 ${esc(response.duration_seconds)} 秒。引用校验通过不代表建议已被业务审核。</p></div><section class="ai-answer-section"><h3>订单结论</h3><p>${esc(output.summary)}</p></section><section class="ai-answer-section"><h3>主要风险</h3>${output.risks.length?output.risks.map(x=>`<article class="ai-answer-card"><span class="badge ${x.severity==='high'?'blocked':'estimated'}">${levels[x.severity]}</span><h4>${esc(x.title)}</h4><p>${esc(x.explanation)}</p>${citations(x.evidence_ids)}</article>`).join(''):'<p>模型未列出额外风险；仍应结合详细页的可信化审查。</p>'}</section><section class="ai-answer-section"><h3>建议行动</h3>${output.recommendations.map(x=>`<article class="ai-answer-card"><h4>${esc(x.action)}</h4><p>${esc(x.reason)}</p><p class="help">适用条件：${esc(x.conditions)}</p>${citations(x.evidence_ids)}</article>`).join('')||'<p>当前未给出建议。</p>'}</section><section class="ai-answer-section"><h3>待确认事项</h3><ul>${output.unknowns.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></section><p class="chart-note">记录 ${esc(response.request_id)} · 快照 ${esc(response.context.snapshot.snapshot_id)} · 模型建议未回写成本、利润或首页决策。</p>`;
   document.querySelector('.ai-result-outline').hidden=true;
 }
-async function loadAIStatus(){try{const status=await (await request('/api/ai/status')).json();aiReady=Boolean(status.configured);$('ai-connection').textContent=status.message;$('ai-model-badge').textContent=aiReady?status.model:'模型未就绪';$('ai-model-badge').className='badge '+(aiReady?'complete':'estimated');$('ai-submit').textContent=aiReady?'开始本地分析':'准备分析资料';if(!aiWorking)resetAIOutput();}catch(e){$('ai-connection').textContent='无法读取模型接入状态：'+e.message;}}
-restoreCurrent();loadAIStatus();
+async function loadAIStatus(){try{const status=await (await request('/api/ai/status')).json();aiReady=Boolean(status.configured);$('ai-connection').textContent=status.message;$('ai-model-badge').textContent=aiReady?status.model:'模型未就绪';$('ai-model-badge').className='badge '+(aiReady?'complete':'estimated');$('ai-submit').textContent=aiReady?'开始本地分析':'准备分析资料';if(historyViewing)showSavedAnalysis();else if(!aiWorking)resetAIOutput();}catch(e){$('ai-connection').textContent='无法读取模型接入状态：'+e.message;}}

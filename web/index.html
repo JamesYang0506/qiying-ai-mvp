@@ -4,6 +4,8 @@
 <body>
 <aside class="sidebar">
   <a class="brand" href="/"><span class="brand-mark">盈</span><span>企盈智擎<small>QIYING · PROFIT STUDIO</small></span></a>
+  <div class="nav-label">工作空间</div>
+  <div class="workspace-links"><button class="nav" data-view="lobby">⌂ 工作大厅</button><button class="nav" data-view="history">◷ 历史分析记录</button></div>
   <div class="nav-label">经营分析</div>
   <div id="detail-navigation" hidden>
   <a class="nav active" href="#overview"><span>◫</span> 利润总览</a>
@@ -18,15 +20,28 @@
   <div class="sidebar-bottom"><span class="live-dot"></span> 本地计算 · 数据留在本机<small>确定性计算引擎 / v0.3</small></div>
 </aside>
 <main>
-  <header><div class="breadcrumb">工作空间 <span>/</span> 订单利润分析</div><div class="version">MODEL V0.3 <span>● 本地运行</span></div></header>
-  <div class="view-switch" role="group" aria-label="页面切换"><button id="home-view-button" class="view-button selected" data-view="home" aria-pressed="true">决策首页</button><button id="detail-view-button" class="view-button" data-view="detail" aria-pressed="false">详细数据</button><button id="ai-view-button" class="view-button" data-view="ai" aria-pressed="false">智能订单分析</button></div>
-  <section class="page-title" id="overview"><div><div class="eyebrow">MAKE EVERY ORDER COUNT</div><h1 id="view-heading">经营决策，一眼看清。</h1><p id="view-description">看利润、看成本、看风险，让订单决策有依据。</p></div><div class="actions"><button id="demo" class="secondary" hidden>加载演示数据</button><label class="button primary" for="upload">＋ 导入数据</label><input id="upload" type="file" accept=".json,.xlsx" hidden></div></section>
+  <header><div class="breadcrumb">工作空间 <span>/</span> <span id="breadcrumb-page">大厅</span></div><div class="version">PROFIT STUDIO <span>● 本地运行</span></div></header>
+  <div class="workspace-bar"><button class="secondary" data-view="lobby">← 返回大厅</button><button id="return-current" class="secondary" hidden>返回当前分析</button><span id="workspace-context">本机工作空间</span></div>
+  <div id="analysis-tabs" class="view-switch" role="group" aria-label="页面切换" hidden><button id="home-view-button" class="view-button selected" data-view="home" aria-pressed="true">经营概览</button><button id="detail-view-button" class="view-button" data-view="detail" aria-pressed="false">详细数据</button><button id="ai-view-button" class="view-button" data-view="ai" aria-pressed="false">智能订单分析</button></div>
+  <section class="page-title" id="overview"><div><div class="eyebrow">MAKE EVERY ORDER COUNT</div><h1 id="view-heading">每一笔订单，都有据可循。</h1><p id="view-description">开始订单分析，或回看历史记录。</p></div><div id="import-actions" class="actions" hidden><button id="demo" class="secondary" hidden>加载演示数据</button><label class="button primary" for="upload">＋ 导入数据</label><input id="upload" type="file" accept=".json,.xlsx" hidden></div></section>
   <div id="error" class="error" role="alert" hidden></div>
-  <section id="decision-view" aria-label="决策首页"><div class="empty">导入数据后显示经营概览与决策建议。</div></section>
+  <div id="history-banner" class="history-banner" role="status" hidden></div>
+  <section id="lobby-view" aria-label="工作大厅">
+    <div class="lobby-intro"><p>选择工作入口，开始分析新数据，或回看已有订单。</p></div>
+    <div class="lobby-grid"><article class="lobby-card lobby-analysis"><span class="lobby-number">01 / ANALYZE</span><h2>订单分析</h2><p>导入订单数据，查看成本、生产毛利与经营净利试算，定位需要关注的风险。</p><div class="lobby-tags"><span>利润与成本</span><span>可信化审查</span><span>智能分析</span></div><button id="enter-analysis" class="primary">进入订单分析 ↗</button></article>
+    <article class="lobby-card"><span class="lobby-number">02 / REVIEW</span><h2>历史分析记录</h2><p>找到已分析的订单，选择分析时间，回看当时的计算依据、核验状态与模型建议。</p><div class="lobby-tags"><span>按订单查找</span><span>版本选择</span><span>结果追溯</span></div><button class="secondary" data-view="history">查看历史记录 ↗</button></article></div>
+    <div class="lobby-summary"><div><strong id="lobby-order-count">—</strong><span>历史订单</span></div><div><strong id="lobby-version-count">—</strong><span>订单分析版本</span></div><p id="lobby-history-status" role="status">正在读取本机历史记录…</p></div>
+  </section>
+  <section id="history-view" aria-label="历史分析记录" hidden>
+    <div class="panel history-controls"><label for="history-search">查找订单<input id="history-search" type="search" placeholder="搜索订单编号、产品或客户"></label><label for="history-kind">数据类型<select id="history-kind"><option value="all">全部记录</option><option value="real">导入数据</option><option value="demo">模拟数据</option></select></label><button id="history-refresh" class="secondary">刷新记录</button></div>
+    <p class="help">每笔订单可选择不同分析版本。金额按该版本原口径展示，试算结果单独标注；查看历史不会改变当前分析。</p><p id="history-status" class="help" role="status" aria-live="polite"></p><div id="history-list" class="history-grid"></div>
+  </section>
+  <section id="decision-view" aria-label="经营概览" hidden><div class="empty">导入数据后显示经营概览与决策建议。</div></section>
   <section id="ai-view" hidden aria-label="智能订单分析">
     <div class="notice" id="ai-connection" role="status">正在读取模型接入状态…</div>
     <div class="ai-workspace-grid">
     <section class="panel" id="ai-workspace"><div class="panel-head"><div><h2>准备订单分析</h2><p>选择订单，说明你希望解决的问题。</p></div><span id="ai-model-badge" class="badge estimated">检查本地模型</span></div>
+    <div id="saved-analysis" hidden><label for="saved-analysis-select">已保存的模型分析</label><select id="saved-analysis-select"></select><p id="saved-analysis-status" class="help"></p></div>
     <form id="ai-form"><label for="ai-order">分析订单</label><select id="ai-order" required><option value="">请先导入订单数据</option></select>
     <label for="ai-focus">分析方向</label><select id="ai-focus"><option value="decision">订单决策建议</option><option value="profit">利润与报价分析</option><option value="cost">成本开销分析</option><option value="risk">数据可信度与风险</option></select>
     <label for="ai-question">补充问题 <span>选填</span></label><textarea id="ai-question" maxlength="2000" rows="5" placeholder="例如：追加这笔订单前，应优先核查哪些成本和风险？"></textarea>
@@ -57,4 +72,4 @@
   <section class="quality-grid" id="quality"><article class="panel"><div class="panel-head"><div><h2>数据与计算口径</h2><p>缺失保留未知，估算保留依据</p></div><span class="pill">可追溯</span></div><dl id="snapshot"></dl><div class="rules"><span>01</span><p><b>实际耗用与 BOM 分开计算</b>实际净耗用不再加损耗；BOM 结果标为估算。</p><span>02</span><p><b>费用按完整期间基数分摊</b>按月计算并汇总，保留未分摊余额。</p><span>03</span><p><b>客户提供模具，不计摊销</b>维修费用如适用，需单独确认和归集。</p></div></article><article class="panel"><div class="panel-head"><div><h2>准备你的第一批数据</h2><p>下载模板，按标准字段填入后导入</p></div></div><div class="template-links"><a href="/api/template.xlsx" download>↙ Excel 空白模板 <span>.xlsx</span></a><a href="/api/example.xlsx" download hidden>↙ Excel 演示样例 <span>合成数据</span></a><a href="/api/template" download>↙ JSON 空白模板 <span>.json</span></a></div><p class="help">包括订单、材料、人工、费用、费用池、分摊基数和完整度声明。原始企业表格到位后，可再建立字段映射。</p><div class="local-note">◎ 仅在本机处理，不调用外部 AI 服务。</div></article></section>
   </div>
   <footer>企盈智擎 · 让经营数字回到业务现场<span id="footer-snapshot"></span></footer>
-</main><script src="/source.js"></script><script src="/app.js"></script></body></html>
+</main><script src="/source.js"></script><script src="/app.js"></script><script src="/history.js"></script></body></html>

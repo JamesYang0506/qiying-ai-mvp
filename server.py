@@ -4,11 +4,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 from profit_model.engine import calculate
 from profit_model.files import empty_template, workbook_bytes, read_workbook, export_bundle, export_training_bundle
 from profit_model.analysis_gateway import run_analysis
 from profit_model.ollama_client import OllamaClient
+from profit_model.history import list_history, read_history
 import threading
 
 ROOT=Path(__file__).resolve().parent
@@ -41,7 +42,7 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
         def do_GET(self):
             if not self.valid_host(): return self.send({'error':'无效本地主机'},403)
             path=urlparse(self.path).path
-            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/source.js':('source.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8')}
+            static={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/source.js':('source.js','text/javascript; charset=utf-8'),'/history.js':('history.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8')}
             try:
                 if path in static:
                     name,mime=static[path]; return self.send((ROOT/'web'/name).read_bytes(),content_type=mime)
@@ -49,6 +50,11 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 if path=='/api/current':
                     current=storage/'latest.json'
                     return self.send(json.loads(current.read_text(encoding='utf-8')) if current.exists() else {'current':None})
+                if path=='/api/history':return self.send(list_history(storage))
+                if path.startswith('/api/history/'):
+                    values=parse_qs(urlparse(self.path).query).get('order_id',[])
+                    if len(values)!=1:raise ValueError('请选择一个历史订单')
+                    return self.send(read_history(storage,path.removeprefix('/api/history/'),values[0]))
                 if path=='/api/ai/status': return self.send(client.status())
                 if path=='/api/template': return self.send(empty_template(),filename='profit-template.json')
                 if path in ('/api/template.xlsx','/api/example.xlsx'):
