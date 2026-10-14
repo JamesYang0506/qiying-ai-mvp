@@ -13,6 +13,9 @@ from profit_model.ollama_client import OllamaClient
 from profit_model.history import list_history, read_history, set_deleted, visible_snapshot, is_deleted
 from profit_model.excel_import import preview_excel, confirmed_excel, auto_excel
 import threading
+import hashlib
+from profit_model.duplicates import input_fingerprints,find_duplicates
+from profit_model.history import TRASH_LOCK
 
 ROOT=Path(__file__).resolve().parent
 MAX_BODY=10*1024*1024
@@ -124,17 +127,30 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                         return self.send(export_training_bundle(result),content_type='application/zip',filename='order-training-candidates.zip')
                     return self.send(export_bundle(result),content_type='application/zip',filename='profit-results.zip')
                 data=reviewed_data if reviewed_data is not None else read_workbook(content) if path=='/api/import-xlsx' else json.loads(content)
+                fingerprints=input_fingerprints(data)
                 result=calculate(data)
+                source_hash=hashlib.sha256(binary if reviewed_data is not None else content).hexdigest() if reviewed_data is not None or path=='/api/import-xlsx' else None
                 if reviewed_data is not None:
                     result['snapshot']['import_review']=data['metadata'].get('import_review',{'mode':'reviewed','source_hash':payload.get('source_hash')})
-                storage.mkdir(parents=True,exist_ok=True)
-                target=storage/(result['snapshot']['snapshot_id']+'.json')
-                temp=target.with_suffix('.tmp')
-                temp.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8'); temp.replace(target)
-                if not result['snapshot']['is_demo']:
-                    current=storage/'latest.json'
-                    current_temp=current.with_suffix('.tmp')
-                    current_temp.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8');current_temp.replace(current)
+                with TRASH_LOCK:
+                    matches=find_duplicates(storage,result,fingerprints,source_hash)
+                    duplicates={x['order_id'] for m in matches for x in m['orders']}
+                    if duplicates==set(fingerprints) and duplicates:
+                        return self.send({'status':'duplicate','match':matches[0],'matches':matches,'message':'相同订单数据已存在，本次未新增记录。'})
+                    if duplicates:
+                        for table in ('orders','costs','allocations','issues'):
+                            result[table]=[x for x in result[table] if x.get('order_id') not in duplicates]
+                        if (result.get('source_analysis') or {}).get('order_id') in duplicates:result.pop('source_analysis',None)
+                        result['snapshot']['duplicates_skipped']=matches
+                    result['snapshot']['import_identity']={'schema':'order-input.v1','source_hash':source_hash,'order_hashes':{oid:h for oid,h in fingerprints.items() if oid not in duplicates}}
+                    storage.mkdir(parents=True,exist_ok=True)
+                    target=storage/(result['snapshot']['snapshot_id']+'.json')
+                    temp=target.with_suffix('.tmp')
+                    temp.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8'); temp.replace(target)
+                    if not result['snapshot']['is_demo']:
+                        current=storage/'latest.json'
+                        current_temp=current.with_suffix('.tmp')
+                        current_temp.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8');current_temp.replace(current)
                 self.send({'status':'imported','result':result} if path=='/api/auto-import-xlsx' else result)
             except (ValueError,TypeError,KeyError,AttributeError,RecursionError) as e:
                 self.send({'error':str(e) or '输入结构不合法'},400)

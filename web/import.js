@@ -11,6 +11,32 @@ function excelButtons(){
   $('excel-import-close').disabled=Boolean(s?.confirming);
   for(const el of document.querySelectorAll('[data-excel-cell],[data-excel-unit]'))el.disabled=Boolean(working);
 }
+function acceptImport(outcome){
+  if(outcome.status==='duplicate'){
+    updateAdaptationStatus();showDuplicateNotice(outcome.matches||[outcome.match]);loadHistory();return false;
+  }
+  const data=outcome.status==='imported'?outcome.result:outcome;
+  accept(data);switchView('home');loadHistory();
+  if(data.snapshot.duplicates_skipped)showDuplicateNotice(data.snapshot.duplicates_skipped,true);
+  return true;
+}
+function showDuplicateNotice(matches,partial=false){
+  $('duplicate-notice').hidden=false;
+  $('duplicate-notice').innerHTML=`<div class="panel-head"><div><h2>${partial?'已跳过重复订单':'发现重复订单'}</h2><p>${partial?'新增或变更订单已保存，下面的重复项未再次保存。':'相同的订单计算数据已存在，本次没有新增记录，当前分析保留。'}</p></div><button id="duplicate-close" class="secondary">关闭提示</button></div>`+matches.flatMap(m=>m.orders.map(o=>`<div class="duplicate-row"><div><b>${esc(o.order_id)} · ${esc(o.product||'未提供产品名称')}</b><p>${esc(historyTime(m.created_at))} · ${o.deleted?'已在回收站':'已有分析记录'}</p></div><button class="secondary" data-duplicate-${o.deleted?'restore':'open'}="${esc(o.order_id)}" data-snapshot="${esc(m.snapshot_id)}">${o.deleted?'恢复原记录':'查看已有记录'}</button></div>`)).join('');
+  $('duplicate-notice').scrollIntoView({behavior:'smooth',block:'start'});
+}
+$('duplicate-notice').addEventListener('click',async e=>{
+  if(e.target.closest('#duplicate-close')){$('duplicate-notice').hidden=true;return;}
+  const open=e.target.closest('[data-duplicate-open]'),restore=e.target.closest('[data-duplicate-restore]');
+  if(open){await openHistoricalOrder(open.dataset.snapshot,open.dataset.duplicateOpen);return;}
+  if(!restore||busy)return;
+  setBusy(true);restore.disabled=true;
+  try{
+    await request('/api/history/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({snapshot_id:restore.dataset.snapshot,order_id:restore.dataset.duplicateRestore,confirmed:true})});
+    try{sessionStorage.setItem('qiying.history.layout','records');}catch{}
+    location.hash='history';location.reload();
+  }catch(error){setError('恢复失败：'+error.message);restore.disabled=false;setBusy(false);}
+});
 async function beginExcelImport(file){
   const s={fileName:file.name,encoded:null,preview:null,dirty:false,working:true,confirming:false};excelSession=s;
   $('excel-adaptation-status').hidden=false;$('excel-adaptation-text').textContent='正在自动识别表格、校验字段并准备计算…';$('excel-adaptation-details').hidden=true;
@@ -20,7 +46,7 @@ async function beginExcelImport(file){
     if(excelSession!==s)return;s.encoded=btoa(binary);
     const outcome=await(await request('/api/auto-import-xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workbook_base64:s.encoded,profiles:excelProfiles().filter(p=>p.approved===true)})})).json();
     if(excelSession!==s)return;
-    if(outcome.status==='imported'){excelSession=null;accept(outcome.result);switchView('home');loadHistory();return;}
+    if(['imported','duplicate'].includes(outcome.status)){excelSession=null;acceptImport(outcome);return;}
     if(outcome.status!=='needs_review')throw new Error('自动导入返回状态无效');
     showExcelReview(s,outcome.preview,outcome.reasons);
   }catch(e){if(excelSession===s){excelSession=null;updateAdaptationStatus();}throw e;}
@@ -100,7 +126,7 @@ $('excel-import-confirm').addEventListener('click',async()=>{
   s.confirming=true;setBusy(true);excelButtons();excelMessage('正在按确认过的位置和单位计算…');
   try{
     const data=await(await request('/api/import-reviewed-xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workbook_base64:s.encoded,mapping:s.preview.mapping,source_hash:s.preview.source_hash,confirmed:true})})).json();
-    rememberExcelMapping(s);accept(data);switchView('home');loadHistory();excelSession=null;$('excel-import-dialog').close();
+    rememberExcelMapping(s);excelSession=null;$('excel-import-dialog').close();acceptImport(data);
   }catch(e){excelMessage('计算未完成：'+e.message+'。原分析结果保留。',true);}
   finally{s.confirming=false;setBusy(false);excelButtons();}
 });
