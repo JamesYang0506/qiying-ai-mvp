@@ -107,3 +107,21 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(len(read['analysis_records']),1)
         self.assertEqual(read['analysis_records'][0]['request_id'],response['request_id'])
         self.assertEqual(read['analysis_records'][0]['result']['summary'],'Saved explanation')
+
+    def test_importing_next_file_keeps_previous_same_product_record_readable(self):
+        import base64
+        from test_auto_import import labeled_source
+        def post(content):
+            payload=json.dumps({'workbook_base64':base64.b64encode(content).decode()}).encode()
+            request=urllib.request.Request(self.url+'/api/auto-import-xlsx',data=payload,headers={'Content-Type':'application/json'})
+            with self.opener.open(request) as response:return json.load(response)['result']
+        old=post(labeled_source());sid=old['snapshot']['snapshot_id'];oid=old['orders'][0]['order_id']
+        old_bytes=(self.storage/(sid+'.json')).read_bytes()
+        new=post(labeled_source(lambda w:w['成本计算'].__setitem__('E4',25)))
+        self.assertNotEqual(sid,new['snapshot']['snapshot_id'])
+        group=next(g for g in self.get('/api/history')['orders'] if g['order_id']==oid)
+        self.assertEqual(len(group['versions']),2)
+        self.assertEqual((self.storage/(sid+'.json')).read_bytes(),old_bytes)
+        old_read=self.get('/api/history/'+sid+'?order_id='+urllib.parse.quote(oid))
+        self.assertEqual(old_read['source_analysis']['metrics'],old['source_analysis']['metrics'])
+        self.assertNotEqual(old_read['source_analysis']['metrics']['revenue'],new['source_analysis']['metrics']['revenue'])

@@ -39,17 +39,18 @@ async function loadHistory(){
     historyOrders=data.orders;historySkipped=data.skipped_files;
     $('lobby-order-count').textContent=historyOrders.length;
     $('lobby-version-count').textContent=historyOrders.reduce((n,x)=>n+x.versions.length,0);
-    $('lobby-history-status').textContent=historyOrders.length?'记录保存在本机，模拟数据与导入数据分别标识。':'还没有分析记录。导入订单并计算后，会自动保存历史版本。';
+    $('lobby-history-status').textContent=historyOrders.length?'每次成功计算都会保存记录；同编号的历次分析也可逐条查看。':'还没有分析记录。导入订单并计算后，会自动保存历史版本。';
     renderHistory();
   }catch(e){if(sequence!==historyLoadSequence)return;$('history-status').textContent='读取失败：'+e.message;$('lobby-history-status').textContent='暂时无法读取历史记录，可点击历史入口后重试。';}
 }
 function renderHistory(){
   const q=$('history-search').value.trim().toLowerCase(),kind=$('history-kind').value;
   const groups=historyOrders.map(g=>({...g,versions:g.versions.filter(v=>(kind==='all'||(kind==='demo')===v.is_demo)&&[g.order_id,v.product,v.customer].some(x=>String(x||'').toLowerCase().includes(q)))})).filter(g=>g.versions.length);
-  $('history-status').textContent=`共 ${groups.length} 笔订单`+(historySkipped?`；${historySkipped} 个历史文件损坏或不兼容，已跳过。`:'');
-  $('history-list').innerHTML=groups.length?groups.map(g=>{
-    const v=g.versions.find(x=>x.snapshot_id===chosenVersions.get(g.order_id))||g.versions[0];
-    return `<article class="panel history-card"><div class="history-card-head"><div><span class="eyebrow">${esc(g.order_id)}</span><h2>${esc(v.product||'未提供产品名称')}</h2><p>${esc(v.customer||'客户未提供')} · ${esc(v.quantity??'数量待补')} ${esc(v.unit||'')}</p></div><span class="badge ${v.is_demo?'estimated':'complete'}">${v.is_demo?'模拟数据':'导入数据'}</span></div><label>选择分析版本<select data-history-version="${esc(g.order_id)}" aria-label="${esc(g.order_id)} 分析版本">${g.versions.map(x=>`<option value="${esc(x.snapshot_id)}" ${x.snapshot_id===v.snapshot_id?'selected':''}>${esc(historyTime(x.created_at))} · ${x.is_demo?'模拟':'导入'} · ${esc(x.snapshot_id.slice(-8))}</option>`).join('')}</select></label><div class="history-profit"><div><span>生产毛利${v.profit_basis==='trial'?' · 试算':''}</span><strong class="${sign(v.production_profit)}">${historyMoney(v.production_profit)}</strong></div><div><span>${v.profit_basis==='trial'?'经营净利 · 试算':'订单管理利润'}</span><strong class="${sign(v.management_profit)}">${historyMoney(v.management_profit)}</strong></div></div><p class="help">数据截止 ${esc(v.cutoff_date)} · ${g.versions.length} 个匹配版本</p><button class="secondary" data-history-open="${esc(g.order_id)}" data-snapshot="${esc(v.snapshot_id)}" ${busy?'disabled':''}>查看此版本 →</button></article>`;
+  const byRecord=$('history-layout').value==='records';
+  const entries=byRecord?groups.flatMap(g=>g.versions.map(v=>({group:g,version:v}))).sort((a,b)=>(b.version.created_at+':'+b.version.snapshot_id).localeCompare(a.version.created_at+':'+a.version.snapshot_id)):groups.map(g=>({group:g,version:g.versions.find(x=>x.snapshot_id===chosenVersions.get(g.order_id))||g.versions[0]}));
+  $('history-status').textContent=`共 ${groups.length} 个订单编号 · ${groups.reduce((n,g)=>n+g.versions.length,0)} 条分析记录`+(historySkipped?`；${historySkipped} 个历史文件损坏或不兼容，已跳过。`:'');
+  $('history-list').innerHTML=entries.length?entries.map(({group:g,version:v})=>{
+    return `<article class="panel history-card"><div class="history-card-head"><div><span class="eyebrow">${esc(g.order_id)}</span><h2>${esc(v.product||'未提供产品名称')}</h2><p>${esc(v.customer||'客户未提供')} · ${esc(v.quantity??'数量待补')} ${esc(v.unit||'')}</p></div><span class="badge ${v.is_demo?'estimated':'complete'}">${v.is_demo?'模拟数据':'导入数据'}</span></div>${byRecord?`<p class="history-record-time">分析时间：${esc(historyTime(v.created_at))}</p>`:`<label>选择分析版本<select data-history-version="${esc(g.order_id)}" aria-label="${esc(g.order_id)} 分析版本">${g.versions.map(x=>`<option value="${esc(x.snapshot_id)}" ${x.snapshot_id===v.snapshot_id?'selected':''}>${esc(historyTime(x.created_at))} · ${x.is_demo?'模拟':'导入'} · ${esc(x.snapshot_id.slice(-8))}</option>`).join('')}</select></label>`}<div class="history-profit"><div><span>生产毛利${v.profit_basis==='trial'?' · 试算':''}</span><strong class="${sign(v.production_profit)}">${historyMoney(v.production_profit)}</strong></div><div><span>${v.profit_basis==='trial'?'经营净利 · 试算':'订单管理利润'}</span><strong class="${sign(v.management_profit)}">${historyMoney(v.management_profit)}</strong></div></div><p class="help">数据截止 ${esc(v.cutoff_date)} · ${g.versions.length} 个匹配版本</p><button class="secondary" data-history-open="${esc(g.order_id)}" data-snapshot="${esc(v.snapshot_id)}" ${busy?'disabled':''}>查看此版本 →</button></article>`;
   }).join(''):`<div class="panel empty">${historyOrders.length?'没有符合筛选条件的历史订单。':'暂无历史记录。进入订单分析并导入数据后，计算结果会自动保存。'}</div>`;
 }
 async function openHistoricalOrder(sid,oid){
@@ -71,6 +72,7 @@ $('return-current').addEventListener('click',enterCurrentAnalysis);
 $('history-refresh').addEventListener('click',loadHistory);
 $('history-search').addEventListener('input',renderHistory);
 $('history-kind').addEventListener('change',renderHistory);
+$('history-layout').addEventListener('change',renderHistory);
 $('saved-analysis-select').addEventListener('change',showSavedAnalysis);
 $('history-list').addEventListener('change',event=>{const el=event.target.closest('[data-history-version]');if(el){chosenVersions.set(el.dataset.historyVersion,el.value);renderHistory();}});
 $('history-list').addEventListener('click',event=>{const el=event.target.closest('[data-history-open]');if(el)openHistoricalOrder(el.dataset.snapshot,el.dataset.historyOpen);});
