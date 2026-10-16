@@ -1,6 +1,10 @@
 # Local enterprise data and generated reports
 /data/raw/
 /data/processed/
+/data/training/
+/data/evaluation/
+/data/knowledge/
+/models/
 /reports/
 /output/
 /tmp/
@@ -36,3 +40,4 @@ dist/
 Thumbs.db
 ~$*
 *.log
+/.playwright-cli/

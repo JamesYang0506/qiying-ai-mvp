@@ -1,0 +1,624 @@
+{
+  "metadata": {
+    "is_demo": true,
+    "currency": "CNY",
+    "cutoff_date": "2026-09-30",
+    "title": "完全合成的演示数据，不代表企业经营状况"
+  },
+  "orders": [
+    {
+      "order_id": "SQ-260901",
+      "product": "轻量运动鞋底",
+      "customer": "客户 A",
+      "quantity": "1000",
+      "unit": "双",
+      "unit_price": "20",
+      "discount": "200",
+      "mode": "forecast",
+      "scope_aligned": true
+    },
+    {
+      "order_id": "SQ-260902",
+      "product": "耐磨橡胶鞋底",
+      "customer": "客户 B",
+      "quantity": "1000",
+      "unit": "双",
+      "unit_price": "12",
+      "discount": "200",
+      "mode": "forecast",
+      "scope_aligned": true
+    },
+    {
+      "order_id": "SQ-260903",
+      "product": "休闲发泡鞋底",
+      "customer": "客户 C",
+      "quantity": "1000",
+      "unit": "双",
+      "unit_price": "15",
+      "discount": "200",
+      "mode": "forecast",
+      "scope_aligned": true
+    },
+    {
+      "order_id": "SQ-260904",
+      "product": "户外防滑鞋底",
+      "customer": "客户 A",
+      "quantity": "1000",
+      "unit": "双",
+      "unit_price": "23",
+      "discount": "200",
+      "mode": "forecast",
+      "scope_aligned": true
+    },
+    {
+      "order_id": "SQ-260905",
+      "product": "复合鞋底",
+      "customer": "客户 D",
+      "quantity": "1000",
+      "unit": "双",
+      "unit_price": "21",
+      "discount": "200",
+      "mode": "forecast",
+      "scope_aligned": true
+    },
+    {
+      "order_id": "SQ-260906",
+      "product": "定制橡胶鞋底",
+      "customer": "客户 E",
+      "quantity": "1000",
+      "unit": "双",
+      "unit_price": "19",
+      "discount": "200",
+      "mode": "actual",
+      "scope_aligned": true
+    }
+  ],
+  "materials": [
+    {
+      "record_id": "mat-SQ-260901",
+      "order_id": "SQ-260901",
+      "quantity": "300",
+      "unit_price": "20",
+      "method": "bom",
+      "loss_rate": "0.04",
+      "loss_definition": "input",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 材料 SQ-260901"
+    },
+    {
+      "record_id": "mat-SQ-260902",
+      "order_id": "SQ-260902",
+      "quantity": "312.5",
+      "unit_price": "20",
+      "method": "actual",
+      "loss_rate": "0.04",
+      "loss_definition": "input",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 材料 SQ-260902"
+    },
+    {
+      "record_id": "mat-SQ-260903",
+      "order_id": "SQ-260903",
+      "quantity": "300",
+      "unit_price": "20",
+      "method": "bom",
+      "loss_rate": "0.04",
+      "loss_definition": "input",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 材料 SQ-260903"
+    },
+    {
+      "record_id": "mat-SQ-260904",
+      "order_id": "SQ-260904",
+      "quantity": "312.5",
+      "unit_price": "20",
+      "method": "actual",
+      "loss_rate": "0.04",
+      "loss_definition": "input",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 材料 SQ-260904"
+    },
+    {
+      "record_id": "mat-SQ-260905",
+      "order_id": "SQ-260905",
+      "quantity": null,
+      "unit_price": "20",
+      "method": "actual",
+      "loss_rate": "0.04",
+      "loss_definition": "input",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 材料 SQ-260905"
+    },
+    {
+      "record_id": "mat-SQ-260906",
+      "order_id": "SQ-260906",
+      "quantity": "312.5",
+      "unit_price": "20",
+      "method": "actual",
+      "loss_rate": "0.04",
+      "loss_definition": "input",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 材料 SQ-260906"
+    }
+  ],
+  "labor": [
+    {
+      "record_id": "lab-SQ-260901",
+      "order_id": "SQ-260901",
+      "quantity": "1000",
+      "rate": "2.5",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 工资 SQ-260901"
+    },
+    {
+      "record_id": "lab-SQ-260902",
+      "order_id": "SQ-260902",
+      "quantity": "1000",
+      "rate": "2.5",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 工资 SQ-260902"
+    },
+    {
+      "record_id": "lab-SQ-260903",
+      "order_id": "SQ-260903",
+      "quantity": "1000",
+      "rate": "2.5",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 工资 SQ-260903"
+    },
+    {
+      "record_id": "lab-SQ-260904",
+      "order_id": "SQ-260904",
+      "quantity": "1000",
+      "rate": "2.5",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 工资 SQ-260904"
+    },
+    {
+      "record_id": "lab-SQ-260905",
+      "order_id": "SQ-260905",
+      "quantity": "1000",
+      "rate": "2.5",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 工资 SQ-260905"
+    },
+    {
+      "record_id": "lab-SQ-260906",
+      "order_id": "SQ-260906",
+      "quantity": "1000",
+      "rate": "2.5",
+      "status": "confirmed",
+      "stage": "inside",
+      "period": "2026-09",
+      "source": "合成样例 / 工资 SQ-260906"
+    }
+  ],
+  "costs": [],
+  "pools": [
+    {
+      "pool_id": "p1",
+      "category": "manufacturing",
+      "period": "2026-09",
+      "amount": "50000",
+      "total_base": "1000",
+      "base_unit": "h",
+      "status": "confirmed",
+      "direct_cost_excluded": true,
+      "stage": "inside"
+    },
+    {
+      "pool_id": "p2",
+      "category": "management",
+      "period": "2026-09",
+      "amount": "10000",
+      "total_base": "10000",
+      "base_unit": "双",
+      "status": "confirmed",
+      "direct_cost_excluded": true,
+      "stage": "inside"
+    },
+    {
+      "pool_id": "p3",
+      "category": "sales",
+      "period": "2026-09",
+      "amount": "5000",
+      "total_base": "10000",
+      "base_unit": "双",
+      "status": "confirmed",
+      "direct_cost_excluded": true,
+      "stage": "inside"
+    },
+    {
+      "pool_id": "p4",
+      "category": "finance",
+      "period": "2026-09",
+      "amount": "2000",
+      "total_base": "10000",
+      "base_unit": "双",
+      "status": "confirmed",
+      "direct_cost_excluded": true,
+      "stage": "inside"
+    }
+  ],
+  "bases": [
+    {
+      "pool_id": "p1",
+      "order_id": "SQ-260901",
+      "base": "100"
+    },
+    {
+      "pool_id": "p2",
+      "order_id": "SQ-260901",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p3",
+      "order_id": "SQ-260901",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p4",
+      "order_id": "SQ-260901",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p1",
+      "order_id": "SQ-260902",
+      "base": "100"
+    },
+    {
+      "pool_id": "p2",
+      "order_id": "SQ-260902",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p3",
+      "order_id": "SQ-260902",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p4",
+      "order_id": "SQ-260902",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p1",
+      "order_id": "SQ-260903",
+      "base": "100"
+    },
+    {
+      "pool_id": "p2",
+      "order_id": "SQ-260903",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p3",
+      "order_id": "SQ-260903",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p4",
+      "order_id": "SQ-260903",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p1",
+      "order_id": "SQ-260904",
+      "base": "100"
+    },
+    {
+      "pool_id": "p2",
+      "order_id": "SQ-260904",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p3",
+      "order_id": "SQ-260904",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p1",
+      "order_id": "SQ-260905",
+      "base": "100"
+    },
+    {
+      "pool_id": "p2",
+      "order_id": "SQ-260905",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p3",
+      "order_id": "SQ-260905",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p4",
+      "order_id": "SQ-260905",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p1",
+      "order_id": "SQ-260906",
+      "base": "100"
+    },
+    {
+      "pool_id": "p2",
+      "order_id": "SQ-260906",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p3",
+      "order_id": "SQ-260906",
+      "base": "1000"
+    },
+    {
+      "pool_id": "p4",
+      "order_id": "SQ-260906",
+      "base": "1000"
+    }
+  ],
+  "coverage": [
+    {
+      "order_id": "SQ-260901",
+      "category": "material",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260901",
+      "category": "labor",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260901",
+      "category": "manufacturing",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260901",
+      "category": "production_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260901",
+      "category": "management",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260901",
+      "category": "sales",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260901",
+      "category": "finance",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260901",
+      "category": "order_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260902",
+      "category": "material",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260902",
+      "category": "labor",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260902",
+      "category": "manufacturing",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260902",
+      "category": "production_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260902",
+      "category": "management",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260902",
+      "category": "sales",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260902",
+      "category": "finance",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260902",
+      "category": "order_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260903",
+      "category": "material",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260903",
+      "category": "labor",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260903",
+      "category": "manufacturing",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260903",
+      "category": "production_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260903",
+      "category": "management",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260903",
+      "category": "sales",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260903",
+      "category": "finance",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260903",
+      "category": "order_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260904",
+      "category": "material",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260904",
+      "category": "labor",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260904",
+      "category": "manufacturing",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260904",
+      "category": "production_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260904",
+      "category": "management",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260904",
+      "category": "sales",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260904",
+      "category": "finance",
+      "status": "missing"
+    },
+    {
+      "order_id": "SQ-260904",
+      "category": "order_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260905",
+      "category": "material",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260905",
+      "category": "labor",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260905",
+      "category": "manufacturing",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260905",
+      "category": "production_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260905",
+      "category": "management",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260905",
+      "category": "sales",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260905",
+      "category": "finance",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260905",
+      "category": "order_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260906",
+      "category": "material",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260906",
+      "category": "labor",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260906",
+      "category": "manufacturing",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260906",
+      "category": "production_other",
+      "status": "not_applicable"
+    },
+    {
+      "order_id": "SQ-260906",
+      "category": "management",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260906",
+      "category": "sales",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260906",
+      "category": "finance",
+      "status": "confirmed"
+    },
+    {
+      "order_id": "SQ-260906",
+      "category": "order_other",
+      "status": "not_applicable"
+    }
+  ]
+}
