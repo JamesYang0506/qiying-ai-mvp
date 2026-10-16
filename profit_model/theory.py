@@ -244,10 +244,76 @@ def normalize_baseline(payload: dict) -> dict:
         return result
 
 
+# 表内声明毛利率与按比例推导值的容许差（个百分点）；企业常按一位小数填写。
+DECLARED_MARGIN_TOLERANCE = Decimal('0.1')
+# 独立推导的计划生产毛利率常见区间；越出时只提示人工核对，不阻止保存。
+MARGIN_SANE_MIN = Decimal('0')
+MARGIN_SANE_MAX = Decimal('90')
+
+
+def declared_margin_conflict(payload: dict, baseline: dict):
+    """quote 的毛利率由比例独立推导；表内另有声明值时口径可能不同，交人工核对。"""
+    if baseline.get('method') != 'quote':
+        return None
+    declared = payload.get('target_margin_pct')
+    derived = baseline.get('target_margin_pct')
+    if _empty(declared) or _empty(derived):
+        return None
+    try:
+        declared = _number(declared, 'target_margin_pct', percentage=True)
+        difference = abs(declared - Decimal(derived))
+    except (ValueError, InvalidOperation):
+        return None
+    if difference <= DECLARED_MARGIN_TOLERANCE:
+        return None
+    return (
+        f'表内声明的目标毛利率 {_format(declared)}% 与按报价比例推导的'
+        f'{_format(Decimal(derived))}% 相差 {_format(difference)} 个百分点，'
+        '口径可能不同（例如是否已扣计件人工、比例列是否为百分数），'
+        '请人工核对后决定采用哪一个。'
+    )
+
+
+def implausible_margin(baseline: dict):
+    """独立推导的毛利率越出常见区间时提示核对；ratio 的声明目标不参与判断。"""
+    if baseline.get('method') not in ('quote', 'costs'):
+        return None
+    value = baseline.get('target_margin_pct')
+    if _empty(value):
+        return None
+    try:
+        value = Decimal(value)
+    except InvalidOperation:
+        return None
+    if MARGIN_SANE_MIN < value < MARGIN_SANE_MAX:
+        return None
+    return (
+        f'按表内输入独立推导的计划生产毛利率为 {_format(value)}%，不在常见区间 '
+        f'{_format(MARGIN_SANE_MIN)}%～{_format(MARGIN_SANE_MAX)}% 内，'
+        '请核对订单数量、报价单价、各成本金额或百分比列的单位与范围后再保存。'
+    )
+
+
 def _field(value):
     if not isinstance(value, str) or value.strip() not in ALIASES:
         raise ValueError(f'不支持的理论字段：{value!s}；请使用公开模板或中英文标准字段')
     return ALIASES[value.strip()]
+
+
+def _percent_format(cell):
+    """Only an unquoted, unescaped percent sign denotes an Excel percentage."""
+    fmt = cell.number_format or ''
+    quoted = escaped = False
+    for char in fmt:
+        if escaped:
+            escaped = False
+        elif char == '\\':
+            escaped = True
+        elif char == '"':
+            quoted = not quoted
+        elif char == '%' and not quoted:
+            return True
+    return False
 
 
 def _cell_value(cell, field):
@@ -256,19 +322,9 @@ def _cell_value(cell, field):
         field.endswith('_pct')
         and isinstance(value, (int, float))
         and not isinstance(value, bool)
+        and _percent_format(cell)
     ):
-        # Only an unquoted, unescaped percent sign denotes an Excel percentage.
-        fmt = cell.number_format or ''
-        quoted = escaped = False
-        for char in fmt:
-            if escaped:
-                escaped = False
-            elif char == '\\':
-                escaped = True
-            elif char == '"':
-                quoted = not quoted
-            elif char == '%' and not quoted:
-                return Decimal(str(value)) * 100
+        return Decimal(str(value)) * 100
     return value
 
 

@@ -7,7 +7,7 @@ from openpyxl import Workbook
 from profit_model.theory_import import auto_preview_theory
 
 
-def workbook(rows, other=None, formats=None):
+def workbook(rows, other=None, formats=None, hide=()):
     book = Workbook()
     sheet = book.active
     sheet.title = '核价'
@@ -19,6 +19,8 @@ def workbook(rows, other=None, formats=None):
         second = book.create_sheet('第二表')
         for row in other:
             second.append(row)
+    for name in hide:
+        book[name].sheet_state = 'hidden'
     stream = io.BytesIO()
     book.save(stream)
     return stream.getvalue()
@@ -237,6 +239,106 @@ class AutoTheoryTests(unittest.TestCase):
         self.assertTrue(
             any('自动选择' in note for note in preview['adaptation']['notes'])
         )
+
+    def test_hidden_sheet_never_outranks_a_visible_plan_sheet(self):
+        # 隐藏的草稿页字段更多，也不能压过可见的计划页。
+        preview = auto_preview_theory(
+            workbook(
+                [['订单号', '001'], ['目标毛利率', 20]],
+                other=[
+                    ['订单号', '002'],
+                    ['订单数量', 100],
+                    ['目标毛利率', 30],
+                    ['材料成本', 50],
+                ],
+                hide=('第二表',),
+            )
+        )
+        self.assertEqual(preview['adaptation']['sheet'], '核价')
+        self.assertEqual(preview['baseline']['business_order_id'], '001')
+        self.assertTrue(
+            any('隐藏页' in note for note in preview['adaptation']['notes'])
+        )
+        # 含字段的计划页是隐藏页、另一页可读但没有理论字段：只能提示核对。
+        # （xlsx 不允许所有工作表都隐藏，所以留一张无字段的可见页。）
+        field_sheet_hidden = auto_preview_theory(
+            workbook(
+                [['订单号', '001'], ['目标毛利率', 20]],
+                other=[['备注', '此页为空白草稿']],
+                hide=('核价',),
+            )
+        )
+        self.assertEqual(field_sheet_hidden['adaptation']['sheet'], '核价')
+        self.assertTrue(
+            any('隐藏页' in note for note in field_sheet_hidden['adaptation']['notes'])
+        )
+
+    def test_declared_quote_margin_mismatch_asks_for_review(self):
+        # 表内声明 40%、按比例推导 29.4%：口径可能不同，提示核对而不是报错。
+        preview = auto_preview_theory(
+            workbook(
+                [
+                    ['订单号', '001'],
+                    ['订单数量', 100],
+                    ['工厂报价', 10],
+                    ['BOM材料', '65%'],
+                    ['生产管理工资', '2.8%'],
+                    ['生产损耗预算', '0.6%'],
+                    ['不良品损耗预算', '1.8%'],
+                    ['电汽动力能源', '0.4%'],
+                    ['备料计件人工（元/双）', 0],
+                    ['油压计件人工（元/双）', 0],
+                    ['公司管理干部', '1.3%'],
+                    ['行政人员', '1.7%'],
+                    ['完整计划毛利率', '40%'],
+                ]
+            )
+        )
+        self.assertEqual(preview['baseline']['method'], 'quote')
+        self.assertEqual(preview['baseline']['target_margin_pct'], '29.4')
+        self.assertEqual(preview['status'], 'needs_review')
+        self.assertTrue(
+            any('口径可能不同' in warning for warning in preview['warnings'])
+        )
+
+    def test_unformatted_fraction_percent_is_flagged_not_rescaled(self):
+        # 0.65 没有百分号格式：按 0.65 个百分点读，但必须提示，不代替企业换算。
+        preview = auto_preview_theory(workbook([['订单号', '001'], ['BOM材料', 0.65]]))
+        self.assertEqual(float(preview['baseline']['material_pct']), 0.65)
+        self.assertTrue(any('百分号格式' in warning for warning in preview['warnings']))
+        formatted = auto_preview_theory(
+            workbook([['订单号', '001'], ['BOM材料', 0.65]], formats={'B2': '0.0%'})
+        )
+        self.assertEqual(formatted['baseline']['material_pct'], '65')
+        self.assertFalse(
+            any('百分号格式' in warning for warning in formatted['warnings'])
+        )
+
+    def test_derived_margin_outside_sane_range_is_flagged(self):
+        rows = [
+            ['订单号', '001'],
+            ['订单数量', 100],
+            ['工厂报价', 10],
+            ['BOM材料', '4%'],
+            ['生产管理工资', '2.8%'],
+            ['生产损耗预算', '0.6%'],
+            ['不良品损耗预算', '1.8%'],
+            ['电汽动力能源', '0.4%'],
+            ['备料计件人工（元/双）', 0],
+            ['油压计件人工（元/双）', 0],
+            ['公司管理干部', '1.3%'],
+            ['行政人员', '1.7%'],
+        ]
+        preview = auto_preview_theory(workbook(rows))
+        self.assertEqual(preview['baseline']['method'], 'quote')
+        self.assertGreater(float(preview['baseline']['target_margin_pct']), 90)
+        self.assertEqual(preview['status'], 'needs_review')
+        self.assertTrue(any('常见区间' in warning for warning in preview['warnings']))
+        # ratio 的目标是企业声明的，不是独立推导，不能按同一区间判。
+        declared = auto_preview_theory(
+            workbook([['订单号', '001'], ['目标毛利率', '95%']])
+        )
+        self.assertFalse(any('常见区间' in warning for warning in declared['warnings']))
 
     def test_per_pair_cost_cannot_be_total_cost_and_customer_is_not_order(self):
         result = auto_preview_theory(

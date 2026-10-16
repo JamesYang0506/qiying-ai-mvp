@@ -19,6 +19,10 @@ from .theory import (
     QUOTE_FIELDS,
     _cell_value,
     _empty,
+    _format,
+    _percent_format,
+    declared_margin_conflict,
+    implausible_margin,
     normalize_baseline,
 )
 
@@ -266,6 +270,9 @@ def auto_preview_theory(content: bytes, selection=None) -> dict:
         raise ValueError('理论字段映射无效')
     book, cached = _load(content)
     try:
+        hidden = {
+            sheet.title: sheet.sheet_state != 'visible' for sheet in book.worksheets
+        }
         layouts = {sheet.title: _layout(sheet) for sheet in book.worksheets}
         counts = {}
         for name, (layout, labels, _) in layouts.items():
@@ -277,9 +284,10 @@ def auto_preview_theory(content: bytes, selection=None) -> dict:
             )
         if not counts:
             raise ValueError('未找到可识别的理论字段，请使用公开模板或补充字段标签')
+        # 先看可见性再看识别字段数：隐藏的草稿页字段再多也不能压过可见的计划页。
         # 计划表识别的字段最多，对照页通常只剩一两个。字段数领先时直接选中，
         # 并列时仍要求人工选择；选择器照旧列出全部，可覆盖自动结果。
-        usable = sorted(counts, key=lambda name: (-counts[name], name))
+        usable = sorted(counts, key=lambda name: (hidden[name], -counts[name]))
         warnings = ['自动识别仅供核对；请确认业务订单、成本单位、费用范围和税口径。']
         adaptation = dict(
             sheet=None,
@@ -302,16 +310,29 @@ def auto_preview_theory(content: bytes, selection=None) -> dict:
         if chosen is not None and (not isinstance(chosen, str) or chosen not in usable):
             raise ValueError('请选择存在且含理论字段的工作表')
         if chosen is None:
-            if len(usable) == 1:
-                chosen = usable[0]
-            elif counts[usable[0]] > counts[usable[1]]:
-                chosen = usable[0]
+            chosen = usable[0]
+            if hidden[chosen]:
                 adaptation['notes'].append(
-                    f'已自动选择识别字段最多的「{chosen}」工作表；如不是计划表，请在上方改选。'
+                    f'含理论字段的工作表都是隐藏页，已选择「{chosen}」；请核对该页是否为计划表。'
                 )
-            else:
-                adaptation['notes'].append('多个工作表含理论字段，请先选择工作表。')
-                return result
+            elif len(usable) > 1:
+                richer_hidden = [
+                    name
+                    for name in usable[1:]
+                    if hidden[name] and counts[name] > counts[chosen]
+                ]
+                if richer_hidden:
+                    adaptation['notes'].append(
+                        f'已选择可见的「{chosen}」工作表；隐藏页「{richer_hidden[0]}」'
+                        '识别字段更多但未采用，如应改用请先取消隐藏。'
+                    )
+                elif counts[usable[0]] > counts[usable[1]]:
+                    adaptation['notes'].append(
+                        f'已自动选择识别字段最多的「{chosen}」工作表；如不是计划表，请在上方改选。'
+                    )
+                else:
+                    adaptation['notes'].append('多个工作表含理论字段，请先选择工作表。')
+                    return result
         sheet = book[chosen]
         layout, labels, records = layouts[chosen]
         adaptation.update(sheet=chosen, layout=layout)
@@ -392,6 +413,22 @@ def auto_preview_theory(content: bytes, selection=None) -> dict:
                     )
                     review = True
                     return None
+            if (
+                field.endswith('_pct')
+                and isinstance(cell.value, (int, float))
+                and not isinstance(cell.value, bool)
+                and not _percent_format(cell)
+                and 0 < cell.value < 1
+            ):
+                # 裸小数看不出是 0.65 个百分点还是 65%，只提示、不代替企业换算。
+                as_points = Decimal(str(cell.value))
+                warnings.append(
+                    f'{cell.coordinate} {LABELS[field]}没有百分号格式，现按 '
+                    f'{_format(as_points)} 个百分点读取；若本意是 '
+                    f'{_format(as_points * 100)}%，请填 {_format(as_points * 100)} '
+                    '或把单元格设为百分比格式。'
+                )
+                review = True
             value = _cell_value(cell, field)
             if (
                 field in ('business_order_id', 'batch_id')
@@ -527,6 +564,13 @@ def auto_preview_theory(content: bytes, selection=None) -> dict:
                 )
                 raise ValueError(message)
             baseline = normalize_baseline(payload)
+            for note in (
+                declared_margin_conflict(payload, baseline),
+                implausible_margin(baseline),
+            ):
+                if note:
+                    warnings.append(note)
+                    review = True
         except ValueError as exc:
             baseline = payload
             warnings.append(str(exc))
