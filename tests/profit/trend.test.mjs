@@ -1,0 +1,2 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {trend} from '../../server/profit/trend.mjs';import {normalizePair} from '../../server/import/normalize.mjs';import {pair} from '../import/fixture.mjs';
+test('trend reuses analysis and does not emit future points outside requested range',()=>{const d=normalizePair(...pair()).dataset;const r=trend(d,{start:'2026-08-03',end:'2026-08-03'});assert.equal(r.length,1);assert.equal(r[0].date,'2026-08-03');assert.equal(r[0].quantity,100);});
