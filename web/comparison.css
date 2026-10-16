@@ -346,6 +346,37 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.theory-adaptation {
+  overflow-wrap: anywhere;
+}
+.theory-adaptation h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.theory-adaptation-fields {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.theory-adaptation-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #dce5df;
+}
+.theory-adaptation-field small,
+.theory-adaptation-field label {
+  grid-column: 1/-1;
+}
+.theory-adaptation select {
+  width: 100%;
+  min-width: 0;
+}
+.theory-adaptation-missing {
+  color: #8b4d13;
+  font-weight: 600;
+}
 #comparison-view :focus-visible {
   outline: 3px solid #238653;
   outline-offset: 3px;

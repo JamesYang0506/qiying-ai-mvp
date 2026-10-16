@@ -38,7 +38,7 @@ source_analysis含 metrics、profit_layers、cost_rows、materials、production�
 | GET /api/ai/status                                 | 检查本机Ollama及指定模型状态                                                                                      |
 | POST /api/ai/analyze                               | 从订单快照读取事实，调用本地模型并验证结果                                                                        |
 | GET /api/theory/template.xlsx                      | 下载理论毛利标准模板                                                                                              |
-| POST /api/theory/preview                           | workbook_base64，只读预览，返回baseline、warnings、source_hash                                                    |
+| POST /api/theory/preview                           | workbook_base64、可选selection；只读自动适配，返回baseline、warnings、source_hash、status、adaptation              |
 | POST /api/theory                                   | snapshot_id、order_id、baseline、scope_confirmed、confirmed=true；保存新理论版本并检测                            |
 | POST /api/theory/bind                              | snapshot_id、order_id、baseline_id、scope_confirmed、confirmed=true；绑定已有理论版本并检测                       |
 | GET /api/comparison?snapshot_id=...&order_id=...   | 读取rules、baselines、comparison、records、events、trend、handling，不自动产生检测                                |
@@ -56,4 +56,8 @@ AI请求与结果说明见 [本地接入](local-qwen-integration.md)。模型输
 
 所有计算/导入保存接口均进行逐单查重；全部重复返回 status=duplicate 及 matches，不写快照；部分重复在 snapshot.duplicates_skipped 中列出，只保存新增或变更订单。详见 [导入查重](import-duplicates.md)。
 
-理论baseline新增method=quote：quantity、unit_price、material_pct、production_management_pct、production_loss_pct、defect_loss_pct、energy_pct、preparation_labor_per_pair、press_labor_per_pair、company_management_pct、administration_pct。比例按0～100百分数输入，人工空白拒绝保存、0允许。生成生产成本分类及计划毛利，单列operating_expense、operating_profit，保留原输入。公司及行政费用不混入生产毛利，不反推实际费用。tax_basis=ignored为本次不计税；本轮quote不含物流预算。网站理论模板不含公式；线下公式核价输出表不能直接导入。以上仅扩展字段，无新增HTTP接口。
+理论baseline新增method=quote：quantity、unit_price、material_pct、production_management_pct、production_loss_pct、defect_loss_pct、energy_pct、preparation_labor_per_pair、press_labor_per_pair、company_management_pct、administration_pct。比例按0～100百分数输入，人工空白拒绝保存、0允许。生成生产成本分类及计划毛利，单列operating_expense、operating_profit，保留原输入。公司及行政费用不混入生产毛利，不反推实际费用。tax_basis=ignored为本次不计税；本轮quote不含物流预算。网站理论模板不含公式；线下公式样表仅在已支持布局范围内读取输入和保存缓存，公式不执行，缓存标为未经核实，无缓存的必要输入等待人工补齐。以上仅扩展字段，无新增HTTP接口。
+
+理论自动预览调用`profit_model.theory_import.auto_preview_theory(content, selection=None)`，不写业务资料。`selection`可含`sheet`（工作表名）、`record_row`（Excel实际行号）和`mapping`（标准field到所选工作表内A1坐标）；不允许跨工作表映射。无效选择返回400，base64仍严格校验。多工作表、多记录、字段冲突或必要输入缺失时返回`status=needs_review`；完整可校验时为`ready`，仍需用户核对后保存。
+
+响应兼容`baseline`、`warnings`、`source_hash`；`baseline`可以是完整规范化结果或待人工补齐的部分输入，`needs_review`不能当作已保存基线。新增`adaptation={sheet,sheets:[{name}],records:[{row,label}],fields:[{field,label,cell,value,candidates:[{cell,value,label}]}],missing,conflicts:[{code,message,fields}],layout,notes}`，供界面显示来源、候选及待补字段。mapping只接受该字段已识别的候选坐标，沿用来源标签和单位校验；不能借映射绕过单位冲突。只读预览保留同义词、单位与已支持布局识别边界，不保证任意Excel自动识别，不采用实际费用反推理论，派生利润不覆盖独立成本核算。左侧工作空间的重复入口移除，顶部页签及首页摘要入口保留；四级毛利与旧历史规则语义不变。

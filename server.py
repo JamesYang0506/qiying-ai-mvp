@@ -24,7 +24,8 @@ from profit_model.excel_import import preview_excel, confirmed_excel, auto_excel
 import threading
 import hashlib
 from profit_model.workflows import calculate_and_save, prepare_export
-from profit_model.theory import preview_theory, theory_template
+from profit_model.theory import theory_template
+from profit_model.theory_import import auto_preview_theory
 from profit_model.comparison_store import (
     workspace,
     create_baseline,
@@ -124,6 +125,10 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 '/import.js': ('import.js', 'text/javascript; charset=utf-8'),
                 '/style.css': ('style.css', 'text/css; charset=utf-8'),
                 '/comparison.js': ('comparison.js', 'text/javascript; charset=utf-8'),
+                '/theory-import.js': (
+                    'theory-import.js',
+                    'text/javascript; charset=utf-8',
+                ),
                 '/comparison.css': ('comparison.css', 'text/css; charset=utf-8'),
                 '/report.js': ('report.js', 'text/javascript; charset=utf-8'),
                 '/report.css': ('report.css', 'text/css; charset=utf-8'),
@@ -232,7 +237,9 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 limit = LARGE_BODY if path in LARGE_BODY_PATHS else MAX_BODY
                 if length <= 0 or length > limit:
                     return self.send(
-                        {'error': f'请求体须大于 0 且不超过 {limit // (1024 * 1024)}MB；Excel 文件上限为 10MB'},
+                        {
+                            'error': f'请求体须大于 0 且不超过 {limit // (1024 * 1024)}MB；Excel 文件上限为 10MB'
+                        },
                         413,
                     )
                 content = self.rfile.read(length)
@@ -270,7 +277,10 @@ def create_server(port=8765, snapshot_dir=None, analysis_client=None):
                 if not isinstance(encoded, str):
                     raise ValueError('请选择理论利润Excel文件')
                 return self.send(
-                    preview_theory(base64.b64decode(encoded, validate=True))
+                    auto_preview_theory(
+                        base64.b64decode(encoded, validate=True),
+                        payload.get('selection'),
+                    )
                 )
             handlers = {
                 '/api/theory': create_baseline,

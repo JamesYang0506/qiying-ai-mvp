@@ -45,7 +45,7 @@ async function browserDecisionFlow(page) {
     ).status() === 404,
     'Training route remains',
   );
-  await page.locator('.workspace-links [data-view="comparison"]').click();
+  await page.evaluate(() => switchView('comparison'));
   assert(
     await page.locator('#comparison-open-theory').isDisabled(),
     'Empty theory write',
@@ -91,7 +91,7 @@ async function browserDecisionFlow(page) {
     'Restore hijacked user navigation',
   );
   await page.unroute('**/api/current');
-  await page.locator('.workspace-links [data-view="comparison"]').click();
+  await page.evaluate(() => switchView('comparison'));
   await page.waitForFunction(() => comparisonWorkspace && !comparisonBusy);
   await page.locator('#comparison-open-theory').click();
   assert(
@@ -183,6 +183,7 @@ async function browserDecisionFlow(page) {
     }),
   );
   await page.locator('#ai-retry').click();
+  await page.locator('#ai-view-button').waitFor({ state: 'visible' });
   assert(await page.locator('#ai-view-button').isVisible(), 'Ready AI hidden');
   assert(
     await page.locator('#ai-availability').isHidden(),
