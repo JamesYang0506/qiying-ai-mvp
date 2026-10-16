@@ -287,9 +287,17 @@
   max-width: 650px;
 }
 .comparison-evidence,
-.comparison-event-edit {
+.comparison-event-edit,
+.comparison-legend {
   margin-top: 12px;
   font-size: 14px;
+}
+.comparison-legend summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.comparison-legend h3 {
+  margin: 16px 0 6px;
 }
 .comparison-trends svg {
   width: 100%;

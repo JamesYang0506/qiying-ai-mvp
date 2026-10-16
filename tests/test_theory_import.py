@@ -216,6 +216,28 @@ class AutoTheoryTests(unittest.TestCase):
             with self.subTest(selection=selection), self.assertRaises(ValueError):
                 auto_preview_theory(content, selection)
 
+    def test_sheet_with_most_fields_is_auto_chosen_without_ties(self):
+        # 计划表字段多、对照页只剩一个字段：不再停在"请选工作表"。
+        preview = auto_preview_theory(
+            workbook(
+                [
+                    ['订单号', '001'],
+                    ['订单数量', 100],
+                    ['目标毛利率', 20],
+                ],
+                other=[['完整计划毛利率', 20]],
+            )
+        )
+        self.assertEqual(preview['adaptation']['sheet'], '核价')
+        self.assertEqual(preview['baseline']['business_order_id'], '001')
+        self.assertEqual(
+            [row['name'] for row in preview['adaptation']['sheets']],
+            ['核价', '第二表'],
+        )
+        self.assertTrue(
+            any('自动选择' in note for note in preview['adaptation']['notes'])
+        )
+
     def test_per_pair_cost_cannot_be_total_cost_and_customer_is_not_order(self):
         result = auto_preview_theory(
             workbook(

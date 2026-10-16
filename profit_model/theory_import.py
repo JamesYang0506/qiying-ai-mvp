@@ -267,9 +267,19 @@ def auto_preview_theory(content: bytes, selection=None) -> dict:
     book, cached = _load(content)
     try:
         layouts = {sheet.title: _layout(sheet) for sheet in book.worksheets}
-        usable = [name for name, (_, labels, _) in layouts.items() if labels]
-        if not usable:
+        counts = {}
+        for name, (layout, labels, _) in layouts.items():
+            if not labels:
+                continue
+            # 键值布局的标签是(字段, 值单元格, 标题)，记录布局是(表头单元格, 字段)。
+            counts[name] = len(
+                {item[0] if layout == 'key_value' else item[1] for item in labels}
+            )
+        if not counts:
             raise ValueError('未找到可识别的理论字段，请使用公开模板或补充字段标签')
+        # 计划表识别的字段最多，对照页通常只剩一两个。字段数领先时直接选中，
+        # 并列时仍要求人工选择；选择器照旧列出全部，可覆盖自动结果。
+        usable = sorted(counts, key=lambda name: (-counts[name], name))
         warnings = ['自动识别仅供核对；请确认业务订单、成本单位、费用范围和税口径。']
         adaptation = dict(
             sheet=None,
@@ -292,10 +302,16 @@ def auto_preview_theory(content: bytes, selection=None) -> dict:
         if chosen is not None and (not isinstance(chosen, str) or chosen not in usable):
             raise ValueError('请选择存在且含理论字段的工作表')
         if chosen is None:
-            if len(usable) != 1:
+            if len(usable) == 1:
+                chosen = usable[0]
+            elif counts[usable[0]] > counts[usable[1]]:
+                chosen = usable[0]
+                adaptation['notes'].append(
+                    f'已自动选择识别字段最多的「{chosen}」工作表；如不是计划表，请在上方改选。'
+                )
+            else:
                 adaptation['notes'].append('多个工作表含理论字段，请先选择工作表。')
                 return result
-            chosen = usable[0]
         sheet = book[chosen]
         layout, labels, records = layouts[chosen]
         adaptation.update(sheet=chosen, layout=layout)
