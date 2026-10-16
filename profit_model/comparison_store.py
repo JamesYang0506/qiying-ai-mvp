@@ -131,21 +131,34 @@ def read_one(storage, group, key):
         raise ValueError('对照资料损坏，请检查本地备份') from None
 
 
+def _journal(storage, path):
+    """Remember the pre-transaction content so an interrupted write rolls back."""
+    if not getattr(_local, 'active', False):
+        return
+    relative = str(path.relative_to(root(storage)))
+    if relative in _local.originals:
+        return
+    _local.originals[relative] = (
+        path.read_text(encoding='utf-8') if path.exists() else None
+    )
+    atomic_write_text(
+        root(storage) / 'transaction.json',
+        json.dumps(_local.originals, ensure_ascii=False),
+    )
+
+
 def write_one(storage, group, key, value):
     path = file_path(storage, group, key)
-    if getattr(_local, 'active', False):
-        relative = str(path.relative_to(root(storage)))
-        if relative not in _local.originals:
-            _local.originals[relative] = (
-                path.read_text(encoding='utf-8') if path.exists() else None
-            )
-            atomic_write_text(
-                root(storage) / 'transaction.json',
-                json.dumps(_local.originals, ensure_ascii=False),
-            )
+    _journal(storage, path)
     atomic_write_text(
         path, json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)
     )
+
+
+def delete_one(storage, group, key):
+    path = file_path(storage, group, key)
+    _journal(storage, path)
+    path.unlink(missing_ok=True)
 
 
 def rows(storage, group):
@@ -476,6 +489,10 @@ def create_baseline(storage, request):
             is_demo=snapshot['snapshot'].get('is_demo', False),
             scope_confirmed=request.get('scope_confirmed') is True,
         )
+        # 同业务、同批次的重复导入只保留最新一次，旧版本删除而不是累积；
+        # 已保存的检测各自冻存当时的理论数字，删掉旧版本不改写历史。换口径请改批次号。
+        for row in peers:
+            delete_one(storage, 'baselines', row['id'])
         write_one(storage, 'baselines', baseline['id'], baseline)
         write_one(
             storage,

@@ -123,20 +123,36 @@ class ComparisonStoreTests(unittest.TestCase):
         self.assertEqual(old['rules']['margin_warning_pp'], '3')
         self.assertEqual(old['metrics']['margin']['status'], 'warning')
 
-    def test_new_baseline_version_does_not_rewrite_prior_comparison(self):
+    def test_reimport_keeps_only_latest_version_and_prior_comparison(self):
         first = create_baseline(self.storage, self.request())
+        old_id = first['comparison']['id']
         payload = self.request()
         payload['baseline']['target_margin_pct'] = '30'
         second = create_baseline(self.storage, payload)
+        # 同业务同批次只留最新一次导入，不累积版本。
+        self.assertEqual(len(second['baselines']), 1)
         self.assertEqual(second['comparison']['baseline']['version'], 2)
+        self.assertEqual(second['comparison']['baseline']['target_margin_pct'], '30')
         self.assertEqual(first['comparison']['baseline']['target_margin_pct'], '20')
-        self.assertEqual(len(second['baselines']), 2)
-        rebound = bind_baseline(
-            self.storage,
-            dict(self.request(), baseline_id=first['comparison']['baseline']['id']),
-        )
-        self.assertEqual(rebound['comparison']['baseline']['target_margin_pct'], '20')
-        self.assertEqual(len(rebound['records']), 2)
+        # 旧检测仍保留当时的理论数字，不被新导入改写。
+        old = next(row for row in second['records'] if row['id'] == old_id)
+        self.assertEqual(old['baseline']['target_margin_pct'], '20')
+        self.assertEqual(len(second['records']), 2)
+
+    def test_failed_reimport_rolls_back_the_deleted_version(self):
+        first = create_baseline(self.storage, self.request())
+        old_id = first['baselines'][0]['id']
+        payload = self.request()
+        payload['baseline']['target_margin_pct'] = '30'
+        with patch(
+            'profit_model.comparison_store._check', side_effect=ValueError('检测失败')
+        ):
+            with self.assertRaises(ValueError):
+                create_baseline(self.storage, payload)
+        # 已删掉旧版本、新版本已写入后才失败：事务回滚，旧版本与绑定都还原。
+        restored = workspace(self.storage, self.sid, 'A')
+        self.assertEqual([row['id'] for row in restored['baselines']], [old_id])
+        self.assertEqual(restored['comparison']['baseline']['target_margin_pct'], '20')
 
     def test_automatic_new_snapshot_and_event_continuity_recovery(self):
         first = create_baseline(self.storage, self.request())
