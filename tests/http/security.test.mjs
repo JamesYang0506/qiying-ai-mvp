@@ -1,0 +1,3 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {setup,files} from './helpers.mjs';
+test('writes require same origin and a session token',async t=>{const {base,token}=await setup(t);for(const headers of [{Origin:'https://example.com','X-Qiying-Token':token},{Origin:base}]){const r=await fetch(base+'/api/import-v1/previews',{method:'POST',headers,body:files()});assert.equal(r.status,403);}});
+test('static service cannot expose data or parent files',async t=>{const {base}=await setup(t);for(const url of ['/data/imports/test.json','/%2e%2e%2fpackage.json'])assert.ok([403,404].includes((await fetch(base+url)).status));});

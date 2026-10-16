@@ -1,0 +1,30 @@
+import {randomUUID,randomBytes} from 'node:crypto';
+import {readXlsx} from '../import/xlsx.mjs';import {normalizePair} from '../import/normalize.mjs';import {evaluate} from '../profit/evaluate.mjs';import {trend} from '../profit/trend.mjs';import {createStore,digest} from '../storage/store.mjs';import {readUpload,readJson} from './uploads.mjs';
+export function createRoutes({dataDir,clock=Date.now}){
+ const store=createStore(dataDir),token=randomBytes(24).toString('hex'),previews=new Map();let busy=false;
+ const send=(res,status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(obj));};
+ return async(req,res,url)=>{
+  const prefix='/api/import-v1';if(!url.pathname.startsWith(prefix+'/'))return false;
+  try{
+   const route=url.pathname.slice(prefix.length),parts=route.split('/').filter(Boolean).map(decodeURIComponent),host=req.headers.host??'';
+   if(!/^(127\.0\.0\.1|localhost):\d+$/.test(host))throw Object.assign(new Error('只允许本机访问'),{status:403});
+   if(req.method==='POST'&&(req.headers.origin!==`http://${host}`||req.headers['x-qiying-token']!==token))throw Object.assign(new Error('请从本站页面提交，或刷新页面后重试'),{status:403});
+   if(req.method==='GET'&&route==='/session'){send(res,200,{token,version:'import-v1',templateVersion:'A-ORDER-0.2'});return true;}
+   if(req.method==='POST'&&route==='/previews'){
+    if(busy)throw Object.assign(new Error('正在解析另一份文件，请稍后重试'),{status:429});busy=true;
+    try{
+     for(const [id,p]of previews)if(clock()-p.at>=600000)previews.delete(id);
+     if(previews.size>=20)throw Object.assign(new Error('预览数量过多，请等待旧预览过期'),{status:429});
+     const files=await readUpload(req);let result;try{result=normalizePair(readXlsx(files.costFile.buffer),readXlsx(files.dailyFile.buffer));}catch(e){throw Object.assign(new Error(e.message),{status:422});}
+     if(!result.issues.some(i=>i.severity==='error')){const a=evaluate(result.dataset,{asOf:result.dataset.order.end});for(const m of a.quality.missing)result.issues.push({severity:'missing',code:'SCOPE_INCOMPLETE',fileRole:'daily',sheet:m.field==='material'?'每日材料':m.field==='production'?'每日生产':'每日费用',cell:null,field:m.field,recordId:null,message:`${m.date} ${m.detail}`});}
+     const previewId=randomUUID(),hash=digest(result.dataset);previews.set(previewId,{at:clock(),result,digest:hash});
+     send(res,200,{previewId,digest:hash,summary:result.summary,issues:result.issues,canCommit:!result.issues.some(i=>i.severity==='error'),requiresIncomplete:result.issues.some(i=>i.severity==='missing'),preview:Object.fromEntries(['production','materials','expenses','supplements'].map(k=>[k,result.dataset[k].slice(0,200)]))});
+    }finally{busy=false;}return true;
+   }
+   if(req.method==='POST'&&parts[0]==='previews'&&parts[2]==='commit'&&parts.length===3){const p=previews.get(parts[1]);if(!p||clock()-p.at>=600000)throw Object.assign(new Error('预览已过期或服务已重启，请重新解析文件'),{status:410});const body=await readJson(req);if(body.digest!==p.digest)throw Object.assign(new Error('预览内容摘要不一致，请重新解析'),{status:409});if(p.result.issues.some(i=>i.severity==='error'))throw Object.assign(new Error('请先修正格式和业务校验错误'),{status:422});if(p.result.issues.some(i=>i.severity==='missing')&&body.allowIncomplete!==true)throw Object.assign(new Error('资料不完整，请明确选择保存为待补齐版本'),{status:422});send(res,200,await store.commit(p.result.dataset));return true;}
+   if(req.method==='GET'&&route==='/orders'){send(res,200,{orders:await store.listOrders()});return true;}
+   if(req.method==='GET'&&parts[0]==='orders'&&parts.length===3){const id=parts[1],action=parts[2];if(action==='revisions'){send(res,200,{revisions:await store.listRevisions(id)});return true;}const dataset=await store.get(id,url.searchParams.get('revision'));if(action==='analysis'){send(res,200,evaluate(dataset,{asOf:url.searchParams.get('asOf')??dataset.order.start,baselineMode:url.searchParams.get('baselineMode')??'ideal'}));return true;}if(action==='trend'){send(res,200,{points:trend(dataset,{start:url.searchParams.get('start')??dataset.order.start,end:url.searchParams.get('end')??dataset.order.end,baselineMode:url.searchParams.get('baselineMode')??'ideal'})});return true;}}
+   throw Object.assign(new Error('接口不存在'),{status:404});
+  }catch(e){req.resume();send(res,e.status??400,{error:{message:e.message,code:e.status??'REQUEST_FAILED'}});return true;}
+ };
+}
