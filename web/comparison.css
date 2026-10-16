@@ -329,6 +329,23 @@
 .comparison-dialog-head button {
   flex-shrink: 0;
 }
+.comparison-focus {
+  color: #873d09;
+  background: #ffebd1;
+  border: 1px solid #d79b53;
+}
+#comparison-quote-fields .comparison-grid {
+  margin-top: 16px;
+}
+#comparison-quote-preview {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  margin-top: 12px;
+}
+.comparison-exact {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 #comparison-view :focus-visible {
   outline: 3px solid #238653;
   outline-offset: 3px;

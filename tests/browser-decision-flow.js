@@ -6,6 +6,20 @@ async function browserDecisionFlow(page) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   const base = 'http://127.0.0.1:8767';
+  // This regression intentionally exercises the legacy points baseline.
+  await page.request.post(base + '/api/comparison/rules', {
+    data: {
+      confirmed: true,
+      rules: {
+        margin_mode: 'points',
+        margin_warning_pp: '3',
+        margin_danger_pp: '5',
+        defect_warning_pct: '3',
+        defect_danger_pct: '5',
+        min_production: '100',
+      },
+    },
+  });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(base + '/?flow=' + Date.now());
   await page.waitForFunction(() => aiStatusLoaded && !defaultLandingPending);

@@ -3,9 +3,11 @@
 from decimal import Decimal, InvalidOperation, localcontext
 
 DEFAULT_RULES = {
-    'version': 'temporary-v1',
-    'margin_warning_pp': '3',
-    'margin_danger_pp': '5',
+    'version': 'confirmed-relative-v1',
+    'margin_mode': 'relative',
+    'margin_attention_pct': '10',
+    'margin_focus_pct': '20',
+    'margin_severe_pct': '30',
     'defect_warning_pct': '3',
     'defect_danger_pct': '5',
     'min_production': '100',
@@ -39,10 +41,17 @@ def text(value):
 def validate_rules(payload):
     if not isinstance(payload, dict):
         raise ValueError('预警设置必须是对象')
-    result = {}
+    mode = payload.get('margin_mode', 'points')
+    if mode not in ('points', 'relative'):
+        raise ValueError('毛利比较口径无效')
+    margin_keys = (
+        ('margin_attention_pct', 'margin_focus_pct', 'margin_severe_pct')
+        if mode == 'relative'
+        else ('margin_warning_pp', 'margin_danger_pp')
+    )
+    result = {'margin_mode': mode} if 'margin_mode' in payload else {}
     for key in (
-        'margin_warning_pp',
-        'margin_danger_pp',
+        *margin_keys,
         'defect_warning_pct',
         'defect_danger_pct',
         'min_production',
@@ -57,8 +66,9 @@ def validate_rules(payload):
         if key == 'min_production' and value != value.to_integral_value():
             raise ValueError('质量观察量须为正整数')
         result[key] = format(value, 'f')
-    if Decimal(result['margin_warning_pp']) >= Decimal(
-        result['margin_danger_pp']
+    if any(
+        Decimal(result[left]) >= Decimal(result[right])
+        for left, right in zip(margin_keys, margin_keys[1:])
     ) or Decimal(result['defect_warning_pct']) >= Decimal(result['defect_danger_pct']):
         raise ValueError('严重阈值必须大于提醒阈值')
     # Trial configuration stays provisional until a separate business verification workflow exists.
@@ -108,6 +118,10 @@ def _evaluate(snapshot, order_id, baseline, rules, scope_confirmed):
         'target_pct': baseline.get('target_margin_pct') if baseline else None,
         'value_pct': text(margin_value),
         'delta_pp': None,
+        'relative_drop_pct': None,
+        'relative_drop_exact': None,
+        'margin_mode': rules.get('margin_mode', 'points'),
+        'performance': None,
         'message': '',
         'basis': 'trial' if trial else 'standard',
         'revenue': text(revenue),
@@ -144,30 +158,65 @@ def _evaluate(snapshot, order_id, baseline, rules, scope_confirmed):
         reason = '生产成本依据不完整，暂不可比较。'
     elif not source and order.get('production_status') not in ('complete', 'estimated'):
         reason = '生产成本或收入范围尚未完整，暂不可比较。'
-    elif baseline.get('tax_basis', 'unknown') != 'unknown' and order.get(
-        'tax_basis', 'unknown'
-    ) not in ('unknown', baseline['tax_basis']):
+    elif baseline.get('tax_basis', 'unknown') not in (
+        'unknown',
+        'ignored',
+    ) and order.get('tax_basis', 'unknown') not in ('unknown', baseline['tax_basis']):
         reason = '理论与当前税口径不一致。'
     target = numeric(margin['target_pct'])
     if reason is None and target is None:
         reason = '理论毛利率无效，不能以实际值补成目标。'
+    if reason is None and margin['margin_mode'] == 'relative' and target <= 0:
+        reason = '计划毛利率须大于零，暂不能计算相对下降比例。'
     if reason:
         margin['message'] = reason
     else:
         delta = target - margin_value
         margin.update(
             delta_pp=text(delta),
-            status=level(delta, rules['margin_warning_pp'], rules['margin_danger_pp']),
+            performance=(
+                'better' if delta < 0 else 'on_plan' if delta == 0 else 'below_plan'
+            ),
         )
-        margin['message'] = (
-            f'毛利率较理论下降 {text(delta)} 个百分点。'
-            if delta >= 0
-            else f'毛利率较理论提高 {text(-delta)} 个百分点。'
-        )
+        if margin['margin_mode'] == 'relative':
+            relative_drop = delta / target * 100
+            margin.update(
+                relative_drop_pct=text(relative_drop),
+                relative_drop_exact=format(relative_drop, 'f'),
+                status=(
+                    'danger'
+                    if relative_drop > Decimal(rules['margin_severe_pct'])
+                    else (
+                        'focus'
+                        if relative_drop > Decimal(rules['margin_focus_pct'])
+                        else (
+                            'warning'
+                            if relative_drop > Decimal(rules['margin_attention_pct'])
+                            else 'normal'
+                        )
+                    )
+                ),
+            )
+            margin['message'] = (
+                f'毛利率较计划相对下降 {text(relative_drop)}%（下降 {text(delta)} 个百分点）。'
+                if delta >= 0
+                else f'毛利率优于计划，相对提高 {text(-relative_drop)}%（提高 {text(-delta)} 个百分点）。'
+            )
+        else:
+            margin['status'] = level(
+                delta, rules['margin_warning_pp'], rules['margin_danger_pp']
+            )
+            margin['message'] = (
+                f'毛利率较理论下降 {text(delta)} 个百分点。'
+                if delta >= 0
+                else f'毛利率较理论提高 {text(-delta)} 个百分点。'
+            )
         if trial:
             margin['message'] += ' 当前为参考试算/预测，尚非已核实实际毛利。'
         if baseline.get('tax_basis', 'unknown') == 'unknown':
             margin['message'] += ' 税口径待核实，按已确认的相同口径参考比较。'
+        elif baseline.get('tax_basis') == 'ignored':
+            margin['message'] += ' 本次不计税，不作税额调整。'
     production = source.get('production') or {}
     produced = numeric(production.get('gross_quantity'))
     defects = numeric(production.get('defect_quantity'))
@@ -212,7 +261,7 @@ def _evaluate(snapshot, order_id, baseline, rules, scope_confirmed):
                 f'按日报不良 / 累计生产计算，不良率 {text(rate)}%；不等于最终报废率。'
             )
     indicators = {'margin': margin, 'quality': quality}
-    rank = {'normal': 0, 'pending': 1, 'warning': 2, 'danger': 3}
+    rank = {'normal': 0, 'pending': 1, 'warning': 2, 'focus': 3, 'danger': 4}
     severity = max((row['status'] for row in indicators.values()), key=rank.get)
     return {
         'snapshot_id': snapshot['snapshot']['snapshot_id'],

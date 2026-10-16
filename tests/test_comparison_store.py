@@ -13,11 +13,12 @@ from profit_model.comparison_store import (
     save_rules,
     update_event,
     auto_check,
+    active_rules,
+    write_one,
 )
-from profit_model.comparison import DEFAULT_RULES
 from profit_model.history import set_deleted
 from profit_model.snapshots import save_snapshot
-from test_comparison import observation
+from test_comparison import observation, LEGACY_RULES, RELATIVE_RULES
 
 
 class ComparisonStoreTests(unittest.TestCase):
@@ -28,6 +29,31 @@ class ComparisonStoreTests(unittest.TestCase):
         self.data.update(costs=[], allocations=[], issues=[])
         save_snapshot(self.storage, self.data)
         self.sid = self.data['snapshot']['snapshot_id']
+        write_one(self.storage, 'settings', 'active-rules', LEGACY_RULES)
+
+    def test_relative_focus_event_recovers_and_legacy_history_stays_frozen(self):
+        first = create_baseline(self.storage, self.request())
+        old_id = first['comparison']['id']
+        old_record = copy.deepcopy(first['comparison'])
+        self.assertEqual(active_rules(self.storage), LEGACY_RULES)
+        save_rules(self.storage, {'confirmed': True, 'rules': RELATIVE_RULES})
+        later = self.later('140.00')
+        auto_check(self.storage, later)
+        focused = workspace(self.storage, later['snapshot']['snapshot_id'], 'A')
+        event = next(row for row in focused['events'] if row['metric'] == 'margin')
+        self.assertEqual(event['severity'], 'focus')
+        self.assertEqual(focused['comparison']['severity'], 'focus')
+        better = self.later('210.00', '2026-10-16')
+        auto_check(self.storage, better)
+        recovered = workspace(self.storage, better['snapshot']['snapshot_id'], 'A')
+        margin = recovered['comparison']['metrics']['margin']
+        self.assertEqual(margin['status'], 'normal')
+        self.assertEqual(margin['performance'], 'better')
+        current_event = next(row for row in recovered['events'] if row['id'] == event['id'])
+        self.assertEqual(current_event['detection_status'], 'recovered')
+        historical = workspace(self.storage, self.sid, 'A')
+        self.assertEqual(next(row for row in historical['records'] if row['id'] == old_id), old_record)
+        self.assertEqual(historical['comparison']['rules'], LEGACY_RULES)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -67,7 +93,7 @@ class ComparisonStoreTests(unittest.TestCase):
     def test_get_is_read_only_and_create_does_not_change_actual_bytes(self):
         before = {p.name: p.read_bytes() for p in self.storage.glob('*.json')}
         self.assertIsNone(workspace(self.storage, self.sid, 'A')['comparison'])
-        self.assertFalse((self.storage / 'comparison-data').exists())
+        self.assertFalse((self.storage / 'comparison-data' / 'records').exists())
         output = create_baseline(self.storage, self.request())
         self.assertEqual(output['comparison']['metrics']['margin']['status'], 'warning')
         self.assertEqual(
@@ -84,7 +110,7 @@ class ComparisonStoreTests(unittest.TestCase):
             {
                 'confirmed': True,
                 'rules': dict(
-                    DEFAULT_RULES, margin_warning_pp='4', margin_danger_pp='6'
+                    LEGACY_RULES, margin_warning_pp='4', margin_danger_pp='6'
                 ),
             },
         )

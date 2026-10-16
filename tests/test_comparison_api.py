@@ -8,6 +8,7 @@ import urllib.request
 from openpyxl import Workbook
 from test_server import ServerTests as _Setup
 from test_engine import fixture
+from test_comparison import LEGACY_RULES, RELATIVE_RULES
 
 
 class ComparisonAPITests(unittest.TestCase):
@@ -27,6 +28,7 @@ class ComparisonAPITests(unittest.TestCase):
         return self.post('/api/calculate', fixture())
 
     def test_import_auto_checks_and_baseline_rules_history_remain_separate(self):
+        self.post('/api/comparison/rules', {'confirmed': True, 'rules': LEGACY_RULES})
         order = self.import_order()
         sid = order['snapshot']['snapshot_id']
         with urllib.request.urlopen(
@@ -75,6 +77,28 @@ class ComparisonAPITests(unittest.TestCase):
         )
         self.assertEqual(updated['comparison']['metrics']['margin']['status'], 'normal')
         self.assertEqual(len(updated['records']), 3)
+
+    def test_relative_rules_roundtrip_and_check_preserves_prior_record(self):
+        order = self.import_order()
+        sid = order['snapshot']['snapshot_id']
+        legacy = self.post('/api/comparison/rules',
+                           {'confirmed': True, 'rules': LEGACY_RULES})
+        before = self.post('/api/theory', {
+            'snapshot_id': sid, 'order_id': 'A', 'confirmed': True,
+            'scope_confirmed': True,
+            'baseline': {'method': 'ratio', 'business_order_id': 'A',
+                         'target_margin_pct': '40', 'quantity': '1000', 'unit': '双'},
+        })
+        saved = self.post('/api/comparison/rules',
+                          {'confirmed': True, 'rules': RELATIVE_RULES})
+        self.assertEqual(saved['rules']['margin_mode'], 'relative')
+        self.assertNotEqual(saved['rules']['version'], legacy['rules']['version'])
+        result = self.post('/api/comparison/check', {'snapshot_id': sid, 'order_id': 'A'})
+        margin = result['comparison']['metrics']['margin']
+        self.assertEqual(margin['status'], 'focus')
+        self.assertIsNotNone(margin['relative_drop_pct'])
+        frozen = next(row for row in result['records'] if row['id'] == before['comparison']['id'])
+        self.assertEqual(frozen, before['comparison'])
 
     def test_template_preview_and_static_assets(self):
         for path in ('/comparison.js', '/comparison.css', '/api/theory/template.xlsx'):

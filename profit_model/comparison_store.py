@@ -284,7 +284,7 @@ def sync_events(storage, snapshot, record):
             ),
             None,
         )
-        if indicator['status'] in ('warning', 'danger'):
+        if indicator['status'] in ('warning', 'focus', 'danger'):
             event = active or {
                 'id': str(uuid4()),
                 'created_at': now(),
@@ -359,7 +359,7 @@ def _check(storage, snapshot, order):
         event for event in record['events'] if event['detection_status'] == 'active'
     ]
     if unresolved:
-        rank = {'normal': 0, 'pending': 1, 'warning': 2, 'danger': 3}
+        rank = {'normal': 0, 'pending': 1, 'warning': 2, 'focus': 3, 'danger': 4}
         record['severity'] = max(
             [record['severity'], *(event['severity'] for event in unresolved)],
             key=rank.get,

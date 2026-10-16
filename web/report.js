@@ -91,7 +91,9 @@
       (event) => event.detection_status === 'active',
     );
     const alertMetrics = ['margin', 'quality'].filter((key) =>
-      ['warning', 'danger'].includes(comparison?.metrics?.[key]?.status),
+      ['warning', 'focus', 'danger'].includes(
+        comparison?.metrics?.[key]?.status,
+      ),
     );
     const issues = (data.issues || []).filter(
       (issue) => issue.order_id === order.order_id,
@@ -178,9 +180,27 @@
     const margin = comparison?.metrics?.margin,
       baseline = comparison?.baseline;
     const delta = number(margin?.delta_pp);
+    const relative =
+      (margin?.margin_mode || comparison?.rules?.margin_mode) === 'relative';
+    const relativeDrop = number(margin?.relative_drop_pct);
+    const statusLabels = {
+      normal: '正常',
+      warning: '注意',
+      focus: '重点',
+      danger: '严重',
+      pending: '待补依据 / 待观察',
+    };
+    const marginPerformance =
+      margin?.performance === 'better'
+        ? '优于计划'
+        : statusLabels[margin?.status] || '状态未记录';
+    const ruleDescription = relative
+      ? `相对下降四级规则：≤${comparison.rules?.margin_attention_pct ?? 10}%正常，≤${comparison.rules?.margin_focus_pct ?? 20}%注意，≤${comparison.rules?.margin_severe_pct ?? 30}%重点，超过${comparison.rules?.margin_severe_pct ?? 30}%严重`
+      : '历史百分点规则（按保存版本解释）';
     const tax =
-      { included: '含税', excluded: '不含税' }[order.tax_basis] ||
-      '未知 / 待核验';
+      { included: '含税', excluded: '不含税', ignored: '本次不计税' }[
+        order.tax_basis
+      ] || '未知 / 待核验';
     const unique = (items) => [...new Set(items.filter(Boolean))];
     return `<article class="report-sheet"><header class="report-heading"><p>企盈智擎 · 单订单决策参考</p><h1>${text(source?.product || order.product || order.order_id)}</h1><div class="report-tags">${[snapshot.is_demo ? '模拟数据' : '导入数据', historical ? '历史只读' : '当前保存结果', trial ? '参考试算 · 尚待核实' : managementEstimated ? '管理利润含估算 · 尚待核实' : '标准核算', `税口径：${tax}`].map((tag) => `<span>${escape(tag)}</span>`).join('')}</div></header>
       <dl class="report-facts"><div><dt>订单 / 客户</dt><dd>${text(order.order_id)} / ${text(order.customer)}</dd></div><div><dt>数量 / 范围</dt><dd>${text(metrics.quantity ?? order.quantity)} ${text(order.unit)} · ${order.mode === 'actual' ? '已交付实际' : '整单预测'}</dd></div><div><dt>数据截至</dt><dd>${text(snapshot.cutoff_date)}</dd></div><div><dt>数据保存时间</dt><dd>${time(snapshot.created_at)}</dd></div></dl>
@@ -216,7 +236,7 @@
         .join(
           '',
         )}</div><p class="report-note">${layers ? '生产毛利 = 收入 − 生产成本；经营净利 = 生产毛利 − 已列经营费用。费用完整性及税口径待核验，不等同于财务报表净利润。' : '生产毛利扣除生产成本；订单管理利润再扣期间及其他订单费用，为管理核算口径，不等同于财务报表净利润。'}缺失值保持待补，未按零处理。</p></section>
-      <section><h2>保存的理论对照</h2><div class="report-comparison"><p>理论毛利率 <b>${escape(rate(margin?.target_pct))}</b></p><p>检测当前毛利率 <b>${escape(rate(margin?.value_pct))}</b></p><p>较理论 <b>${delta === null ? '待确认可比范围' : `${delta > 0 ? '下降' : delta < 0 ? '提高' : '持平'} ${Math.abs(delta).toFixed(2)} 个百分点`}</b></p></div><p class="report-note">${comparison ? `${text({ normal: '未触发预警', warning: '黄色提醒', danger: '严重预警', pending: '待补依据 / 待观察' }[comparison.severity] || '状态未记录')} · ${comparison.scope_confirmed ? '范围已人工确认' : '范围未确认'} · 理论税口径 ${text({ included: '含税', excluded: '不含税' }[baseline?.tax_basis] || '未知')} · ${comparison.rules?.provisional === false ? '保存规则' : '暂定规则'}` : '没有可用保存检测，不能据此认定正常。'}${historical ? ' 历史报告仅使用该快照的保存检测、理论和规则。' : ''}</p></section>
+      <section><h2>保存的理论对照</h2><div class="report-comparison"><p>理论毛利率 <b>${escape(rate(margin?.target_pct))}</b></p><p>检测当前毛利率 <b>${escape(rate(margin?.value_pct))}</b></p><p>较计划 <b>${delta === null ? '待确认可比范围' : `${delta > 0 ? '下降' : delta < 0 ? '提高' : '持平'} ${Math.abs(delta).toFixed(2)} 个百分点`}</b></p>${relative ? `<p>相对计划下降 <b>${relativeDrop === null ? '依据待补' : rate(relativeDrop)}</b> · ${escape(marginPerformance)}</p>` : ''}</div><p class="report-note">${comparison ? `${text(relative ? statusLabels[comparison.severity] || '状态未记录' : { normal: '未触发预警', warning: '黄色提醒', danger: '严重预警', pending: '待补依据 / 待观察' }[comparison.severity] || '状态未记录')} · ${comparison.scope_confirmed ? '范围已人工确认' : '范围未确认'} · 理论税口径 ${text({ included: '含税', excluded: '不含税', ignored: '本次不计税' }[baseline?.tax_basis] || '未知')} · ${comparison.rules?.provisional === false ? '保存规则' : relative ? '毛利标准已设置 / 质量阈值暂定' : '旧暂定规则'}` : '没有可用保存检测，不能据此认定正常。'}${comparison ? ` · ${escape(ruleDescription)}。质量阈值仍为暂定规则。` : ''}${historical ? ' 历史报告仅使用该快照的保存检测、理论和规则。' : ''}${baseline?.method === 'quote' ? ' 报价计划经营费用单列于计划生产毛利之后，仅作理论依据；实际经营费用以原实际快照为准。' : ''}</p></section>
       <section class="report-risk"><h2>主要预警</h2>${list(unique(risks), '当前保存结果未列出预警；仍需结合待补依据判断。')}</section>
       <section><h2>待补依据 / 待观察</h2>${list(unique(pending), '保存结果未列出待补事项；准确性仍需企业凭证复核。')}</section>
       <section><h2>依据支持的行动</h2>${list(unique(actions), '保存结果暂无进一步行动依据；结合原始凭证及企业认可口径复核。')}<p class="report-note">本报告由已保存数据与规则整理，无需模型；不能直接替代接单、拒单、降价或财务确认决定。</p></section>
@@ -236,6 +256,8 @@
       .querySelector('[data-report-close]')
       .addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {
+      // A queued close event may arrive after the same dialog has reopened.
+      if (dialog.open) return;
       sequence++;
       opener?.focus();
     });

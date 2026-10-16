@@ -5,11 +5,74 @@ let comparisonContext = '',
   comparisonWorkspace = null,
   comparisonBusy = false;
 const comparisonLabels = {
-  normal: '未触发预警',
-  warning: '黄色提醒',
+  normal: '正常',
+  warning: '注意',
+  focus: '重点',
   danger: '严重预警',
   pending: '待补依据 / 待观察',
 };
+const comparisonRelative = (rules) => rules?.margin_mode === 'relative';
+const comparisonRuleName = (rules) =>
+  comparisonRelative(rules) ? '相对计划下降四级标准' : '旧版百分点标准';
+function comparisonRuleText(rules) {
+  return comparisonRelative(rules)
+    ? `相对计划下降 ≤ ${comparisonNumber(rules.margin_attention_pct, '%')} 正常；超过此值至 ${comparisonNumber(rules.margin_focus_pct, '%')} 注意；再至 ${comparisonNumber(rules.margin_severe_pct, '%')} 重点；超过 ${comparisonNumber(rules.margin_severe_pct, '%')} 严重。恰好达到边界归入较低等级。`
+    : `旧标准：毛利率下降 ≥ ${comparisonNumber(rules.margin_warning_pp, ' 个百分点')} 提醒；≥ ${comparisonNumber(rules.margin_danger_pp, ' 个百分点')} 严重。`;
+}
+const comparisonMarginStatus = (metric) =>
+  metric?.performance === 'better'
+    ? '<span class="comparison-state comparison-normal">优于计划</span>'
+    : comparisonStatus(metric?.status);
+const comparisonQuoteParameters = [
+  ['material_pct', '材料成本（报价%）', 65],
+  ['production_management_pct', '生产管理工资（报价%）', 2.8],
+  ['production_loss_pct', '生产损耗预算（报价%）', 0.6],
+  ['defect_loss_pct', '不良品损耗预算（报价%）', 1.8],
+  ['energy_pct', '电汽动力能源（报价%）', 0.4],
+  ['preparation_labor_per_pair', '备料计件人工（元/计量单位）', null],
+  ['press_labor_per_pair', '油压计件人工（元/计量单位）', null],
+  ['company_management_pct', '公司管理干部（报价%）', 1.3],
+  ['administration_pct', '行政人员（报价%）', 1.7],
+];
+function comparisonQuoteEvidence(baseline) {
+  if (baseline?.method !== 'quote') return '';
+  return `<details class="comparison-evidence"><summary>报价核价的原始比例与计件单价</summary><div class="comparison-costs">${comparisonQuoteParameters.map(([k, l]) => `<div><span>${l}</span><strong>${comparisonNumber(baseline[k], k.endsWith('_pct') ? '%' : ' 元')}</strong></div>`).join('')}</div><p>公司经管及行政另列经营费用，物流不纳入本计划；不良品损耗比例是成本预算，不能替代不良数量率阈值。</p></details>`;
+}
+function comparisonRulesFields(rules) {
+  return `<label>毛利判断口径<select name="margin_mode" id="comparison-rule-mode"><option value="relative" ${comparisonRelative(rules) ? 'selected' : ''}>相对计划下降（四级）</option><option value="points" ${!comparisonRelative(rules) ? 'selected' : ''}>旧版百分点（历史兼容）</option></select></label>
+  <div class="comparison-grid" id="comparison-relative-rule-fields">${[
+    ['margin_attention_pct', '正常上界（相对下降%）', 10],
+    ['margin_focus_pct', '注意上界（相对下降%）', 20],
+    ['margin_severe_pct', '重点上界（相对下降%）', 30],
+  ]
+    .map(([k, l, v]) => comparisonField(k, l, rules[k] ?? v, 'number', true))
+    .join('')}</div>
+  <div class="comparison-grid" id="comparison-points-rule-fields">${[
+    ['margin_warning_pp', '旧版毛利提醒（百分点）', 3],
+    ['margin_danger_pp', '旧版毛利严重（百分点）', 5],
+  ]
+    .map(([k, l, v]) => comparisonField(k, l, rules[k] ?? v, 'number', true))
+    .join('')}</div>
+  <h3>质量阈值仍为暂定</h3><div class="comparison-grid">${[
+    ['defect_warning_pct', '不良率提醒（%）'],
+    ['defect_danger_pct', '不良率严重（%）'],
+    ['min_production', '质量最低观察数量'],
+  ]
+    .map(([k, l]) => comparisonField(k, l, rules[k], 'number', true))
+    .join('')}</div>`;
+}
+function updateComparisonRuleMode() {
+  const form = $('comparison-rules');
+  if (!form) return;
+  const relative = form.elements.margin_mode.value === 'relative';
+  for (const [id, on] of [
+    ['comparison-relative-rule-fields', relative],
+    ['comparison-points-rule-fields', !relative],
+  ]) {
+    $(id).hidden = !on;
+    for (const input of $(id).querySelectorAll('input')) input.disabled = !on;
+  }
+}
 const comparisonNumber = (v, suffix = '') =>
   v === null || v === undefined || v === ''
     ? '—'
@@ -43,7 +106,7 @@ const comparisonMessageDetails = (message) =>
     ? `<details class="comparison-evidence"><summary>查看原始检测依据</summary><p>${esc(message)}</p></details>`
     : '';
 function comparisonMarkers(c) {
-  return `<span class="comparison-state">${c?.is_demo || result?.snapshot?.is_demo ? '模拟数据' : '导入数据'}</span><span class="comparison-state comparison-pending">暂定规则</span>${c?.metrics?.margin?.basis === 'trial' ? '<span class="comparison-state comparison-warning">源表参考试算 · 尚待核实</span>' : ''}${historyViewing ? '<span class="comparison-state">历史只读</span>' : ''}`;
+  return `<span class="comparison-state">${c?.is_demo || result?.snapshot?.is_demo ? '模拟数据' : '导入数据'}</span><span class="comparison-state comparison-pending">${comparisonRuleName(c?.rules || comparisonWorkspace?.rules)} · 质量阈值暂定</span>${c?.metrics?.margin?.basis === 'trial' ? '<span class="comparison-state comparison-warning">源表参考试算 · 尚待核实</span>' : ''}${historyViewing ? '<span class="comparison-state">历史只读</span>' : ''}`;
 }
 function comparisonKey() {
   return `${result?.snapshot?.snapshot_id || ''}:${comparisonOrder}:${historyViewing}`;
@@ -145,7 +208,7 @@ function renderComparison() {
     readonly = historyViewing || !comparisonOrder || !w;
   const disabled = readonly || comparisonBusy ? 'disabled' : '';
   $('comparison-view').innerHTML =
-    `<div class="panel comparison-controls"><label>对照订单<select id="comparison-order">${orders.length ? orders.map((o) => `<option value="${esc(o.order_id)}" ${o.order_id === comparisonOrder ? 'selected' : ''}>${esc(o.order_id)} · ${esc(o.product || '')}</option>`).join('') : '<option value="">请先导入实际订单数据</option>'}</select></label><div class="comparison-actions"><button class="secondary" id="comparison-check" ${disabled}>重新检查</button><button class="primary" id="comparison-open-theory" data-comparison-dialog="comparison-theory-dialog" ${disabled}>导入 / 填写理论利润表</button><button class="secondary" id="comparison-open-rules" data-comparison-dialog="comparison-rules-dialog" ${disabled}>编辑暂定规则</button></div><div class="comparison-context"><div class="comparison-markers">${comparisonMarkers(c)}</div><span>数据截至 ${esc(c?.cutoff_date || result?.snapshot?.cutoff_date || '未记录')} · 检测 ${comparisonShortTime(c?.created_at)}</span></div></div><p id="comparison-message" class="help" role="status" aria-live="polite"></p>${comparisonWarning()}
+    `<div class="panel comparison-controls"><label>对照订单<select id="comparison-order">${orders.length ? orders.map((o) => `<option value="${esc(o.order_id)}" ${o.order_id === comparisonOrder ? 'selected' : ''}>${esc(o.order_id)} · ${esc(o.product || '')}</option>`).join('') : '<option value="">请先导入实际订单数据</option>'}</select></label><div class="comparison-actions"><button class="secondary" id="comparison-check" ${disabled}>重新检查</button><button class="primary" id="comparison-open-theory" data-comparison-dialog="comparison-theory-dialog" ${disabled}>导入 / 填写理论利润表</button><button class="secondary" id="comparison-open-rules" data-comparison-dialog="comparison-rules-dialog" ${disabled}>编辑判断标准</button></div><div class="comparison-context"><div class="comparison-markers">${comparisonMarkers(c)}</div><span>数据截至 ${esc(c?.cutoff_date || result?.snapshot?.cutoff_date || '未记录')} · 检测 ${comparisonShortTime(c?.created_at)}</span></div></div><p id="comparison-message" class="help" role="status" aria-live="polite"></p>${comparisonWarning()}
   <section id="comparison-metrics" class="panel comparison-results"><div class="panel-head"><h2>生产毛利与质量 ${comparisonStatus(c?.severity)}</h2></div>${!c ? '<p class="help">尚无保存检测，不能据此认定正常。请导入订单并建立理论目标。</p>' : ''}<div class="comparison-kpis">${[
     [
       '理论毛利率',
@@ -155,20 +218,16 @@ function renderComparison() {
     [
       '当前毛利率',
       comparisonNumber(c?.metrics?.margin?.value_pct, '%'),
-      comparisonStatus(c?.metrics?.margin?.status),
+      comparisonMarginStatus(c?.metrics?.margin),
     ],
     [
-      '较理论差异',
-      c?.metrics?.margin?.delta_pp == null
-        ? '—'
-        : `${Math.abs(Number(c.metrics.margin.delta_pp)).toFixed(2)}<small>个百分点</small>`,
-      c?.metrics?.margin?.delta_pp == null
-        ? '待确认可比范围'
-        : Number(c.metrics.margin.delta_pp) < 0
-          ? '较理论提高'
-          : Number(c.metrics.margin.delta_pp) > 0
-            ? '较理论下降'
-            : '与理论持平',
+      comparisonRelative(r) ? '相对计划下降比例' : '较理论差异（旧标准）',
+      comparisonRelative(r)
+        ? comparisonNumber(c?.metrics?.margin?.relative_drop_pct, '%')
+        : c?.metrics?.margin?.delta_pp == null
+          ? '—'
+          : `${Math.abs(Number(c.metrics.margin.delta_pp)).toFixed(2)}<small>个百分点</small>`,
+      `${c?.metrics?.margin?.performance === 'better' ? '优于计划 · ' : ''}${comparisonDelta(c?.metrics?.margin?.delta_pp)}`,
     ],
     [
       '累计不良率',
@@ -181,6 +240,7 @@ function renderComparison() {
         `<article class="comparison-kpi"><span>${label}</span><strong>${value}</strong><div>${note}</div></article>`,
     )
     .join('')}</div>
+  <p class="help">${comparisonRuleText(r)}${c?.rules?.version && w?.rules?.version && c.rules.version !== w.rules.version && !historyViewing ? ' 当前保存检测使用旧规则版本；重新检查后才采用当前全局标准。' : ''}</p>
   ${c?.pending?.length ? `<div class="comparison-pending"><h3>待补依据 / 待观察</h3><ul>${c.pending.map((p) => `<li>${comparisonDisplayMessage(p)}</li>`).join('')}</ul></div>` : ''}</section>
   <section id="comparison-alerts" class="panel"><h2>预警事件与处理记录</h2><p class="help">检测状态与人工处理分开。已确认 / 已关闭不会消除仍存在的异常。</p>${
     ((historyViewing ? c?.events : w?.events) || [])
@@ -208,10 +268,10 @@ function renderComparison() {
   ]
     .map((k) => {
       const m = c?.metrics?.[k];
-      return `<article class="comparison-metric"><h3>${k === 'margin' ? '生产毛利率' : '累计不良率'} ${comparisonStatus(m?.status)}</h3><dl><div><dt>理论目标</dt><dd>${m?.target_pct != null ? comparisonNumber(m.target_pct, '%') : k === 'quality' ? '暂定上限见规则' : '—'}</dd></div><div><dt>当前观测</dt><dd>${comparisonNumber(m?.value_pct, '%')}</dd></div><div><dt>差异</dt><dd>${k === 'margin' ? comparisonDelta(m?.delta_pp) : m?.delta_pp == null ? '—' : `${Number(m.delta_pp) < 0 ? '减少' : '增加'} ${comparisonNumber(Math.abs(Number(m.delta_pp)), ' 个百分点')}`}</dd></div><div><dt>提醒 / 严重</dt><dd>${k === 'margin' ? `下降 ≥ ${comparisonNumber(r.margin_warning_pp, ' 个百分点')} / ≥ ${comparisonNumber(r.margin_danger_pp, ' 个百分点')}` : `≥ ${comparisonNumber(r.defect_warning_pct, '%')} / ≥ ${comparisonNumber(r.defect_danger_pct, '%')}`}</dd></div>${k === 'quality' ? `<div><dt>累计生产 / 不良</dt><dd>${comparisonNumber(m?.produced)} / ${comparisonNumber(m?.defects)}</dd></div><div><dt>最低观察量</dt><dd>${comparisonNumber(r.min_production)}</dd></div>` : ''}</dl><p class="help">${comparisonDisplayMessage(m?.message || '尚无保存检测')}</p>${comparisonMessageDetails(m?.message)}</article>`;
+      return `<article class="comparison-metric"><h3>${k === 'margin' ? '生产毛利率' : '累计不良率'} ${k === 'margin' ? comparisonMarginStatus(m) : comparisonStatus(m?.status)}</h3><dl><div><dt>理论目标</dt><dd>${m?.target_pct != null ? comparisonNumber(m.target_pct, '%') : k === 'quality' ? '暂定上限见规则' : '—'}</dd></div><div><dt>当前观测</dt><dd>${comparisonNumber(m?.value_pct, '%')}</dd></div><div><dt>差异</dt><dd>${k === 'margin' ? comparisonDelta(m?.delta_pp) : m?.delta_pp == null ? '—' : `${Number(m.delta_pp) < 0 ? '减少' : '增加'} ${comparisonNumber(Math.abs(Number(m.delta_pp)), ' 个百分点')}`}</dd></div>${k === 'margin' && comparisonRelative(r) ? `<div><dt>相对计划下降</dt><dd>${comparisonNumber(m?.relative_drop_pct, '%')}</dd></div>` : ''}<div><dt>${k === 'margin' ? '判断标准' : '提醒 / 严重'}</dt><dd>${k === 'margin' ? comparisonRuleText(r) : `≥ ${comparisonNumber(r.defect_warning_pct, '%')} / ≥ ${comparisonNumber(r.defect_danger_pct, '%')}`}</dd></div>${k === 'quality' ? `<div><dt>累计生产 / 不良</dt><dd>${comparisonNumber(m?.produced)} / ${comparisonNumber(m?.defects)}</dd></div><div><dt>最低观察量</dt><dd>${comparisonNumber(r.min_production)}</dd></div>` : ''}</dl><p class="help">${comparisonDisplayMessage(m?.message || '尚无保存检测')}</p>${comparisonMessageDetails(m?.message)}${k === 'margin' && m?.relative_drop_exact != null ? `<details class="comparison-exact"><summary>用于判级的未舍入比例</summary><p>${esc(m.relative_drop_exact)}%</p></details>` : ''}</article>`;
     })
     .join('')}</div></section>
-  <details id="comparison-evidence" class="panel comparison-evidence"><summary>理论基线与完整检测依据 ${b ? `· 理论 v${esc(b.version)}` : '· 尚未绑定'}</summary><p>${historyViewing ? '历史只读：展示保存时的理论、规则和检测，不重新计算。' : '理论基线独立保存，实际数据更新后检测，尚未接入现场自动监测。'}</p><p>检测 ID：${esc(c?.id || '未检测')}<br>基线 ID：${esc(b?.id || '未绑定')} · 理论 v${esc(b?.version || '—')}<br>规则：${esc(r.version || '—')}<br>检测时间：${comparisonTime(c?.created_at)}</p>${c?.pending?.length ? `<p>原始待补依据：${esc(c.pending.join('；'))}</p>` : ''}<p>${b ? `业务订单 ${esc(b.business_order_id)} · 批次 ${esc(b.batch_id || '无')} · ${b.method === 'costs' ? '独立成本计算' : '比例目标'} · 税口径 ${esc({ unknown: '未知', included: '含税', excluded: '不含税' }[b.tax_basis] || '未知')} · ${c.scope_confirmed ? '范围已人工确认' : '范围未确认'}` : 'SRC 编号仅代表款号来源，请填写真实业务订单与批次。'}</p><p>${esc(b?.source_note || '来源未填写')}</p>${c ? `<details class="comparison-evidence"><summary>本次检测的完整版本信息</summary><p>检测编号 ${esc(c.id)}<br>实际快照 ${esc(c.snapshot_id)}<br>理论基线 ${esc(b?.id || '未绑定')}<br>规则版本 ${esc(r.version || '未记录')}<br>检测时间 ${comparisonTime(c.created_at)}</p></details>` : ''}${
+  <details id="comparison-evidence" class="panel comparison-evidence"><summary>理论基线与完整检测依据 ${b ? `· 理论 v${esc(b.version)}` : '· 尚未绑定'}</summary><p>${historyViewing ? '历史只读：展示保存时的理论、规则和检测，不重新计算。' : '理论基线独立保存，实际数据更新后检测，尚未接入现场自动监测。'}</p><p>检测 ID：${esc(c?.id || '未检测')}<br>基线 ID：${esc(b?.id || '未绑定')} · 理论 v${esc(b?.version || '—')}<br>规则：${esc(r.version || '—')}<br>检测时间：${comparisonTime(c?.created_at)}</p>${c?.pending?.length ? `<p>原始待补依据：${esc(c.pending.join('；'))}</p>` : ''}<p>${b ? `业务订单 ${esc(b.business_order_id)} · 批次 ${esc(b.batch_id || '无')} · ${b.method === 'quote' ? '按报价比例核价' : b.method === 'costs' ? '独立成本计算' : '比例目标'} · 税口径 ${esc({ unknown: '未知', included: '含税', excluded: '不含税', ignored: '本次不计税（未调税额）' }[b.tax_basis] || '未知')} · ${c.scope_confirmed ? '范围已人工确认' : '范围未确认'}` : 'SRC 编号仅代表款号来源，请填写真实业务订单与批次。'}</p><p>${esc(b?.source_note || '来源未填写')}</p>${comparisonQuoteEvidence(b)}${c ? `<details class="comparison-evidence"><summary>本次检测的完整版本信息</summary><p>检测编号 ${esc(c.id)}<br>实际快照 ${esc(c.snapshot_id)}<br>理论基线 ${esc(b?.id || '未绑定')}<br>规则版本 ${esc(r.version || '未记录')}<br>检测时间 ${comparisonTime(c.created_at)}</p></details>` : ''}${
     b
       ? `<div class="comparison-costs">${[
           ['quantity', '理论数量'],
@@ -224,6 +284,12 @@ function renderComparison() {
           ['other_production_cost', '其他生产成本'],
           ['production_cost', '生产成本合计'],
           ['production_profit', '生产毛利'],
+          ...(b.method === 'quote'
+            ? [
+                ['operating_expense', '另列经营费用预算'],
+                ['operating_profit', '已列费用经营利润预算'],
+              ]
+            : []),
         ]
           .map(
             ([k, l]) =>
@@ -231,11 +297,10 @@ function renderComparison() {
           )
           .join('')}</div>`
       : ''
-  }<p class="help">20% 降至 14% 为下降 6 个百分点。生产毛利为同范围收入减材料、直接人工、制造及其他生产成本，不含管理、销售和财务费用。日报不良 / 生产不等同最终报废率。</p></details>
+  }<p class="help">计划毛利率20%降至18%：下降2个百分点，相对计划下降10%，按新标准仍属正常。生产毛利为同范围收入减材料、直接人工、制造及其他生产成本，不含管理、销售和财务费用。日报不良 / 生产不等同最终报废率。</p></details>
   ${w?.records?.length > 1 ? `<section class="panel"><label>保存的检测版本<select id="comparison-record">${w.records.map((x, i) => `<option value="${esc(x.id)}" ${x.id === c?.id ? 'selected' : ''}>检测 ${i + 1} · ${comparisonShortTime(x.created_at)} · 理论 v${esc(x.baseline?.version || '—')}</option>`).join('')}</select></label><details class="comparison-evidence"><summary>完整版本编号</summary>${w.records.map((x) => `<p>${comparisonTime(x.created_at)} · 检测 ${esc(x.id)} · 基线 ${esc(x.baseline?.id || '未绑定')} · 规则 ${esc(x.rules?.version || '—')}</p>`).join('')}</details></section>` : ''}
   <section class="panel comparison-trends"><h2>观测趋势</h2><div class="comparison-grid">${comparisonTrend(w?.trend || [])}</div><p class="help">同一快照重检保留时间与规则版本，不代表新增生产进度。</p></section>
-  <dialog id="comparison-theory-dialog" class="comparison-dialog" aria-labelledby="comparison-theory-title"><div class="comparison-dialog-head"><h2 id="comparison-theory-title">导入 / 填写理论利润表</h2><button type="button" class="secondary" data-comparison-close>关闭</button></div><p class="comparison-dialog-message help" role="status" aria-live="polite"></p><fieldset ${disabled}><div class="comparison-import"><a href="/api/theory/template.xlsx" download>下载理论 Excel 模板 ↙</a><label>导入标准模板（仅预览，最大 10MB）<input id="comparison-import" type="file" accept=".xlsx"></label></div><p class="help">首版仅支持标准字段，不支持公式。预览后仍可修改，点击保存才创建新版本。</p><div id="comparison-preview" role="status"></div><form id="comparison-theory"><div class="comparison-grid"><label>基线方式<select name="method"><option value="ratio">比例目标</option><option value="costs">填写收入与成本，独立计算</option></select></label>${comparisonField('business_order_id', '真实业务订单号', comparisonOrder.startsWith('SRC-') ? '' : comparisonOrder, 'text', true)}${comparisonField('batch_id', '批次（选填）')}<label>税口径<select name="tax_basis"><option value="unknown">未知（同口径确认后仅参考比较）</option><option value="included">含税</option><option value="excluded">不含税</option></select></label><label class="comparison-ratio">理论生产毛利率（%）<input name="target_margin_pct" type="number" step="any" required></label>${comparisonField('target_defect_pct', '理论不良率（%，选填）', '', 'number')}${comparisonField('quantity', '理论数量（比例目标可选）', '', 'number')}${comparisonField('unit', '数量单位', orders.find((o) => o.order_id === comparisonOrder)?.unit || '双', 'text', true)}</div><div id="comparison-cost-fields" class="comparison-grid" hidden>${[
-    ['unit_price', '单价（元）'],
+  <dialog id="comparison-theory-dialog" class="comparison-dialog" aria-labelledby="comparison-theory-title"><div class="comparison-dialog-head"><h2 id="comparison-theory-title">导入 / 填写理论利润表</h2><button type="button" class="secondary" data-comparison-close>关闭</button></div><p class="comparison-dialog-message help" role="status" aria-live="polite"></p><fieldset ${disabled}><div class="comparison-import"><a href="/api/theory/template.xlsx" download>下载理论 Excel 模板 ↙</a><label>导入标准模板（仅预览，最大 10MB）<input id="comparison-import" type="file" accept=".xlsx"></label></div><p class="help">首版仅支持标准字段，不支持公式。预览后仍可修改，点击保存才创建新版本。</p><div id="comparison-preview" role="status"></div><form id="comparison-theory"><div class="comparison-grid"><label>基线方式<select name="method"><option value="ratio">比例目标</option><option value="costs">填写收入与成本，独立计算</option><option value="quote">按报价比例核价（计件人工另填）</option></select></label>${comparisonField('business_order_id', '真实业务订单号', comparisonOrder.startsWith('SRC-') ? '' : comparisonOrder, 'text', true)}${comparisonField('batch_id', '批次（选填）')}<label>税口径<select name="tax_basis"><option value="unknown">未知（同口径确认后仅参考比较）</option><option value="included">含税</option><option value="excluded">不含税</option><option value="ignored">本次不计税（不调整税额）</option></select></label><label class="comparison-ratio">理论生产毛利率（%）<input name="target_margin_pct" type="number" step="any" required></label>${comparisonField('target_defect_pct', '理论不良率（%，选填）', '', 'number')}${comparisonField('quantity', '理论数量（比例目标可选）', '', 'number')}${comparisonField('unit', '数量单位', orders.find((o) => o.order_id === comparisonOrder)?.unit || '双', 'text', true)}</div><div class="comparison-grid" id="comparison-price-fields">${comparisonField('unit_price', '报价单价（元/计量单位）', '', 'number')}</div><div id="comparison-cost-fields" class="comparison-grid" hidden>${[
     ['discount_per_pair', '每双折扣（元）'],
     ['material_cost', '整单材料成本（元）'],
     ['labor_cost', '整单人工成本（元）'],
@@ -245,19 +310,9 @@ function renderComparison() {
     .map(([k, l]) => comparisonField(k, l, '', 'number'))
     .join(
       '',
-    )}</div><label>来源及成本范围说明<textarea name="source_note" rows="2" maxlength="1000"></textarea></label><label class="comparison-confirm"><input name="scope_confirmed" type="checkbox">我已核对：仅当前实际快照与该理论基线属于同一业务订单 / 批次、同一数量与期间范围、相同收入成本及税口径，成本没有重复归集。</label><p class="help">未勾选仍可保存目标；毛利保持待比较。未知成本请保留空白，明确为零时才填写 0。成本方式由网站独立计算，无需填写目标毛利率。</p><button class="primary" type="submit">保存新理论版本并检查</button></form>
+    )}</div><section id="comparison-quote-fields" hidden><p class="help">比例以报价收入为基数，材料不含另列损耗。两项计件人工按订单数量计价，请核对计件范围。公司管理与行政另列经营费用；物流不纳入本轮预算。1.8%不良损耗是成本预算，不是不良数量率阈值。</p><button type="button" class="secondary" id="comparison-quote-example">填入已确认样例比例</button><div class="comparison-grid">${comparisonQuoteParameters.map(([k, l]) => comparisonField(k, l, '', 'number')).join('')}</div><div id="comparison-quote-preview" class="notice" role="status" aria-live="polite"></div></section><label>来源及成本范围说明<textarea name="source_note" rows="2" maxlength="1000"></textarea></label><label class="comparison-confirm"><input name="scope_confirmed" type="checkbox">我已核对：仅当前实际快照与该理论基线属于同一业务订单 / 批次、同一数量与期间范围、相同收入成本及税口径，成本没有重复归集。</label><p class="help">未勾选仍可保存目标；毛利保持待比较。未知成本请保留空白，明确为零时才填写 0。成本方式由网站独立计算，无需填写目标毛利率。</p><button class="primary" type="submit">保存新理论版本并检查</button></form>
   <form id="comparison-bind"><h3>绑定已有理论版本</h3><label>理论版本<select name="baseline_id" required><option value="">请选择</option>${(w?.baselines || []).map((x) => `<option value="${esc(x.id)}">${esc(x.business_order_id)} / ${esc(x.batch_id || '无批次')} · v${esc(x.version)} · ${x.is_demo ? '模拟' : '导入'}</option>`).join('')}</select></label><label class="comparison-confirm"><input name="scope_confirmed" type="checkbox">我已核对当前快照的同业务、同数量期间及收入成本范围、相同税口径</label><button class="secondary" type="submit">绑定所选版本并检查</button></form></fieldset>${historyViewing ? '<p class="help">历史回看不可创建或绑定基线。</p>' : ''}</dialog>
-  <dialog id="comparison-rules-dialog" class="comparison-dialog" aria-labelledby="comparison-rules-title"><div class="comparison-dialog-head"><h2 id="comparison-rules-title">全局暂定阈值 · 规则 ${esc(editableRules.version || '—')}</h2><button type="button" class="secondary" data-comparison-close>关闭</button></div><p class="comparison-dialog-message help" role="status" aria-live="polite"></p><p>毛利下降达到提醒 / 严重阈值触发（pp）；不良率达到阈值触发（%），红色优先。产量低于观察量时待观察。临时规则用于提示核查，不直接作停产或损失认定。</p><p class="help">规则修改时间 ${comparisonTime(editableRules.created_at)}；${historyViewing ? '当前显示保存检测的旧规则。' : '全局设置适用于后续订单检测；可点击重新检查当前订单，历史检测保留原规则。'}</p><form id="comparison-rules"><fieldset ${disabled}><div class="comparison-grid">${[
-    ['margin_warning_pp', '毛利提醒（pp）'],
-    ['margin_danger_pp', '毛利严重（pp）'],
-    ['defect_warning_pct', '不良率提醒（%）'],
-    ['defect_danger_pct', '不良率严重（%）'],
-    ['min_production', '质量最低观察数量'],
-  ]
-    .map(([k, l]) => comparisonField(k, l, editableRules[k], 'number', true))
-    .join(
-      '',
-    )}</div><button class="secondary" type="submit">保存新暂定规则</button></fieldset></form></dialog>
+  <dialog id="comparison-rules-dialog" class="comparison-dialog" aria-labelledby="comparison-rules-title"><div class="comparison-dialog-head"><h2 id="comparison-rules-title">全局判断标准 · 规则 ${esc(editableRules.version || '—')}</h2><button type="button" class="secondary" data-comparison-close>关闭</button></div><p class="comparison-dialog-message help" role="status" aria-live="polite"></p><p>新口径：（计划毛利率－当前毛利率）÷计划毛利率。计划须大于0，恰好10%正常、20%注意、30%重点；实际更优显示优于计划。质量阈值独立且仍为暂定。</p><p class="help">${historyViewing ? '历史只读，保存时的规则不重算。' : '保存只改变后续检测，当前保存检测须重新检查后更新，历史版本保留。'}</p><form id="comparison-rules"><fieldset ${disabled}>${comparisonRulesFields(editableRules)}<button class="secondary" type="submit">保存新判断标准</button></fieldset></form></dialog>
 `;
   $('comparison-view')
     .querySelectorAll('dialog')
@@ -267,6 +322,7 @@ function renderComparison() {
       );
     });
   updateComparisonMethod();
+  updateComparisonRuleMode();
 }
 function comparisonHandling(event, entries, comparison) {
   const history = entries.filter(
@@ -287,15 +343,74 @@ function updateComparisonMethod() {
   const f = $('comparison-theory');
   if (!f) return;
   const costs = f.elements.method.value === 'costs';
+  const quote = f.elements.method.value === 'quote';
+  const calculated = costs || quote;
+  $('comparison-quote-fields').hidden = !quote;
+  $('comparison-price-fields').hidden = !calculated;
+  f.elements.unit_price.disabled = !calculated;
+  f.elements.unit_price.required = calculated;
   $('comparison-cost-fields').hidden = !costs;
-  f.querySelector('.comparison-ratio').hidden = costs;
-  f.elements.target_margin_pct.required = !costs;
-  f.elements.target_margin_pct.disabled = costs;
-  f.elements.quantity.required = costs;
+  f.querySelector('.comparison-ratio').hidden = calculated;
+  f.elements.target_margin_pct.required = !calculated;
+  f.elements.target_margin_pct.disabled = calculated;
+  f.elements.quantity.required = calculated;
   for (const input of $('comparison-cost-fields').querySelectorAll('input')) {
     input.disabled = !costs;
     input.required = costs;
   }
+  for (const input of $('comparison-quote-fields').querySelectorAll('input')) {
+    input.disabled = !quote;
+    input.required = quote;
+    input.min = '0';
+    if (input.name.endsWith('_pct')) input.max = '100';
+  }
+  updateComparisonQuotePreview();
+}
+function updateComparisonQuotePreview() {
+  const f = $('comparison-theory');
+  if (!f || f.elements.method.value !== 'quote') return;
+  const read = (name) => {
+    const text = f.elements[name].value.trim();
+    return text !== '' && Number.isFinite(Number(text)) && Number(text) >= 0
+      ? Number(text)
+      : null;
+  };
+  const productionPctFields = comparisonQuoteParameters.slice(0, 5);
+  const rates = productionPctFields.map(([k]) => read(k));
+  const price = read('unit_price'),
+    quantity = read('quantity');
+  const missing = comparisonQuoteParameters
+    .filter(([k]) => read(k) === null)
+    .map(([, l]) => l);
+  const pct = rates.every((v) => v !== null && v <= 100)
+    ? rates.reduce((a, b) => a + b, 0)
+    : null;
+  const labour = [
+    read('preparation_labor_per_pair'),
+    read('press_labor_per_pair'),
+  ];
+  const complete =
+    price > 0 &&
+    quantity > 0 &&
+    pct !== null &&
+    !missing.length &&
+    comparisonQuoteParameters
+      .filter(([k]) => k.endsWith('_pct'))
+      .every(([k]) => read(k) <= 100);
+  let text =
+    pct === null
+      ? '请填写五项生产成本比例。'
+      : `已知比例生产成本 ${pct.toFixed(2)}%；扣计件人工前毛利率 ${(100 - pct).toFixed(2)}%。`;
+  if (complete) {
+    const margin =
+      100 - pct - (labour.reduce((a, b) => a + b, 0) / price) * 100;
+    const company = read('company_management_pct') + read('administration_pct');
+    text += ` 完整计划生产毛利率约 ${margin.toFixed(2)}%；另列公司经营费用 ${company.toFixed(2)}%。`;
+  } else {
+    text += ` 完整计划尚未形成。${missing.length ? '待填：' + missing.join('、') + '。' : '请核对数量、报价和比例范围。'}扣人工前值不能作为正式基线。`;
+  }
+  text += ' 本地预览仅供核对，保存时由后端独立精算；本预算不含物流。';
+  $('comparison-quote-preview').textContent = text;
 }
 async function comparisonWrite(path, payload) {
   if (
@@ -372,6 +487,16 @@ document.addEventListener('click', (e) => {
     e.target.closest('dialog').close();
   if (e.target.closest('#comparison-check'))
     comparisonWrite('/api/comparison/check', {});
+  if (e.target.closest('#comparison-quote-example')) {
+    const f = $('comparison-theory');
+    for (const [k, , v] of comparisonQuoteParameters)
+      if (v !== null) f.elements[k].value = v;
+    f.elements.scope_confirmed.checked = false;
+    updateComparisonQuotePreview();
+  }
+});
+$('comparison-view').addEventListener('input', (e) => {
+  if (e.target.closest('#comparison-theory')) updateComparisonQuotePreview();
 });
 $('comparison-view').addEventListener('change', async (e) => {
   if (e.target.id === 'comparison-order') {
@@ -379,6 +504,7 @@ $('comparison-view').addEventListener('change', async (e) => {
     refreshComparison(true);
   }
   if (e.target.name === 'method') updateComparisonMethod();
+  if (e.target.id === 'comparison-rule-mode') updateComparisonRuleMode();
   if (e.target.id === 'comparison-record') {
     const c = comparisonWorkspace.records.find((x) => x.id === e.target.value);
     if (c) {
@@ -417,11 +543,11 @@ $('comparison-view').addEventListener('change', async (e) => {
       return;
     const f = $('comparison-theory');
     for (const [k, v] of Object.entries(data.baseline || {}))
-      if (f.elements[k] && v != null) f.elements[k].value = v;
+      if (f.elements[k]) f.elements[k].value = v ?? '';
     f.elements.scope_confirmed.checked = false;
     updateComparisonMethod();
     $('comparison-preview').innerHTML =
-      `<div class="notice"><b>预览完成 · 尚未保存</b><p>业务订单 ${esc(data.baseline?.business_order_id)} · 方式 ${data.baseline?.method === 'costs' ? '收入成本独立复算' : '比例目标'} · 目标毛利率 ${comparisonNumber(data.baseline?.target_margin_pct, '%')} · 理论收入 ${comparisonNumber(data.baseline?.revenue, ' 元')}</p>${(data.warnings || []).map((x) => `<p>${esc(typeof x === 'string' ? x : JSON.stringify(x))}</p>`).join('')}<p>请核对下方可编辑字段，再保存新版本。</p></div>`;
+      `<div class="notice"><b>预览完成 · 尚未保存</b><p>业务订单 ${esc(data.baseline?.business_order_id)} · 方式 ${data.baseline?.method === 'quote' ? '按报价比例核价' : data.baseline?.method === 'costs' ? '收入成本独立复算' : '比例目标'} · 目标毛利率 ${comparisonNumber(data.baseline?.target_margin_pct, '%')} · 理论收入 ${comparisonNumber(data.baseline?.revenue, ' 元')}</p>${(data.warnings || []).map((x) => `<p>${esc(typeof x === 'string' ? x : JSON.stringify(x))}</p>`).join('')}<p>请核对下方可编辑字段，再保存新版本。</p></div>`;
   } catch (err) {
     if (seq === comparisonSequence && key === comparisonKey())
       $('comparison-preview').textContent = err.message;
@@ -435,8 +561,18 @@ $('comparison-view').addEventListener('submit', (e) => {
   if (f.id === 'comparison-theory') {
     const scope = f.elements.scope_confirmed.checked;
     delete values.scope_confirmed;
-    if (values.method === 'costs') delete values.target_margin_pct;
-    else
+    if (values.method === 'costs' || values.method === 'quote')
+      delete values.target_margin_pct;
+    if (values.method === 'quote') {
+      for (const key of [
+        'discount_per_pair',
+        'material_cost',
+        'labor_cost',
+        'manufacturing_cost',
+        'other_production_cost',
+      ])
+        delete values[key];
+    } else if (values.method === 'ratio')
       for (const k of [
         'unit_price',
         'discount_per_pair',

@@ -29,6 +29,15 @@ LABELS = {
     'tax_basis': '税口径',
     'source_note': '来源说明',
     'target_defect_pct': '目标不良率',
+    'material_pct': '材料成本比例',
+    'production_management_pct': '生产经管比例',
+    'production_loss_pct': '生产损耗比例',
+    'defect_loss_pct': '不良损耗比例',
+    'energy_pct': '能源成本比例',
+    'preparation_labor_per_pair': '准备人工单价',
+    'press_labor_per_pair': '压制人工单价',
+    'company_management_pct': '公司经管比例',
+    'administration_pct': '行政费用比例',
 }
 ALIASES = {key: key for key in LABELS}
 ALIASES.update({label: key for key, label in LABELS.items()})
@@ -47,6 +56,16 @@ ALIASES.update(
         '理论生产毛利率': 'target_margin_pct',
         '目标毛利率': 'target_margin_pct',
         '理论毛利率': 'target_margin_pct',
+        '材料比例': 'material_pct',
+        '生产经管': 'production_management_pct',
+        '生产损耗': 'production_loss_pct',
+        '不良品损耗': 'defect_loss_pct',
+        '不良损耗': 'defect_loss_pct',
+        '能源比例': 'energy_pct',
+        '准备工价': 'preparation_labor_per_pair',
+        '压制工价': 'press_labor_per_pair',
+        '公司经管': 'company_management_pct',
+        '行政费用': 'administration_pct',
     }
 )
 COST_FIELDS = (
@@ -55,10 +74,22 @@ COST_FIELDS = (
     'manufacturing_cost',
     'other_production_cost',
 )
+QUOTE_FIELDS = (
+    'material_pct',
+    'production_management_pct',
+    'production_loss_pct',
+    'defect_loss_pct',
+    'energy_pct',
+    'preparation_labor_per_pair',
+    'press_labor_per_pair',
+    'company_management_pct',
+    'administration_pct',
+)
 NUMERIC_FIELDS = (
     ('quantity', 'unit_price', 'discount_per_pair')
     + COST_FIELDS
     + ('target_margin_pct', 'target_defect_pct')
+    + QUOTE_FIELDS
 )
 
 
@@ -120,8 +151,8 @@ def normalize_baseline(payload: dict) -> dict:
     with localcontext() as context:
         context.prec = 80
         method = payload.get('method')
-        if method not in ('ratio', 'costs'):
-            raise ValueError('计算方式必须为ratio或costs')
+        if method not in ('ratio', 'costs', 'quote'):
+            raise ValueError('计算方式必须为ratio、costs或quote')
         result = {'method': method}
         for field, maximum, default, required in (
             ('business_order_id', 200, '', True),
@@ -131,27 +162,63 @@ def normalize_baseline(payload: dict) -> dict:
         ):
             result[field] = _text(payload, field, maximum, default, required)
         tax = payload.get('tax_basis', 'unknown')
-        if tax not in ('unknown', 'included', 'excluded'):
-            raise ValueError('税口径必须为unknown、included或excluded')
+        if tax not in ('unknown', 'included', 'excluded', 'ignored'):
+            raise ValueError('税口径必须为unknown、included、excluded或ignored')
         result['tax_basis'] = tax
         numbers = {}
         for field in NUMERIC_FIELDS:
             required = (
-                method == 'costs'
-                and field not in ('target_margin_pct', 'target_defect_pct')
-            ) or (method == 'ratio' and field == 'target_margin_pct')
+                (
+                    method == 'costs'
+                    and field
+                    in ('quantity', 'unit_price', 'discount_per_pair') + COST_FIELDS
+                )
+                or (method == 'ratio' and field == 'target_margin_pct')
+                or (
+                    method == 'quote'
+                    and field in ('quantity', 'unit_price') + QUOTE_FIELDS
+                )
+            )
             number = _number(
                 payload.get(field), field, required, field.endswith('_pct')
             )
             if number is not None:
                 if field == 'quantity' and number <= 0:
                     raise ValueError('订单数量必须大于零')
+                if method == 'quote' and field == 'unit_price' and number <= 0:
+                    raise ValueError('报价单价必须大于零')
                 if field not in ('target_margin_pct', 'quantity') and number < 0:
                     raise ValueError(f'{LABELS[field]}不能为负数')
                 if field.endswith('_pct') and number > 100:
                     raise ValueError(f'{LABELS[field]}不能超过100%')
             numbers[field] = number
-        revenue = cost = profit = None
+        revenue = cost = profit = operating_expense = operating_profit = None
+        if method == 'quote':
+            revenue = numbers['quantity'] * numbers['unit_price']
+            numbers['material_cost'] = revenue * numbers['material_pct'] / 100
+            numbers['labor_cost'] = (
+                numbers['quantity']
+                * (
+                    numbers['preparation_labor_per_pair']
+                    + numbers['press_labor_per_pair']
+                )
+                + revenue * numbers['production_management_pct'] / 100
+            )
+            numbers['manufacturing_cost'] = revenue * numbers['energy_pct'] / 100
+            numbers['other_production_cost'] = (
+                revenue
+                * (numbers['production_loss_pct'] + numbers['defect_loss_pct'])
+                / 100
+            )
+            cost = sum(numbers[field] for field in COST_FIELDS)
+            profit = revenue - cost
+            numbers['target_margin_pct'] = profit / revenue * 100
+            operating_expense = (
+                revenue
+                * (numbers['company_management_pct'] + numbers['administration_pct'])
+                / 100
+            )
+            operating_profit = profit - operating_expense
         if method == 'costs':
             revenue = numbers['quantity'] * (
                 numbers['unit_price'] - numbers['discount_per_pair']
@@ -171,6 +238,8 @@ def normalize_baseline(payload: dict) -> dict:
             revenue=_format(revenue),
             production_cost=_format(cost),
             production_profit=_format(profit),
+            operating_expense=_format(operating_expense),
+            operating_profit=_format(operating_profit),
         )
         return result
 
@@ -312,6 +381,13 @@ def preview_theory(content: bytes) -> dict:
             warnings.append('比例目标未反推收入或成本；缺少依据的金额保持为空。')
         if baseline['tax_basis'] == 'unknown':
             warnings.append('税口径尚未确认。')
+        if baseline['method'] == 'quote':
+            warnings.append(
+                '报价比例核价：生产经管计入人工成本，损耗计入其他生产成本；'
+                '公司经管与行政费用单列经营费用，物流不纳入本轮预算。'
+            )
+        if baseline['tax_basis'] == 'ignored':
+            warnings.append('本次不计税，不作税额调整；比较仍需确认费用与税口径范围。')
         return {
             'baseline': baseline,
             'warnings': warnings,
@@ -348,9 +424,17 @@ def theory_template() -> bytes:
         ],
         ['成本方法独立计算：（数量×（报价－每双折扣）－四项成本合计）÷收入×100。'],
         [
+            'quote：填写数量、报价、全部报价比例及准备/压制人工单价；人工未知不得留空后按零处理，明确为零时填写0。'
+        ],
+        [
+            'quote生产成本：材料比例＋生产经管比例＋生产损耗比例＋不良损耗比例＋能源比例对应收入金额，加两项人工单价×数量。公司经管与行政费用单列经营费用；物流不纳入本轮预算。'
+        ],
+        [
             '百分数输入示例：20、20%或Excel百分数格式的20%均表示20个百分点；示例不代表企业目标。'
         ],
-        ['税口径：unknown未确认、included含税、excluded不含税。'],
+        [
+            '税口径：unknown未确认、included含税、excluded不含税、ignored本次不计税且不作税额调整。'
+        ],
         [
             '成本均为同范围总金额；折扣为每计量单位金额。生产成本不含管理、销售、财务费用，勿重复归集。'
         ],

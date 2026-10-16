@@ -21,6 +21,93 @@ def workbook(rows, percent_cell=None):
 
 
 class TheoryTests(unittest.TestCase):
+    def quote(self, **updates):
+        data = dict(
+            method='quote', business_order_id='业务001', quantity='100500',
+            unit_price='17.2', material_pct='65', production_management_pct='2.8',
+            production_loss_pct='0.8', defect_loss_pct='1.8', energy_pct='0.2',
+            preparation_labor_per_pair='0', press_labor_per_pair='0',
+            company_management_pct='2', administration_pct='1', tax_basis='ignored',
+        )
+        data.update(updates)
+        return data
+
+    def test_quote_zero_labor_and_expenses_classification(self):
+        result = normalize_baseline(self.quote())
+        self.assertEqual(result['revenue'], '1728600')
+        self.assertEqual(result['production_cost'], '1220391.6')
+        self.assertEqual(result['target_margin_pct'], '29.4')
+        self.assertEqual(result['operating_expense'], '51858')
+        self.assertEqual(result['operating_profit'], '456350.4')
+        self.assertEqual(result['labor_cost'], '48400.8')
+        self.assertEqual(result['manufacturing_cost'], '3457.2')
+        self.assertEqual(result['other_production_cost'], '44943.6')
+        self.assertEqual(result['tax_basis'], 'ignored')
+        self.assertIsNone(result['target_defect_pct'])
+        self.assertEqual(result['defect_loss_pct'], '1.8')
+
+    def test_quote_labor_required_positive_price_and_individual_percentage_limits(self):
+        for field in ('preparation_labor_per_pair', 'press_labor_per_pair'):
+            for missing in (None, ''):
+                with self.subTest(field=field, missing=missing), self.assertRaises(ValueError):
+                    normalize_baseline(self.quote(**{field: missing}))
+        for updates in (
+            {'quantity': '0'}, {'unit_price': '0'}, {'energy_pct': '101'},
+            {'material_pct': '-1'}, {'preparation_labor_per_pair': '-1'},
+        ):
+            with self.subTest(updates=updates), self.assertRaises(ValueError):
+                normalize_baseline(self.quote(**updates))
+        result = normalize_baseline(self.quote(material_pct='100'))
+        self.assertLess(float(result['target_margin_pct']), 0)
+
+    def test_quote_labor_and_management_do_not_change_production_scope(self):
+        result = normalize_baseline(
+            self.quote(preparation_labor_per_pair='1', press_labor_per_pair='.5')
+        )
+        self.assertEqual(result['target_margin_pct'], '20.679069767442')
+        self.assertEqual(result['labor_cost'], '199150.8')
+        result = normalize_baseline(
+            self.quote(company_management_pct='0', administration_pct='0')
+        )
+        self.assertEqual(result['target_margin_pct'], '29.4')
+
+    def test_quote_excel_preview_accepts_standard_fields_and_preserves_sources(self):
+        rows = [['字段', '数值']] + [[key, value] for key, value in self.quote().items()]
+        result = preview_theory(workbook(rows))
+        self.assertEqual(result['baseline']['target_margin_pct'], '29.4')
+        self.assertEqual(result['baseline']['production_management_pct'], '2.8')
+        self.assertTrue(any('物流' in warning for warning in result['warnings']))
+
+    def test_quote_all_source_fields_required_and_percent_formats(self):
+        data = self.quote()
+        for field in set(data) - {'method', 'business_order_id', 'tax_basis'}:
+            missing = dict(data)
+            del missing[field]
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, '不能为空'):
+                normalize_baseline(missing)
+        data['material_pct'] = '65%'
+        data['defect_loss_pct'] = '1.8%'
+        result = normalize_baseline(data)
+        self.assertEqual(result['target_margin_pct'], '29.4')
+        rows = [['字段', '数值']] + [[key, value] for key, value in self.quote().items()]
+        material_row = next(i for i, row in enumerate(rows, 1) if row[0] == 'material_pct')
+        rows[material_row - 1] = ['材料成本比例', .65]
+        result = preview_theory(workbook(rows, f'B{material_row}'))
+        self.assertEqual(result['baseline']['material_pct'], '65')
+
+    def test_expanded_template_remains_valid_for_ratio_with_quote_fields_empty(self):
+        book = load_workbook(io.BytesIO(theory_template()))
+        sheet = book['理论利润表']
+        for row in sheet.iter_rows(min_row=2):
+            if row[0].value == '业务订单号':
+                row[1].value = '业务001'
+            elif row[0].value == '目标生产毛利率':
+                row[1].value = 20
+        stream = io.BytesIO()
+        book.save(stream)
+        result = preview_theory(stream.getvalue())
+        self.assertEqual(result['baseline']['target_margin_pct'], '20')
+
     def ratio(self, **updates):
         return dict(
             method='ratio',

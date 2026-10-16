@@ -6,6 +6,7 @@ async function browserDecisionReport(page) {
   };
   const requests = [];
   let activeScenario = false;
+  let relativeScenario = null;
   const pattern = '**/api/comparison?snapshot_id=REPORT-TEST-*';
   await page.route(pattern, async (route) => {
     const req = route.request();
@@ -29,7 +30,11 @@ async function browserDecisionReport(page) {
                 snapshot_id: url.searchParams.get('snapshot_id'),
                 order_id: id,
                 created_at: '2025-01-02',
-                severity: activeScenario ? 'danger' : 'warning',
+                severity: relativeScenario
+                  ? relativeScenario.status
+                  : activeScenario
+                    ? 'danger'
+                    : 'warning',
                 events: activeScenario
                   ? [
                       ...Array.from({ length: 4 }, (_, i) => ({
@@ -50,15 +55,25 @@ async function browserDecisionReport(page) {
                     ]
                   : [],
                 scope_confirmed: false,
-                rules: { version: 'HISTORICAL-RULE', provisional: true },
+                rules: relativeScenario
+                  ? {
+                      version: 'SAVED-RELATIVE-RULE',
+                      margin_mode: 'relative',
+                      margin_attention_pct: '10',
+                      margin_focus_pct: '20',
+                      margin_severe_pct: '30',
+                      provisional: true,
+                    }
+                  : { version: 'HISTORICAL-RULE', provisional: true },
                 baseline: {
                   id: 'THEORY-OLD',
                   version: 3,
-                  tax_basis: 'unknown',
+                  tax_basis: relativeScenario ? 'ignored' : 'unknown',
+                  method: relativeScenario ? 'quote' : 'margin',
                 },
                 pending: ['同单范围待确认'],
                 metrics: {
-                  margin: {
+                  margin: relativeScenario || {
                     target_pct: '25',
                     value_pct: '20',
                     delta_pp: '5',
@@ -149,6 +164,9 @@ async function browserDecisionReport(page) {
     );
     assert(
       body.includes('HISTORICAL-RULE') &&
+        body.includes('历史百分点规则') &&
+        body.includes('5.00 个百分点') &&
+        !body.includes('相对下降四级规则') &&
         !body.includes('CURRENT-RULE-MUST-NOT-APPEAR'),
       'Historical rule contamination',
     );
@@ -302,8 +320,72 @@ async function browserDecisionReport(page) {
       body.includes('非完整明细') && body.includes('保存检测仍有毛利预警'),
       'Summary scope or active-event action missing',
     );
+    activeScenario = false;
+    for (const scenario of [
+      {
+        target_pct: '25',
+        value_pct: '18',
+        delta_pp: '7',
+        relative_drop_pct: '28',
+        status: 'focus',
+        performance: 'below_plan',
+        margin_mode: 'relative',
+        message: '重点毛利预警：相对下降28%。',
+      },
+      {
+        target_pct: '25',
+        value_pct: '27',
+        delta_pp: '-2',
+        relative_drop_pct: '-8',
+        status: 'normal',
+        performance: 'better',
+        margin_mode: 'relative',
+        message: '优于计划',
+      },
+    ]) {
+      relativeScenario = scenario;
+      await page.evaluate(() => {
+        document.querySelector('#report-dialog').close();
+        openDecisionReport();
+      });
+      await page.waitForFunction(
+        () => !document.querySelector('#report-print').disabled,
+      );
+      body = await report.innerText();
+      assert(
+        body.includes('相对下降四级规则') &&
+          body.includes('≤10%正常') &&
+          body.includes('≤20%注意') &&
+          body.includes('≤30%重点') &&
+          body.includes('超过30%严重'),
+        'Saved relative threshold explanation missing',
+      );
+      assert(
+        body.includes('本次不计税') &&
+          body.includes('仅作理论依据') &&
+          body.includes('300.00 元'),
+        'Quote budget changed actual net profit or lost scope labels',
+      );
+      if (scenario.status === 'focus') {
+        assert(
+          body.includes('28.00%') &&
+            body.includes('7.00 个百分点') &&
+            body.includes('重点毛利预警') &&
+            body.includes('保存检测仍有毛利预警'),
+          'Relative focus alert or delta missing',
+        );
+      } else {
+        assert(
+          body.includes('优于计划') &&
+            body.includes('-8.00%') &&
+            body.includes('提高 2.00 个百分点') &&
+            !body.includes('保存检测仍有毛利预警'),
+          'Better-than-plan result mislabeled',
+        );
+      }
+    }
     assert(
-      requests.length === 4 && requests.every((method) => method === 'GET'),
+      requests.length === 6 && requests.every((method) => method === 'GET'),
       'Report made a mutation or unexpected request',
     );
     await page.locator('[data-report-close]').click();
