@@ -4,6 +4,12 @@
 
 当前可运行版本使用24笔合成演示订单；真实企业数据、正式核算后端及AI服务尚未接入。API契约是开发设计，不代表后端接口已经实现。
 
+## 下载共同开发包
+
+- [完整开发包 ZIP](https://github.com/JamesYang0506/qiying-ai-mvp/releases/download/order-monitor-dev-20261017/qiying-order-monitor-dev-20261017.zip)：网站源码、启动文件、三模块设计、OpenAPI契约、联调样例与测试。
+- [三模块接口设计包 ZIP](https://github.com/JamesYang0506/qiying-ai-mvp/releases/download/order-monitor-dev-20261017/qiying-module-interface-v1.zip)：便于单独分发和评审的接口设计文档。
+- [发布说明与文件校验值](https://github.com/JamesYang0506/qiying-ai-mvp/releases/tag/order-monitor-dev-20261017)。开发包为预发布版本，解压后进入文件夹运行 `npm start`；协作提交代码仍建议使用Git克隆仓库。
+
 ## 启动网站
 
 需要 Node.js 20 或以上，无需安装前端依赖。
