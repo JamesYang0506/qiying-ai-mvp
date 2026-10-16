@@ -1,0 +1,2 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {renderImportedVariance} from '../dist/imported-workspace.js';
+test('variance display preserves cents and does not label zero as negative',()=>{const html=renderImportedVariance([{name:'价格',delta:12666.46},{name:'舍入',delta:-.17},{name:'其他',delta:0}]);assert.ok(html.includes('+¥12,666.46'));assert.ok(html.includes('−¥0.17'));assert.ok(html.includes('¥0.00'));assert.ok(!html.includes('−¥0.00'));});
