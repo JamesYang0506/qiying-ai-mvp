@@ -36,7 +36,7 @@ const comparisonQuoteParameters = [
 ];
 function comparisonQuoteEvidence(baseline) {
   if (baseline?.method !== 'quote') return '';
-  return `<details class="comparison-evidence"><summary>报价核价的原始比例与计件单价</summary><div class="comparison-costs">${comparisonQuoteParameters.map(([k, l]) => `<div><span>${l}</span><strong>${comparisonNumber(baseline[k], k.endsWith('_pct') ? '%' : ' 元')}</strong></div>`).join('')}</div><p>公司经管及行政另列经营费用，物流不纳入本计划；不良品损耗比例是成本预算，不能替代不良数量率阈值。</p></details>`;
+  return `<details class="comparison-evidence"><summary>报价核价的原始比例与计件单价</summary><div class="comparison-costs">${comparisonQuoteParameters.map(([k, l]) => `<div><span>${l}</span><strong>${comparisonNumber(baseline[k], k.endsWith('_pct') ? '%' : ' 元')}</strong></div>`).join('')}</div><p>两项计件人工与生产管理工资已计入下方成本构成的「人工成本」，不另行累加。公司经管及行政另列经营费用，物流不纳入本计划；不良品损耗比例是成本预算，不能替代不良数量率阈值。</p></details>`;
 }
 function comparisonRulesFields(rules) {
   return `<label>毛利判断口径<select name="margin_mode" id="comparison-rule-mode"><option value="relative" ${comparisonRelative(rules) ? 'selected' : ''}>相对计划下降（四级）</option><option value="points" ${!comparisonRelative(rules) ? 'selected' : ''}>旧版百分点（历史兼容）</option></select></label>
@@ -284,7 +284,12 @@ function renderComparison() {
           ['discount_per_pair', '每双折扣'],
           ['revenue', '理论收入'],
           ['material_cost', '材料'],
-          ['labor_cost', '直接人工'],
+          [
+            'labor_cost',
+            b.method === 'quote'
+              ? '人工成本（计件单价＋生产经管比例）'
+              : '人工成本',
+          ],
           ['manufacturing_cost', '加工 / 制造'],
           ['other_production_cost', '其他生产成本'],
           ['production_cost', '生产成本合计'],
@@ -315,7 +320,7 @@ function renderComparison() {
     .map(([k, l]) => comparisonField(k, l, '', 'number'))
     .join(
       '',
-    )}</div><section id="comparison-quote-fields" hidden><p class="help">比例以报价收入为基数，材料不含另列损耗。两项计件人工按订单数量计价，请核对计件范围。公司管理与行政另列经营费用；物流不纳入本轮预算。1.8%不良损耗是成本预算，不是不良数量率阈值。</p><button type="button" class="secondary" id="comparison-quote-example">填入已确认样例比例</button><div class="comparison-grid">${comparisonQuoteParameters.map(([k, l]) => comparisonField(k, l, '', 'number')).join('')}</div><div id="comparison-quote-preview" class="notice" role="status" aria-live="polite"></div></section><label>来源及成本范围说明<textarea name="source_note" rows="2" maxlength="1000"></textarea></label><label class="comparison-confirm"><input name="scope_confirmed" type="checkbox">我已核对：仅当前实际快照与该理论基线属于同一业务订单 / 批次、同一数量与期间范围、相同收入成本及税口径，成本没有重复归集。</label><p class="help">未勾选仍可保存目标；毛利保持待比较。未知成本请保留空白，明确为零时才填写 0。成本方式由网站独立计算，无需填写目标毛利率。</p><button class="primary" type="submit">保存新理论版本并检查</button></form>
+    )}</div><section id="comparison-quote-fields" hidden><p class="help">比例以报价收入为基数，材料不含另列损耗。两项计件人工与生产管理工资都计入人工成本一项，不会分开再累加。两项计件人工按订单数量计价，请核对计件范围。公司管理与行政另列经营费用；物流不纳入本轮预算。1.8%不良损耗是成本预算，不是不良数量率阈值。</p><button type="button" class="secondary" id="comparison-quote-example">填入已确认样例比例</button><div class="comparison-grid">${comparisonQuoteParameters.map(([k, l]) => comparisonField(k, l, '', 'number')).join('')}</div><div id="comparison-quote-preview" class="notice" role="status" aria-live="polite"></div></section><label>来源及成本范围说明<textarea name="source_note" rows="2" maxlength="1000"></textarea></label><label class="comparison-confirm"><input name="scope_confirmed" type="checkbox">我已核对：仅当前实际快照与该理论基线属于同一业务订单 / 批次、同一数量与期间范围、相同收入成本及税口径，成本没有重复归集。</label><p class="help">未勾选仍可保存目标；毛利保持待比较。未知成本请保留空白，明确为零时才填写 0。成本方式由网站独立计算，无需填写目标毛利率。</p><button class="primary" type="submit">保存新理论版本并检查</button></form>
   <form id="comparison-bind"><h3>绑定已有理论版本</h3><label>理论版本<select name="baseline_id" required><option value="">请选择</option>${(w?.baselines || []).map((x) => `<option value="${esc(x.id)}">${esc(x.business_order_id)} / ${esc(x.batch_id || '无批次')} · v${esc(x.version)} · ${x.is_demo ? '模拟' : '导入'}</option>`).join('')}</select></label><label class="comparison-confirm"><input name="scope_confirmed" type="checkbox">我已核对当前快照的同业务、同数量期间及收入成本范围、相同税口径</label><button class="secondary" type="submit">绑定所选版本并检查</button></form></fieldset>${historyViewing ? '<p class="help">历史回看不可创建或绑定基线。</p>' : ''}</dialog>
   <dialog id="comparison-rules-dialog" class="comparison-dialog" aria-labelledby="comparison-rules-title"><div class="comparison-dialog-head"><h2 id="comparison-rules-title">全局判断标准 · 规则 ${esc(editableRules.version || '—')}</h2><button type="button" class="secondary" data-comparison-close>关闭</button></div><p class="comparison-dialog-message help" role="status" aria-live="polite"></p><p>新口径：（计划毛利率－当前毛利率）÷计划毛利率。计划须大于0，恰好10%正常、20%注意、30%重点；实际更优显示优于计划。质量阈值独立且仍为暂定。</p><p class="help">${historyViewing ? '历史只读，保存时的规则不重算。' : '保存只改变后续检测，当前保存检测须重新检查后更新，历史版本保留。'}</p><form id="comparison-rules"><fieldset ${disabled}>${comparisonRulesFields(editableRules)}<button class="secondary" type="submit">保存新判断标准</button></fieldset></form></dialog>
 `;
