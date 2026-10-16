@@ -246,6 +246,7 @@ function renderComparison() {
     .join('')}</div>
   ${c?.rules?.version && w?.rules?.version && c.rules.version !== w.rules.version && !historyViewing ? '<p class="help">当前保存检测使用旧规则版本；重新检查后才采用当前全局标准。</p>' : ''}
   ${c?.pending?.length ? `<div class="comparison-pending"><h3>待补依据 / 待观察</h3><ul>${c.pending.map((p) => `<li>${comparisonDisplayMessage(p)}</li>`).join('')}</ul></div>` : ''}</section>
+  ${comparisonComposition(b)}
   <section id="comparison-alerts" class="panel"><h2>预警事件与处理记录</h2><p class="help">检测状态与人工处理分开。已确认 / 已关闭不会消除仍存在的异常。</p>${
     ((historyViewing ? c?.events : w?.events) || [])
       .map(
@@ -333,6 +334,60 @@ function renderComparison() {
     });
   updateComparisonMethod();
   updateComparisonRuleMode();
+}
+// 理论与实际都按各自收入拆成同样的三项，复用首页决策概览的圆环与配色，便于直接对照。
+function comparisonComposition(baseline) {
+  const source = result?.source_analysis,
+    metrics = source?.metrics,
+    add = (values) =>
+      values.every((v) => v !== null && v !== undefined && v !== '')
+        ? values.reduce((s, v) => s + Number(v), 0)
+        : null,
+    cards = [];
+  if (baseline?.method === 'costs' || baseline?.method === 'quote') {
+    cards.push(
+      renderProfitPie(
+        '理论计划 · 收入如何分配',
+        baseline.revenue,
+        [
+          ['材料成本', baseline.material_cost, PALETTE.revenue],
+          [
+            '人工及加工成本',
+            add([
+              baseline.labor_cost,
+              baseline.manufacturing_cost,
+              baseline.other_production_cost,
+            ]),
+            PALETTE.expense,
+          ],
+          ['生产毛利', baseline.production_profit, PALETTE.profit],
+        ],
+        false,
+        '理论收入',
+      ),
+    );
+  }
+  const actual =
+    source?.order_id === comparisonOrder && metrics
+      ? [
+          ['材料成本', metrics.material_total, PALETTE.revenue],
+          ['人工及加工成本', metrics.processing_total, PALETTE.expense],
+          ['生产毛利', source.profit_layers?.production_profit, PALETTE.profit],
+        ]
+      : null;
+  if (actual) {
+    cards.push(
+      renderProfitPie(
+        '实际 · 收入如何分配',
+        metrics.revenue,
+        actual,
+        false,
+        '本单折后收入',
+      ),
+    );
+  }
+  if (!cards.length) return '';
+  return `<section class="panel comparison-composition"><h2>成本与利润构成</h2><div class="profit-pie-grid">${cards.join('')}</div><p class="chart-note">两张图各以自己口径的收入为100%：理论按计划单价与数量，实际按订单折后收入；两张图的金额不能相加，也不与上方毛利率直接等同。理论侧的人工及加工成本＝人工＋加工制造＋其他生产，两项计件人工与生产管理工资已含在内。逐项舍入与汇总舍入可能有分位尾差。${actual ? '' : '实际成本构成取自本次导入的成本明细，当前对照订单不是该明细所属订单时只显示理论侧。'}</p></section>`;
 }
 function comparisonHandling(event, entries, comparison) {
   const history = entries.filter(

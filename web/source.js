@@ -172,7 +172,13 @@ function renderProfitLayers(a) {
   </div><p class="chart-note">两张图均以本单折后收入为100%，分别展示生产和经营阶段，不能把两张图的金额相加。生产工资已包含在人工及加工费中，不能再次扣除。逐项舍入与汇总舍入可能有分位尾差。经营净利试算的费用范围尚未确认完整。</p>`;
 }
 
-function renderProfitPie(title, revenue, segments, compact = false) {
+function renderProfitPie(
+  title,
+  revenue,
+  segments,
+  compact = false,
+  caption = '本单折后收入',
+) {
   const display = compact
     ? (value) =>
         value === null || value === undefined
@@ -213,7 +219,7 @@ function renderProfitPie(title, revenue, segments, compact = false) {
         ? '收入不大于零，暂不计算收入占比。'
         : '金额暂未勾稽平衡，暂不生成占比图。';
   return `<article class="profit-pie-card"><h3>${esc(title)}</h3><p>金额与占比均为当前参考试算</p><div class="profit-pie-body">
-  ${valid ? `<svg class="profit-donut" viewBox="0 0 220 220" role="img" aria-label="${esc(title)}，各项金额及占比见图例"><circle cx="110" cy="110" r="82" fill="none" stroke="${PALETTE.pieTrack}" stroke-width="30"/>${arcs}<text x="110" y="101" text-anchor="middle" class="donut-caption">本单折后收入${compact ? '' : ' / 元'}</text><text x="110" y="126" text-anchor="middle" class="donut-total">${compact ? display(revenue) : money(revenue)}</text></svg>` : `<div class="profit-pie-unavailable">${reason}</div>`}
+  ${valid ? `<svg class="profit-donut" viewBox="0 0 220 220" role="img" aria-label="${esc(title)}，各项金额及占比见图例"><circle cx="110" cy="110" r="82" fill="none" stroke="${PALETTE.pieTrack}" stroke-width="30"/>${arcs}<text x="110" y="101" text-anchor="middle" class="donut-caption">${esc(caption)}${compact ? '' : ' / 元'}</text><text x="110" y="126" text-anchor="middle" class="donut-total">${compact ? display(revenue) : money(revenue)}</text></svg>` : `<div class="profit-pie-unavailable">${reason}</div>`}
   <ul class="profit-pie-legend">${segments.map(([label, value, color]) => `<li><span class="pie-key" style="background:${color}"></span><div><span>${esc(label)}</span><strong>${value === null || value === undefined ? '待补' : display(value)}</strong></div><b>${valid ? (compact ? ((Number(value) / total) * 100).toFixed(2) + '%' : percent(Number(value) / total)) : '—'}</b></li>`).join('')}</ul></div></article>`;
 }
 
