@@ -1,1 +1,0 @@
-"""Deterministic order profitability calculations."""

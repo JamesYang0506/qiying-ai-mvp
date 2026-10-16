@@ -1,0 +1,146 @@
+{
+  "atomic": true,
+  "reports": [
+    {
+      "order_id": "QY-DEMO-001",
+      "business_date": "2026-10-16",
+      "report_key": "line-1",
+      "source_system": "synthetic",
+      "source_record_id": "DAILY-001",
+      "expected_revision": 0,
+      "completed_quantity": "100",
+      "quantity_unit": "pair",
+      "actual_input": {
+        "revenue_lines": [
+          {
+            "line_id": "L1",
+            "unit_price": "100",
+            "quantity": "100",
+            "quantity_unit": "pair",
+            "discount": "0.00",
+            "source_refs": [
+              {
+                "record_id": "ACT-REV",
+                "source_system": "synthetic",
+                "source_record_id": "ACT-REV",
+                "confirmed": true
+              }
+            ]
+          }
+        ],
+        "material_basis": "actual_net",
+        "material_scope_confirmed": true,
+        "materials": [
+          {
+            "line_id": "M1",
+            "material_id": "MAT1",
+            "quantity": "1100",
+            "quantity_unit": "kg",
+            "weighted_price": "5",
+            "loss_rate": null,
+            "source_refs": [
+              {
+                "record_id": "ACT-MAT",
+                "source_system": "synthetic",
+                "source_record_id": "ACT-MAT",
+                "confirmed": true
+              }
+            ]
+          }
+        ],
+        "labor": [
+          {
+            "line_id": "W1",
+            "stage_id": "S1",
+            "piece_rate": "21.8",
+            "payable_quantity": "100",
+            "quantity_unit": "pair",
+            "source_refs": [
+              {
+                "record_id": "ACT-LAB",
+                "source_system": "synthetic",
+                "source_record_id": "ACT-LAB",
+                "confirmed": true
+              }
+            ]
+          }
+        ],
+        "manufacturing_allocations": [
+          {
+            "line_id": "F1",
+            "pool_version_id": "ACT-POOL-v1",
+            "period_start": "2026-10-01",
+            "period_end": "2026-10-16",
+            "amount": "1000.00",
+            "quality": "complete",
+            "source_refs": [
+              {
+                "record_id": "ACT-POOL",
+                "source_system": "synthetic",
+                "source_record_id": "ACT-POOL",
+                "confirmed": true
+              }
+            ]
+          }
+        ],
+        "expenses": [
+          {
+            "line_id": "E0",
+            "category": "other_production",
+            "amount": "0.00",
+            "source_refs": [
+              {
+                "record_id": "ACT-other_production",
+                "source_system": "synthetic",
+                "source_record_id": "ACT-other_production",
+                "confirmed": true
+              }
+            ]
+          },
+          {
+            "line_id": "E1",
+            "category": "management",
+            "amount": "100.00",
+            "source_refs": [
+              {
+                "record_id": "ACT-management",
+                "source_system": "synthetic",
+                "source_record_id": "ACT-management",
+                "confirmed": true
+              }
+            ]
+          },
+          {
+            "line_id": "E2",
+            "category": "sales",
+            "amount": "50.00",
+            "source_refs": [
+              {
+                "record_id": "ACT-sales",
+                "source_system": "synthetic",
+                "source_record_id": "ACT-sales",
+                "confirmed": true
+              }
+            ]
+          },
+          {
+            "line_id": "E3",
+            "category": "finance",
+            "amount": "20.00",
+            "source_refs": [
+              {
+                "record_id": "ACT-finance",
+                "source_system": "synthetic",
+                "source_record_id": "ACT-finance",
+                "confirmed": true
+              }
+            ]
+          }
+        ],
+        "management_enabled": true,
+        "coverage_confirmed": true,
+        "quality": "complete"
+      }
+    }
+  ]
+}

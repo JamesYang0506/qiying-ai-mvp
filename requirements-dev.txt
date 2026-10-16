@@ -1,0 +1,2 @@
+# Only needed for contract example validation; the website itself needs no Python.
+jsonschema==4.26.0

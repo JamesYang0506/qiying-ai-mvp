@@ -1,0 +1,113 @@
+{
+  "schema_version": "1.0",
+  "request_id": "REQ-AI-DEMO-001",
+  "data": {
+    "job_id": "AIJOB-DEMO-001",
+    "conversation_id": "CONV-DEMO-001",
+    "message_id": "MSG-DEMO-001",
+    "context_id": "CTX-DEMO-001",
+    "status": "completed",
+    "result": {
+      "intent": "profit_explanation",
+      "summary": "当前生产毛利为1,320元，比同范围预期少680元；尚未结算，最终利润待确认。",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "毛利率从计划20%降至13.2%，下降6.8个百分点；相对下降34%，属于严重偏离。",
+          "fact_refs": [
+            {
+              "snapshot_id": "SNAP-DEMO-001",
+              "evidence_id": "EV-MARGIN"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "columns": [
+            "成本项目",
+            "较预期增加（元）"
+          ],
+          "rows": [
+            [
+              "材料",
+              "500.00"
+            ],
+            [
+              "人工",
+              "180.00"
+            ]
+          ],
+          "fact_refs": [
+            {
+              "snapshot_id": "SNAP-DEMO-001",
+              "evidence_id": "EV-MAT"
+            },
+            {
+              "snapshot_id": "SNAP-DEMO-001",
+              "evidence_id": "EV-LAB"
+            }
+          ]
+        }
+      ],
+      "fact_refs": [
+        {
+          "snapshot_id": "SNAP-DEMO-001",
+          "evidence_id": "EV-GP"
+        },
+        {
+          "snapshot_id": "SNAP-DEMO-001",
+          "evidence_id": "EV-MAT"
+        },
+        {
+          "snapshot_id": "SNAP-DEMO-001",
+          "evidence_id": "EV-LAB"
+        },
+        {
+          "snapshot_id": "SNAP-DEMO-001",
+          "evidence_id": "EV-MARGIN"
+        }
+      ],
+      "possible_causes": [
+        {
+          "description": "材料耗用和计件费用需要核对，尚不能认定为浪费或低效率。",
+          "status": "candidate",
+          "fact_refs": [
+            {
+              "snapshot_id": "SNAP-DEMO-001",
+              "evidence_id": "EV-MAT"
+            },
+            {
+              "snapshot_id": "SNAP-DEMO-001",
+              "evidence_id": "EV-LAB"
+            }
+          ]
+        }
+      ],
+      "options": [],
+      "recommended_checks": [
+        "核对领料、退料与在制品归属",
+        "核对工段计件单价和计薪数量"
+      ],
+      "unknowns": [
+        "订单尚未结算，最终利润不能确认"
+      ],
+      "follow_up_questions": [
+        "需要查看材料记录，还是人工计件记录？"
+      ],
+      "coverage": {
+        "requested_order_count": 1,
+        "included_order_count": 1,
+        "excluded_order_ids": [],
+        "notes": [
+          "仅合成演示案例，非真实企业结论"
+        ]
+      },
+      "requires_human_approval": false,
+      "reviewed": false
+    },
+    "provider": "mock",
+    "model_revision": null,
+    "prompt_version": "secretary-v1",
+    "error": null
+  }
+}

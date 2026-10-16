@@ -1,0 +1,302 @@
+{
+  "snapshot_id": "SNAP-DEMO-001",
+  "order_id": "QY-DEMO-001",
+  "baseline_id": "BASE-DEMO-001",
+  "input_hash": "synthetic-input-hash-001",
+  "formula_version": "formula-20261013-v1",
+  "scope": {
+    "basis": "order_total",
+    "period_start": "2026-10-01",
+    "period_end": "2026-10-16",
+    "quantity_basis": "completed_good",
+    "quantity": "100",
+    "quantity_unit": "pair",
+    "currency": "CNY",
+    "tax_basis": "exclusive",
+    "cost_scope_id": "production-management-v1",
+    "revenue_basis": "recognized",
+    "settlement_state": "completed"
+  },
+  "expected_scope": {
+    "basis": "order_total",
+    "period_start": "2026-10-01",
+    "period_end": "2026-10-16",
+    "quantity_basis": "completed_good",
+    "quantity": "100",
+    "quantity_unit": "pair",
+    "currency": "CNY",
+    "tax_basis": "exclusive",
+    "cost_scope_id": "production-management-v1",
+    "revenue_basis": "recognized",
+    "settlement_state": "completed"
+  },
+  "expected": {
+    "revenue_lines": [
+      {
+        "line_id": "L1",
+        "unit_price": "100",
+        "quantity": "100",
+        "quantity_unit": "pair",
+        "discount": "0.00",
+        "source_refs": [
+          {
+            "record_id": "PLAN-REV",
+            "source_system": "synthetic",
+            "source_record_id": "PLAN-REV",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "material_basis": "bom",
+    "material_scope_confirmed": true,
+    "materials": [
+      {
+        "line_id": "M1",
+        "material_id": "MAT1",
+        "quantity": "1000",
+        "quantity_unit": "kg",
+        "weighted_price": "5",
+        "loss_rate": "0",
+        "source_refs": [
+          {
+            "record_id": "PLAN-MAT",
+            "source_system": "synthetic",
+            "source_record_id": "PLAN-MAT",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "labor": [
+      {
+        "line_id": "W1",
+        "stage_id": "S1",
+        "piece_rate": "20",
+        "payable_quantity": "100",
+        "quantity_unit": "pair",
+        "source_refs": [
+          {
+            "record_id": "PLAN-LAB",
+            "source_system": "synthetic",
+            "source_record_id": "PLAN-LAB",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "manufacturing_allocations": [
+      {
+        "line_id": "F1",
+        "pool_version_id": "PLAN-POOL-v1",
+        "period_start": "2026-10-01",
+        "period_end": "2026-10-16",
+        "amount": "1000.00",
+        "quality": "complete",
+        "source_refs": [
+          {
+            "record_id": "PLAN-POOL",
+            "source_system": "synthetic",
+            "source_record_id": "PLAN-POOL",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "expenses": [
+      {
+        "line_id": "E0",
+        "category": "other_production",
+        "amount": "0.00",
+        "source_refs": [
+          {
+            "record_id": "PLAN-other_production",
+            "source_system": "synthetic",
+            "source_record_id": "PLAN-other_production",
+            "confirmed": true
+          }
+        ]
+      },
+      {
+        "line_id": "E1",
+        "category": "management",
+        "amount": "100.00",
+        "source_refs": [
+          {
+            "record_id": "PLAN-management",
+            "source_system": "synthetic",
+            "source_record_id": "PLAN-management",
+            "confirmed": true
+          }
+        ]
+      },
+      {
+        "line_id": "E2",
+        "category": "sales",
+        "amount": "50.00",
+        "source_refs": [
+          {
+            "record_id": "PLAN-sales",
+            "source_system": "synthetic",
+            "source_record_id": "PLAN-sales",
+            "confirmed": true
+          }
+        ]
+      },
+      {
+        "line_id": "E3",
+        "category": "finance",
+        "amount": "20.00",
+        "source_refs": [
+          {
+            "record_id": "PLAN-finance",
+            "source_system": "synthetic",
+            "source_record_id": "PLAN-finance",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "management_enabled": true,
+    "coverage_confirmed": true,
+    "quality": "complete"
+  },
+  "actual": {
+    "revenue_lines": [
+      {
+        "line_id": "L1",
+        "unit_price": "100",
+        "quantity": "100",
+        "quantity_unit": "pair",
+        "discount": "0.00",
+        "source_refs": [
+          {
+            "record_id": "ACT-REV",
+            "source_system": "synthetic",
+            "source_record_id": "ACT-REV",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "material_basis": "actual_net",
+    "material_scope_confirmed": true,
+    "materials": [
+      {
+        "line_id": "M1",
+        "material_id": "MAT1",
+        "quantity": "1100",
+        "quantity_unit": "kg",
+        "weighted_price": "5",
+        "loss_rate": null,
+        "source_refs": [
+          {
+            "record_id": "ACT-MAT",
+            "source_system": "synthetic",
+            "source_record_id": "ACT-MAT",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "labor": [
+      {
+        "line_id": "W1",
+        "stage_id": "S1",
+        "piece_rate": "21.8",
+        "payable_quantity": "100",
+        "quantity_unit": "pair",
+        "source_refs": [
+          {
+            "record_id": "ACT-LAB",
+            "source_system": "synthetic",
+            "source_record_id": "ACT-LAB",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "manufacturing_allocations": [
+      {
+        "line_id": "F1",
+        "pool_version_id": "ACT-POOL-v1",
+        "period_start": "2026-10-01",
+        "period_end": "2026-10-16",
+        "amount": "1000.00",
+        "quality": "complete",
+        "source_refs": [
+          {
+            "record_id": "ACT-POOL",
+            "source_system": "synthetic",
+            "source_record_id": "ACT-POOL",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "expenses": [
+      {
+        "line_id": "E0",
+        "category": "other_production",
+        "amount": "0.00",
+        "source_refs": [
+          {
+            "record_id": "ACT-other_production",
+            "source_system": "synthetic",
+            "source_record_id": "ACT-other_production",
+            "confirmed": true
+          }
+        ]
+      },
+      {
+        "line_id": "E1",
+        "category": "management",
+        "amount": "100.00",
+        "source_refs": [
+          {
+            "record_id": "ACT-management",
+            "source_system": "synthetic",
+            "source_record_id": "ACT-management",
+            "confirmed": true
+          }
+        ]
+      },
+      {
+        "line_id": "E2",
+        "category": "sales",
+        "amount": "50.00",
+        "source_refs": [
+          {
+            "record_id": "ACT-sales",
+            "source_system": "synthetic",
+            "source_record_id": "ACT-sales",
+            "confirmed": true
+          }
+        ]
+      },
+      {
+        "line_id": "E3",
+        "category": "finance",
+        "amount": "20.00",
+        "source_refs": [
+          {
+            "record_id": "ACT-finance",
+            "source_system": "synthetic",
+            "source_record_id": "ACT-finance",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "management_enabled": true,
+    "coverage_confirmed": true,
+    "quality": "complete"
+  },
+  "risk_rule": {
+    "rule_version": "margin-20261016-v1",
+    "method": "relative_margin_decline",
+    "normal_max": "0.10",
+    "attention_max": "0.20",
+    "key_max": "0.30"
+  }
+}

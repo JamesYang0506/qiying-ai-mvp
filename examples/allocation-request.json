@@ -1,0 +1,23 @@
+{
+  "pool_version_id": "ACT-POOL-v1",
+  "period_start": "2026-10-01",
+  "period_end": "2026-10-16",
+  "currency": "CNY",
+  "amount": "1000.00",
+  "total_hours": "100",
+  "targets": [
+    {
+      "order_id": "QY-DEMO-001",
+      "hours": "100"
+    }
+  ],
+  "quality": "complete",
+  "source_refs": [
+    {
+      "record_id": "ACT-POOL",
+      "source_system": "synthetic",
+      "source_record_id": "ACT-POOL",
+      "confirmed": true
+    }
+  ]
+}

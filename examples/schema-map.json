@@ -1,0 +1,9 @@
+{
+  "calculation-request.json": "CalculationRequest",
+  "calculation-response.json": "CalculationResultResponse",
+  "allocation-request.json": "AllocationRequest",
+  "batch-request.json": "BatchWrite",
+  "view-request.json": "ViewWrite",
+  "conversation-request.json": "ConversationWrite",
+  "assistant-response.json": "AssistantJobResponse"
+}

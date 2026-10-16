@@ -1,0 +1,12 @@
+{
+  "scope": {
+    "snapshot_refs": [
+      {
+        "order_id": "QY-DEMO-001",
+        "snapshot_id": "SNAP-DEMO-001",
+        "as_of": "2026-10-16"
+      }
+    ]
+  },
+  "style": "secretary"
+}

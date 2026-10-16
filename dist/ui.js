@@ -1,0 +1,12 @@
+export const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export const money=(v,d=0)=>v===null||v===undefined?'—':'¥'+Number(v).toLocaleString('zh-CN',{minimumFractionDigits:d,maximumFractionDigits:d});
+export const num=v=>Number(v).toLocaleString('zh-CN');
+export const pct=v=>v===null||v===undefined?'—':(v*100).toFixed(1)+'%';
+export const pp=v=>v===null||v===undefined?'—':(v>0?'+':'')+(v*100).toFixed(1)+' pp';
+export const signed=v=>v===null||v===undefined?'—':(v>0?'+':v<0?'−':'')+money(Math.abs(v));
+export const tone=v=>v===null?'muted':v<0?'negative':v>0?'positive':'muted';
+export const riskClass=r=>({'严重':'danger','重点':'warning','注意':'warning','正常':'success','优于预期':'success'}[r]||'neutral');
+export const badge=r=>`<span class="badge ${riskClass(r)}"><i></i>${esc(r)}</span>`;
+const paths={grid:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',chart:'M4 20V10m6 10V4m6 16v-7m6 7V7',file:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h6',chat:'M21 11a8 8 0 0 1-8 8H6l-4 3V5a3 3 0 0 1 3-3h13a3 3 0 0 1 3 3zM7 8h10M7 12h6',refresh:'M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 2M18 18a8 8 0 0 1-13-2',search:'M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',arrow:'M5 12h14M13 6l6 6-6 6',back:'M19 12H5M11 6l-6 6 6 6',down:'M4 5l6 6 4-4 6 12M14 19h6v-6',wallet:'M20 8V5a2 2 0 0 0-2-2H5a3 3 0 0 0 0 6h15v12H5a3 3 0 0 1-3-3V6M20 13h-6v4h6',alert:'M10.3 3.9 1.8 18.5A2 2 0 0 0 3.5 21h17a2 2 0 0 0 1.7-2.5L13.7 3.9a2 2 0 0 0-3.4 0M12 9v4M12 17h.01',spark:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z',clock:'M12 8v5l3 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',check:'m5 12 4 4L19 6',send:'m22 2-7 20-4-9-9-4 20-7M22 2 11 13',info:'M12 11v6M12 7h.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',calendar:'M4 5h16v16H4zM16 2v6M8 2v6M4 10h16',chevron:'m9 5 7 7-7 7',layers:'m12 2 10 6-10 6L2 8zM2 12l10 6 10-6M2 16l10 6 10-6'};
+export const icon=(name,cls='')=>`<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]||paths.grid}"/></svg>`;
+export const empty=(title='暂无符合条件的订单',text='调整筛选条件后再试。')=>`<div class="empty">${icon('layers')}<h3>${title}</h3><p>${text}</p></div>`;

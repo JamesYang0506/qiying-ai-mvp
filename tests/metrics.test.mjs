@@ -1,0 +1,17 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {analyzeOrder,summarizeOrders,filterOrders,seriesFor} from '../dist/metrics.js';
+import {demoOrders} from '../dist/data.js';
+const order=(id='A',extra={})=>({id,customer:'测试客户',product:'中底',status:'生产中',quantity:100,price:100,planRate:.2,planShares:{材料:.5,人工:.2,能耗:.1},daily:[{date:'2026-10-15',quantity:100,costs:{材料:5500,人工:2180,能耗:1000},defects:3}],...extra});
+test('20% to 13.2% equals -6.8pp and 34% relative decline, severe',()=>{const a=analyzeOrder(order(),'2026-10-16');assert.ok(Math.abs(a.rate-.132)<1e-10);assert.ok(Math.abs(a.deviation+.068)<1e-10);assert.ok(Math.abs(a.decline-.34)<1e-10);assert.equal(a.risk,'严重');assert.equal(a.profit,1320);});
+test('missing cost is unknown and excluded from comparable totals',()=>{const x=order('B',{daily:[{date:'2026-10-15',quantity:10,costs:{材料:null,人工:100,能耗:30},defects:0}]});assert.equal(analyzeOrder(x).profit,null);assert.equal(analyzeOrder(x).risk,'数据不足');const s=summarizeOrders([order(),x]);assert.equal(s.excluded,1);assert.equal(s.delta,-680);});
+test('missing baseline is excluded from comparison but actual stays available',()=>{const a=analyzeOrder(order('B',{planRate:null}));assert.equal(a.risk,'缺少基线');assert.equal(a.profit,1320);assert.equal(a.delta,null);assert.equal(summarizeOrders([order('B',{planRate:null})]).comparable,0);});
+test('nonpositive baseline does not use relative decline',()=>{const a=analyzeOrder(order('B',{planRate:0}));assert.equal(a.decline,null);assert.equal(a.risk,'不可评级');});
+test('aggregate rate is revenue weighted',()=>{const b=order('B',{price:200});const s=summarizeOrders([order(),b]);assert.equal(s.rate,(1320+11320)/30000);assert.notEqual(s.rate,(.132+.566)/2);});
+test('empty summary is empty rather than misleading zero rate',()=>{assert.equal(summarizeOrders([]).rate,null);assert.equal(summarizeOrders([]).count,0);});
+test('filters combine customer, search and risk; no match returns empty',()=>{assert.equal(filterOrders([order()],{search:'不存在'}).length,0);assert.equal(filterOrders([order()],{search:'a',customer:'测试客户',risk:'严重'}).length,1);});
+test('as-of excludes future rows and yesterday requires observations',()=>{const a=analyzeOrder(order(),'2026-10-14');assert.equal(a.profit,null);assert.equal(a.yesterdayChange,null);});
+test('trend endpoints match aggregate and missing dates stay null',()=>{const o=order();const s=seriesFor([o],'2026-10-16',3);assert.equal(s[0].actual,null);assert.equal(s.at(-1).actual,summarizeOrders([o]).profit);});
+test('threshold boundaries and loss states',()=>{for(const [rate,risk] of [[.18,'正常'],[.16,'注意'],[.14,'重点'],[-.1,'严重']]){const o=order('X',{daily:[{date:'2026-10-15',quantity:100,costs:{材料:10000*(1-rate),人工:0,能耗:0}}]});assert.equal(analyzeOrder(o).risk,risk);}});
+test('missing yesterday report cannot provide a yesterday comparison',()=>{const o=demoOrders.find(o=>o.id==='QY-2026-039');assert.equal(analyzeOrder(o,'2026-10-11').yesterdayChange,null);});
+test('completed demo orders have fully completed production quantities',()=>{for(const o of demoOrders.filter(o=>o.status==='已完工'))assert.equal(analyzeOrder(o).progress,1);});

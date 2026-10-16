@@ -1,0 +1,6042 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "企盈智擎三模块接口设计",
+    "version": "1.0.0-draft",
+    "description": "设计契约，尚未实现。A核算，B数据/时间管理，C本地AI秘书。金额为字符串、缺失为null；业务不变量见随附文档。"
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "统一应用同源网关"
+    }
+  ],
+  "tags": [
+    {
+      "name": "A 核算"
+    },
+    {
+      "name": "B 数据"
+    },
+    {
+      "name": "B 查询"
+    },
+    {
+      "name": "C AI"
+    }
+  ],
+  "paths": {
+    "/profit/evaluate": {
+      "post": {
+        "tags": [
+          "A 核算"
+        ],
+        "summary": "无持久化单订单核算",
+        "operationId": "post_profit_evaluate",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalculationResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalculationRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profit/allocations/evaluate": {
+      "post": {
+        "tags": [
+          "A 核算"
+        ],
+        "summary": "全池确定性制造费用分摊",
+        "operationId": "post_profit_allocations_evaluate",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders": {
+      "post": {
+        "tags": [
+          "B 数据"
+        ],
+        "summary": "建立订单主档",
+        "operationId": "post_orders",
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRecordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{order_id}": {
+      "put": {
+        "tags": [
+          "B 数据"
+        ],
+        "summary": "乐观锁修改订单主档",
+        "operationId": "put_orders_order_id",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRecordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{order_id}/baselines": {
+      "post": {
+        "tags": [
+          "B 数据"
+        ],
+        "summary": "新增预期基线版本",
+        "operationId": "post_orders_order_id_baselines",
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaselineRecordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaselineWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/batches": {
+      "post": {
+        "tags": [
+          "B 数据"
+        ],
+        "summary": "原子批次写入并调度重算",
+        "operationId": "post_reports_batches",
+        "responses": {
+          "202": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/batches/{batch_id}": {
+      "get": {
+        "tags": [
+          "B 数据"
+        ],
+        "summary": "查询批次及计算状态",
+        "operationId": "get_reports_batches_batch_id",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/manufacturing-pools": {
+      "post": {
+        "tags": [
+          "B 数据"
+        ],
+        "summary": "更新费用池并调度全部关联订单",
+        "operationId": "post_manufacturing-pools",
+        "responses": {
+          "202": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolUpdateResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoolWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{order_id}/recalculations": {
+      "post": {
+        "tags": [
+          "B 数据"
+        ],
+        "summary": "重算指定期间",
+        "operationId": "post_orders_order_id_recalculations",
+        "responses": {
+          "202": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecalculationWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "B 数据"
+        ],
+        "summary": "查询核算任务",
+        "operationId": "get_jobs_job_id",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/portfolio/views": {
+      "post": {
+        "tags": [
+          "B 查询"
+        ],
+        "summary": "冻结跨订单跨日期一致视图",
+        "operationId": "post_portfolio_views",
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewRefResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ViewWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/portfolio/views/{view_id}": {
+      "get": {
+        "tags": [
+          "B 查询"
+        ],
+        "summary": "查询同视图汇总与分页列表",
+        "operationId": "get_portfolio_views_view_id",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "risk",
+                "profit_delta",
+                "order_id"
+              ]
+            }
+          },
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/portfolio/views/{view_id}/trend": {
+      "get": {
+        "tags": [
+          "B 查询"
+        ],
+        "summary": "查询固定视图趋势",
+        "operationId": "get_portfolio_views_view_id_trend",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "daily",
+                "cumulative"
+              ]
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/orders/{order_id}/snapshots": {
+      "get": {
+        "tags": [
+          "B 查询"
+        ],
+        "summary": "按业务及系统时间查询历史快照",
+        "operationId": "get_orders_order_id_snapshots",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "known_at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/orders/{order_id}/snapshots/{snapshot_id}": {
+      "get": {
+        "tags": [
+          "B 查询"
+        ],
+        "summary": "读取不可变订单核算结果",
+        "operationId": "get_orders_order_id_snapshots_snapshot_id",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalculationResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/orders/{order_id}/reports": {
+      "get": {
+        "tags": [
+          "B 查询"
+        ],
+        "summary": "读取当时可见原始日报修订",
+        "operationId": "get_orders_order_id_reports",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "known_at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/snapshots/{snapshot_id}/evidence": {
+      "get": {
+        "tags": [
+          "B 查询"
+        ],
+        "summary": "读取不可变证据",
+        "operationId": "get_snapshots_snapshot_id_evidence",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/assistant/status": {
+      "get": {
+        "tags": [
+          "C AI"
+        ],
+        "summary": "查看本地模型状态",
+        "operationId": "get_assistant_status",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assistant/conversations": {
+      "post": {
+        "tags": [
+          "C AI"
+        ],
+        "summary": "创建固定事实范围对话",
+        "operationId": "post_assistant_conversations",
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assistant/conversations/{conversation_id}/messages": {
+      "post": {
+        "tags": [
+          "C AI"
+        ],
+        "summary": "异步提交提问",
+        "operationId": "post_assistant_conversations_conversation_id_messages",
+        "responses": {
+          "202": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantJobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assistant/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "C AI"
+        ],
+        "summary": "查询生成任务及验证后回答",
+        "operationId": "get_assistant_jobs_job_id",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantJobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/assistant/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "C AI"
+        ],
+        "summary": "尽力取消生成任务",
+        "operationId": "post_assistant_jobs_job_id_cancel",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantJobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/assistant/messages/{message_id}/feedback": {
+      "post": {
+        "tags": [
+          "C AI"
+        ],
+        "summary": "保存人工反馈及审核结果",
+        "operationId": "post_assistant_messages_message_id_feedback",
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackRecordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误；具体语义见公共约定",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackWrite"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Decimal": {
+        "type": "string",
+        "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+      },
+      "Money": {
+        "type": "string",
+        "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+      },
+      "SourceRef": {
+        "type": "object",
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "source_system": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "source_record_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "sheet": {
+            "type": "string"
+          },
+          "cell": {
+            "type": "string"
+          },
+          "confirmed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "record_id",
+          "source_system",
+          "source_record_id",
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "Issue": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "message": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "blocking"
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "field",
+          "severity",
+          "source_refs"
+        ],
+        "additionalProperties": false
+      },
+      "Scope": {
+        "type": "object",
+        "properties": {
+          "basis": {
+            "type": "string",
+            "enum": [
+              "order_total",
+              "cumulative",
+              "daily"
+            ]
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "quantity_basis": {
+            "type": "string",
+            "enum": [
+              "completed_good",
+              "settled",
+              "contract"
+            ]
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          },
+          "quantity_unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "tax_basis": {
+            "type": "string",
+            "enum": [
+              "exclusive",
+              "ignored",
+              "unconfirmed"
+            ]
+          },
+          "cost_scope_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "revenue_basis": {
+            "type": "string",
+            "enum": [
+              "contract",
+              "production_equivalent",
+              "recognized"
+            ]
+          },
+          "settlement_state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "completed",
+              "settled"
+            ]
+          }
+        },
+        "required": [
+          "basis",
+          "period_start",
+          "period_end",
+          "quantity_basis",
+          "quantity",
+          "quantity_unit",
+          "currency",
+          "tax_basis",
+          "cost_scope_id",
+          "revenue_basis",
+          "settlement_state"
+        ],
+        "additionalProperties": false
+      },
+      "RevenueLine": {
+        "type": "object",
+        "properties": {
+          "line_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity_unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "discount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            }
+          }
+        },
+        "required": [
+          "line_id",
+          "unit_price",
+          "quantity",
+          "quantity_unit",
+          "discount",
+          "source_refs"
+        ],
+        "additionalProperties": false
+      },
+      "MaterialLine": {
+        "type": "object",
+        "properties": {
+          "line_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "material_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity_unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "weighted_price": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "loss_rate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            }
+          }
+        },
+        "required": [
+          "line_id",
+          "material_id",
+          "quantity",
+          "quantity_unit",
+          "weighted_price",
+          "loss_rate",
+          "source_refs"
+        ],
+        "additionalProperties": false
+      },
+      "LaborLine": {
+        "type": "object",
+        "properties": {
+          "line_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "stage_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "piece_rate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payable_quantity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity_unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            }
+          }
+        },
+        "required": [
+          "line_id",
+          "stage_id",
+          "piece_rate",
+          "payable_quantity",
+          "quantity_unit",
+          "source_refs"
+        ],
+        "additionalProperties": false
+      },
+      "AllocatedCost": {
+        "type": "object",
+        "properties": {
+          "line_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "pool_version_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "estimated",
+              "incomplete",
+              "invalid"
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            }
+          }
+        },
+        "required": [
+          "line_id",
+          "pool_version_id",
+          "period_start",
+          "period_end",
+          "amount",
+          "quality",
+          "source_refs"
+        ],
+        "additionalProperties": false
+      },
+      "ExpenseLine": {
+        "type": "object",
+        "properties": {
+          "line_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "other_production",
+              "management",
+              "sales",
+              "finance"
+            ]
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            }
+          }
+        },
+        "required": [
+          "line_id",
+          "category",
+          "amount",
+          "source_refs"
+        ],
+        "additionalProperties": false
+      },
+      "PeriodInput": {
+        "type": "object",
+        "properties": {
+          "revenue_lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RevenueLine"
+            }
+          },
+          "material_basis": {
+            "type": "string",
+            "enum": [
+              "bom",
+              "actual_net"
+            ]
+          },
+          "material_scope_confirmed": {
+            "type": "boolean"
+          },
+          "materials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MaterialLine"
+            }
+          },
+          "labor": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LaborLine"
+            }
+          },
+          "manufacturing_allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocatedCost"
+            }
+          },
+          "expenses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExpenseLine"
+            }
+          },
+          "management_enabled": {
+            "type": "boolean"
+          },
+          "coverage_confirmed": {
+            "type": "boolean"
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "estimated",
+              "incomplete",
+              "invalid"
+            ]
+          }
+        },
+        "required": [
+          "revenue_lines",
+          "material_basis",
+          "material_scope_confirmed",
+          "materials",
+          "labor",
+          "manufacturing_allocations",
+          "expenses",
+          "management_enabled",
+          "coverage_confirmed",
+          "quality"
+        ],
+        "additionalProperties": false
+      },
+      "RiskRule": {
+        "type": "object",
+        "properties": {
+          "rule_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "relative_margin_decline"
+            ]
+          },
+          "normal_max": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          },
+          "attention_max": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          },
+          "key_max": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          }
+        },
+        "required": [
+          "rule_version",
+          "method",
+          "normal_max",
+          "attention_max",
+          "key_max"
+        ],
+        "additionalProperties": false
+      },
+      "CalculationRequest": {
+        "type": "object",
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "baseline_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "input_hash": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "formula_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "expected_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Scope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeriodInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actual": {
+            "$ref": "#/components/schemas/PeriodInput"
+          },
+          "risk_rule": {
+            "$ref": "#/components/schemas/RiskRule"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "order_id",
+          "baseline_id",
+          "input_hash",
+          "formula_version",
+          "scope",
+          "expected_scope",
+          "expected",
+          "actual",
+          "risk_rule"
+        ],
+        "additionalProperties": false
+      },
+      "ProfitMetrics": {
+        "type": "object",
+        "properties": {
+          "revenue": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "material_cost": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "labor_cost": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "manufacturing_cost": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "other_production_cost": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_production_cost": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gross_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit_gross_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gross_margin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "management_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecast_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "final_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "estimated",
+              "incomplete",
+              "invalid"
+            ]
+          }
+        },
+        "required": [
+          "revenue",
+          "material_cost",
+          "labor_cost",
+          "manufacturing_cost",
+          "other_production_cost",
+          "total_production_cost",
+          "gross_profit",
+          "unit_gross_profit",
+          "gross_margin",
+          "management_profit",
+          "forecast_profit",
+          "final_profit",
+          "quality"
+        ],
+        "additionalProperties": false
+      },
+      "Risk": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "better",
+              "normal",
+              "attention",
+              "key",
+              "severe",
+              "not_applicable"
+            ]
+          },
+          "rule_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string"
+          },
+          "loss": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "level",
+          "rule_version",
+          "reason",
+          "loss"
+        ],
+        "additionalProperties": false
+      },
+      "CostVariance": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "material",
+              "labor",
+              "manufacturing",
+              "other_production"
+            ]
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actual": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        },
+        "required": [
+          "category",
+          "expected",
+          "actual",
+          "delta",
+          "evidence_ids"
+        ],
+        "additionalProperties": false
+      },
+      "Comparison": {
+        "type": "object",
+        "properties": {
+          "comparable": {
+            "type": "boolean"
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "estimated",
+              "incomplete",
+              "invalid"
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "profit_delta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revenue_delta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "margin_delta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relative_decline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "risk": {
+            "$ref": "#/components/schemas/Risk"
+          },
+          "cost_variances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CostVariance"
+            }
+          }
+        },
+        "required": [
+          "comparable",
+          "quality",
+          "reasons",
+          "profit_delta",
+          "revenue_delta",
+          "margin_delta",
+          "relative_decline",
+          "risk",
+          "cost_variances"
+        ],
+        "additionalProperties": false
+      },
+      "Evidence": {
+        "type": "object",
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "snapshot_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "metric": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baseline_value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "difference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            }
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trust_status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "pending",
+              "anomalous",
+              "missing"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "snapshot_id",
+          "order_id",
+          "metric",
+          "value",
+          "baseline_value",
+          "difference",
+          "unit",
+          "source_refs",
+          "rule_id",
+          "trust_status",
+          "occurred_at"
+        ],
+        "additionalProperties": false
+      },
+      "CalculationResult": {
+        "type": "object",
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "baseline_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "input_hash": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "formula_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "rule_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "computed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfitMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actual": {
+            "$ref": "#/components/schemas/ProfitMetrics"
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/Comparison"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            }
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "order_id",
+          "baseline_id",
+          "input_hash",
+          "formula_version",
+          "rule_version",
+          "computed_at",
+          "scope",
+          "expected",
+          "actual",
+          "comparison",
+          "issues",
+          "evidence"
+        ],
+        "additionalProperties": false
+      },
+      "AllocationTarget": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "hours": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          }
+        },
+        "required": [
+          "order_id",
+          "hours"
+        ],
+        "additionalProperties": false
+      },
+      "AllocationRequest": {
+        "type": "object",
+        "properties": {
+          "pool_version_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+          },
+          "total_hours": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationTarget"
+            }
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "estimated"
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            }
+          }
+        },
+        "required": [
+          "pool_version_id",
+          "period_start",
+          "period_end",
+          "currency",
+          "amount",
+          "total_hours",
+          "targets",
+          "quality",
+          "source_refs"
+        ],
+        "additionalProperties": false
+      },
+      "AllocationResult": {
+        "type": "object",
+        "properties": {
+          "pool_version_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "order_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "amount": {
+                  "type": "string",
+                  "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+                }
+              },
+              "required": [
+                "order_id",
+                "amount"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "unassigned_amount": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+          },
+          "unassigned_hours": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "estimated"
+            ]
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            }
+          }
+        },
+        "required": [
+          "pool_version_id",
+          "allocations",
+          "unassigned_amount",
+          "unassigned_hours",
+          "quality",
+          "issues"
+        ],
+        "additionalProperties": false
+      },
+      "OrderWrite": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "order_number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "customer_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          },
+          "quantity_unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "producing",
+              "completed",
+              "settled"
+            ]
+          },
+          "planned_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "planned_end": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "order_number",
+          "customer_id",
+          "product_name",
+          "quantity",
+          "quantity_unit",
+          "currency",
+          "status",
+          "planned_start",
+          "planned_end"
+        ],
+        "additionalProperties": false
+      },
+      "OrderRecord": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "order_number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "customer_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          },
+          "quantity_unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "producing",
+              "completed",
+              "settled"
+            ]
+          },
+          "planned_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "planned_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "order_number",
+          "customer_id",
+          "product_name",
+          "quantity",
+          "quantity_unit",
+          "currency",
+          "status",
+          "planned_start",
+          "planned_end",
+          "order_id",
+          "revision",
+          "recorded_at"
+        ],
+        "additionalProperties": false
+      },
+      "StageInput": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "input": {
+            "$ref": "#/components/schemas/PeriodInput"
+          }
+        },
+        "required": [
+          "scope",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "BaselineWrite": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "effective_from": {
+            "type": "string",
+            "format": "date"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "input": {
+            "$ref": "#/components/schemas/PeriodInput"
+          },
+          "stage_policy": {
+            "type": "string",
+            "enum": [
+              "explicit_stage_inputs",
+              "none"
+            ]
+          },
+          "stage_inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageInput"
+            }
+          }
+        },
+        "required": [
+          "expected_revision",
+          "effective_from",
+          "effective_to",
+          "scope",
+          "input",
+          "stage_policy",
+          "stage_inputs"
+        ],
+        "additionalProperties": false
+      },
+      "BaselineRecord": {
+        "type": "object",
+        "properties": {
+          "baseline_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/BaselineWrite"
+          }
+        },
+        "required": [
+          "baseline_id",
+          "order_id",
+          "revision",
+          "recorded_at",
+          "definition"
+        ],
+        "additionalProperties": false
+      },
+      "DailyReportWrite": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "business_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "report_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "source_system": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "source_record_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "completed_quantity": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          },
+          "quantity_unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "actual_input": {
+            "$ref": "#/components/schemas/PeriodInput"
+          }
+        },
+        "required": [
+          "order_id",
+          "business_date",
+          "report_key",
+          "source_system",
+          "source_record_id",
+          "expected_revision",
+          "completed_quantity",
+          "quantity_unit",
+          "actual_input"
+        ],
+        "additionalProperties": false
+      },
+      "BatchWrite": {
+        "type": "object",
+        "properties": {
+          "atomic": {
+            "const": true
+          },
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyReportWrite"
+            },
+            "minItems": 1,
+            "maxItems": 1000
+          }
+        },
+        "required": [
+          "atomic",
+          "reports"
+        ],
+        "additionalProperties": false
+      },
+      "DailyReportRecord": {
+        "type": "object",
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DailyReportWrite"
+          }
+        },
+        "required": [
+          "record_id",
+          "revision",
+          "recorded_at",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "BatchStatus": {
+        "type": "object",
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "job_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "recalculating",
+              "completed",
+              "failed"
+            ]
+          },
+          "accepted_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "snapshot_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            }
+          }
+        },
+        "required": [
+          "batch_id",
+          "job_id",
+          "status",
+          "accepted_count",
+          "snapshot_ids",
+          "issues"
+        ],
+        "additionalProperties": false
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "superseded"
+            ]
+          },
+          "snapshot_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "snapshot_ids",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "PoolDefinition": {
+        "type": "object",
+        "properties": {
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+          },
+          "total_hours": {
+            "type": "string",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationTarget"
+            }
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "estimated"
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            }
+          }
+        },
+        "required": [
+          "period_start",
+          "period_end",
+          "currency",
+          "amount",
+          "total_hours",
+          "targets",
+          "quality",
+          "source_refs"
+        ],
+        "additionalProperties": false
+      },
+      "PoolWrite": {
+        "type": "object",
+        "properties": {
+          "pool_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "definition": {
+            "$ref": "#/components/schemas/PoolDefinition"
+          }
+        },
+        "required": [
+          "pool_id",
+          "expected_revision",
+          "definition"
+        ],
+        "additionalProperties": false
+      },
+      "PoolUpdateResult": {
+        "type": "object",
+        "properties": {
+          "pool_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "pool_version_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "job_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted"
+            ]
+          }
+        },
+        "required": [
+          "pool_id",
+          "pool_version_id",
+          "revision",
+          "job_id",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "RecalculationWrite": {
+        "type": "object",
+        "properties": {
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "expected_order_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "period_start",
+          "period_end",
+          "expected_order_revision",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "PortfolioFilter": {
+        "type": "object",
+        "properties": {
+          "order_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "customer_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "producing",
+              "completed",
+              "settled"
+            ]
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "better",
+              "normal",
+              "attention",
+              "key",
+              "severe",
+              "not_applicable"
+            ]
+          },
+          "search": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "ViewWrite": {
+        "type": "object",
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "known_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/PortfolioFilter"
+          }
+        },
+        "required": [
+          "as_of",
+          "period_start",
+          "filters"
+        ],
+        "additionalProperties": false
+      },
+      "SnapshotRef": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "snapshot_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "required": [
+          "order_id",
+          "snapshot_id",
+          "as_of"
+        ],
+        "additionalProperties": false
+      },
+      "ViewRef": {
+        "type": "object",
+        "properties": {
+          "view_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "known_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "snapshot_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SnapshotRef"
+            }
+          },
+          "pending_order_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        },
+        "required": [
+          "view_id",
+          "as_of",
+          "period_start",
+          "known_at",
+          "snapshot_refs",
+          "pending_order_ids"
+        ],
+        "additionalProperties": false
+      },
+      "GroupSummary": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "currency": {
+            "type": "string"
+          },
+          "scope_label": {
+            "type": "string"
+          },
+          "order_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "known_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "comparable_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "excluded_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "revenue": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actual_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gross_margin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comparable_actual_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profit_delta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exclusions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "order_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "order_id",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "group_id",
+          "currency",
+          "scope_label",
+          "order_count",
+          "known_count",
+          "comparable_count",
+          "excluded_count",
+          "revenue",
+          "actual_profit",
+          "gross_margin",
+          "comparable_actual_profit",
+          "expected_profit",
+          "profit_delta",
+          "exclusions"
+        ],
+        "additionalProperties": false
+      },
+      "OrderSummary": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "order_number": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "group_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "pending",
+              "stale",
+              "unavailable"
+            ]
+          },
+          "gross_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gross_margin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profit_delta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "yesterday_margin_delta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "risk": {
+            "$ref": "#/components/schemas/Risk"
+          }
+        },
+        "required": [
+          "order_id",
+          "order_number",
+          "snapshot_id",
+          "group_id",
+          "status",
+          "gross_profit",
+          "gross_margin",
+          "profit_delta",
+          "yesterday_margin_delta",
+          "risk"
+        ],
+        "additionalProperties": false
+      },
+      "PortfolioPage": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "$ref": "#/components/schemas/ViewRef"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupSummary"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderSummary"
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "view",
+          "groups",
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false
+      },
+      "TrendPoint": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "actual_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_profit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profit_delta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(?:0|[1-9]\\d*)\\.\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "included_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "excluded_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "missing_daily_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "date",
+          "actual_profit",
+          "expected_profit",
+          "profit_delta",
+          "included_count",
+          "excluded_count",
+          "missing_daily_count"
+        ],
+        "additionalProperties": false
+      },
+      "Trend": {
+        "type": "object",
+        "properties": {
+          "view_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "cumulative"
+            ]
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "group_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "currency": {
+                  "type": "string"
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrendPoint"
+                  }
+                }
+              },
+              "required": [
+                "group_id",
+                "currency",
+                "points"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "view_id",
+          "mode",
+          "groups"
+        ],
+        "additionalProperties": false
+      },
+      "SnapshotPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SnapshotRef"
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false
+      },
+      "ReportPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyReportRecord"
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false
+      },
+      "EvidenceList": {
+        "type": "object",
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            }
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "AssistantStatus": {
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "unavailable",
+              "not_configured"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "ollama",
+              "mock",
+              "none"
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queue_length": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "status",
+          "provider",
+          "model",
+          "model_revision",
+          "queue_length",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "ContextScope": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "view_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "view_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "snapshot_refs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SnapshotRef"
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "snapshot_refs"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ConversationWrite": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/ContextScope"
+          },
+          "style": {
+            "type": "string",
+            "enum": [
+              "secretary",
+              "brief",
+              "detailed"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "style"
+        ],
+        "additionalProperties": false
+      },
+      "Conversation": {
+        "type": "object",
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ContextScope"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "context_id",
+          "scope",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "MessageWrite": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "expected_context_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "refresh_context": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "question",
+          "expected_context_id",
+          "refresh_context"
+        ],
+        "additionalProperties": false
+      },
+      "FactRef": {
+        "type": "object",
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "evidence_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "evidence_id"
+        ],
+        "additionalProperties": false
+      },
+      "AnswerBlock": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "paragraph",
+              "table",
+              "action"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "fact_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactRef"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "fact_refs"
+        ],
+        "additionalProperties": false
+      },
+      "Cause": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "candidate",
+              "verified"
+            ]
+          },
+          "fact_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactRef"
+            }
+          }
+        },
+        "required": [
+          "description",
+          "status",
+          "fact_refs"
+        ],
+        "additionalProperties": false
+      },
+      "AdviceOption": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "basis": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactRef"
+            }
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "required_confirmation": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "label",
+          "action",
+          "basis",
+          "risks",
+          "required_confirmation"
+        ],
+        "additionalProperties": false
+      },
+      "Coverage": {
+        "type": "object",
+        "properties": {
+          "requested_order_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "included_order_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "excluded_order_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "requested_order_count",
+          "included_order_count",
+          "excluded_order_ids",
+          "notes"
+        ],
+        "additionalProperties": false
+      },
+      "AssistantAnswer": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "profit_explanation",
+              "daily_briefing",
+              "cost_investigation",
+              "comparison",
+              "data_check",
+              "clarification",
+              "general"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnswerBlock"
+            }
+          },
+          "fact_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactRef"
+            }
+          },
+          "possible_causes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Cause"
+            }
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdviceOption"
+            }
+          },
+          "recommended_checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unknowns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "follow_up_questions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/Coverage"
+          },
+          "requires_human_approval": {
+            "type": "boolean"
+          },
+          "reviewed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "intent",
+          "summary",
+          "blocks",
+          "fact_refs",
+          "possible_causes",
+          "options",
+          "recommended_checks",
+          "unknowns",
+          "follow_up_questions",
+          "coverage",
+          "requires_human_approval",
+          "reviewed"
+        ],
+        "additionalProperties": false
+      },
+      "AssistantJob": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "conversation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssistantAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "ollama",
+              "mock",
+              "none"
+            ]
+          },
+          "model_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prompt_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "job_id",
+          "conversation_id",
+          "message_id",
+          "context_id",
+          "status",
+          "result",
+          "provider",
+          "model_revision",
+          "prompt_version",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "FeedbackWrite": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "review_status": {
+            "type": "string",
+            "enum": [
+              "candidate",
+              "approved",
+              "rejected"
+            ]
+          },
+          "corrected_answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssistantAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "rating",
+          "review_status",
+          "corrected_answer",
+          "comment",
+          "expected_revision"
+        ],
+        "additionalProperties": false
+      },
+      "FeedbackRecord": {
+        "type": "object",
+        "properties": {
+          "feedback_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reviewed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewer_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "review_status": {
+            "type": "string",
+            "enum": [
+              "candidate",
+              "approved",
+              "rejected"
+            ]
+          }
+        },
+        "required": [
+          "feedback_id",
+          "message_id",
+          "revision",
+          "reviewed_at",
+          "reviewer_id",
+          "review_status"
+        ],
+        "additionalProperties": false
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "retryable"
+        ],
+        "additionalProperties": false
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "CalculationResultResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/CalculationResult"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "AllocationResultResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/AllocationResult"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "OrderRecordResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/OrderRecord"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "BaselineRecordResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/BaselineRecord"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "BatchStatusResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/BatchStatus"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "PoolUpdateResultResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/PoolUpdateResult"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "JobResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/Job"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "ViewRefResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/ViewRef"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "PortfolioPageResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/PortfolioPage"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "TrendResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/Trend"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "SnapshotPageResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/SnapshotPage"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "ReportPageResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/ReportPage"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "EvidenceListResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/EvidenceList"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "AssistantStatusResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/AssistantStatus"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "ConversationResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/Conversation"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "AssistantJobResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/AssistantJob"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "FeedbackRecordResponse": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "const": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "data": {
+            "$ref": "#/components/schemas/FeedbackRecord"
+          }
+        },
+        "required": [
+          "schema_version",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}
