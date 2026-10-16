@@ -6,9 +6,9 @@
 
 ## 下载共同开发包
 
-- [完整开发包 ZIP](https://github.com/JamesYang0506/qiying-ai-mvp/releases/download/order-monitor-dev-20261017/qiying-order-monitor-dev-20261017.zip)：网站源码、启动文件、三模块设计、OpenAPI契约、联调样例与测试。
-- [三模块接口设计包 ZIP](https://github.com/JamesYang0506/qiying-ai-mvp/releases/download/order-monitor-dev-20261017/qiying-module-interface-v1.zip)：便于单独分发和评审的接口设计文档。
-- [发布说明与文件校验值](https://github.com/JamesYang0506/qiying-ai-mvp/releases/tag/order-monitor-dev-20261017)。开发包为预发布版本，解压后进入文件夹运行 `npm start`；协作提交代码仍建议使用Git克隆仓库。
+- [完整开发包 ZIP](https://github.com/JamesYang0506/qiying-ai-mvp/releases/download/order-monitor-dev-20261017.1/qiying-order-monitor-dev-20261017.1.zip)：网站源码、修复后的启动入口、三模块设计、OpenAPI契约、联调样例与测试。
+- [三模块接口设计包 ZIP](https://github.com/JamesYang0506/qiying-ai-mvp/releases/download/order-monitor-dev-20261017.1/qiying-module-interface-v1.zip)：便于单独分发和评审的接口设计文档。
+- [发布说明与文件校验值](https://github.com/JamesYang0506/qiying-ai-mvp/releases/tag/order-monitor-dev-20261017.1)。开发包为预发布版本，须完整解压后使用；协作提交代码仍建议使用Git克隆仓库。
 
 ## 启动网站
 
@@ -20,7 +20,11 @@ cd qiying-ai-mvp
 npm start
 ```
 
-打开 http://127.0.0.1:8787 。Windows也可双击 `启动网站.cmd`。终端按Ctrl+C停止；如端口占用，可在PowerShell设置 `$env:PORT=8788` 后运行 `npm start`。
+打开 http://127.0.0.1:8787 。终端按Ctrl+C停止；如端口占用，可在PowerShell设置 `$env:PORT=8788` 后运行 `npm start`。
+
+Windows推荐完整解压后双击 `启动网站.cmd`。启动器会检查文件、等待服务就绪后自动打开默认浏览器；已有本站服务时直接打开它，默认端口被其他程序占用时自动改用附近可用端口。请保留服务窗口，关闭窗口会停止新启动的网站。最终网址以窗口内“网站地址”为准。
+
+也可运行 `启动网站.cmd 8788` 指定端口；明确指定的端口被其他应用占用时会报错而不替换它。`--no-browser` 仅用于自动检查；正常双击无需参数。若提示Node缺失或版本过低，请安装Node.js 20或以上；不要在压缩包预览里直接运行启动文件。
 
 ## 当前页面
 
@@ -71,7 +75,7 @@ python -m pip install -r requirements-dev.txt
 python contracts/validate_examples.py
 ```
 
-当前有12项业务指标测试；契约校验覆盖Schema、路径及引用完整性、7份示例、独立金额复算和AI证据关联。仓库CI自动执行以上检查。
+当前有12项业务指标测试和6项启动回归测试（Windows `.cmd` 测试在Windows上运行）；契约校验覆盖Schema、路径及引用完整性、7份示例、独立金额复算和AI证据关联。仓库CI在Windows和Linux上执行检查。
 
 ## 旧版恢复与资料边界
 

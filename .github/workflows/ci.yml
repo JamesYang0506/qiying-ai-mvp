@@ -10,7 +10,10 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,6 +24,7 @@ jobs:
           node --check dist/app.js
           node --check dist/charts.js
           node --check serve.mjs
+          node --check start-website.mjs
       - name: Verify business calculations
         run: npm test
       - uses: actions/setup-python@v5
