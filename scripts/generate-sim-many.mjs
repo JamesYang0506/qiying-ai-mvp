@@ -132,7 +132,7 @@ function buildScenario(s) {
 // ---------------------------------------------------------------------------
 // Minimal but valid OOXML writer: inline strings, grouped rows, named tables.
 // ---------------------------------------------------------------------------
-function sheetXml(rows) {
+function sheetXml(rows, tableCount = 0) {
   const maxRow = Math.max(0, ...rows.map(r => r.row));
   const maxCol = Math.max(1, ...rows.flatMap(r => Object.keys(r.cells).map(Number)));
   const body = rows.filter(r => Object.keys(r.cells).length).sort((a, b) => a.row - b.row).map(r => {
@@ -144,7 +144,8 @@ function sheetXml(rows) {
     }).join('');
     return `<row r="${r.row}">${cells}</row>`;
   }).join('');
-  return `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${colLetter(maxCol)}${maxRow}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetData>${body}</sheetData></worksheet>`;
+  const tableParts = tableCount ? `<tableParts count="${tableCount}">${Array.from({length: tableCount}, (_, i) => `<tablePart r:id="rId${i + 1}"/>`).join('')}</tableParts>` : '';
+  return `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:${colLetter(maxCol)}${maxRow}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetData>${body}</sheetData>${tableParts}</worksheet>`;
 }
 function workbookBytes(sheets) {
   const files = {};
@@ -158,7 +159,7 @@ function workbookBytes(sheets) {
     content.push(`<Override PartName="/xl/worksheets/sheet${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
     rels.push(`<Relationship Id="rId${n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${n}.xml"/>`);
     bookSheets.push(`<sheet name="${xmlEsc(s.name)}" sheetId="${n}" r:id="rId${n}"/>`);
-    files[`xl/worksheets/sheet${n}.xml`] = strToU8(sheetXml(s.rows));
+    files[`xl/worksheets/sheet${n}.xml`] = strToU8(sheetXml(s.rows, s.tables?.length ?? 0));
     const tableRels = [];
     (s.tables ?? []).forEach((t, j) => {
       const tn = `${n}_${j}`;
@@ -174,7 +175,7 @@ function workbookBytes(sheets) {
   files['_rels/.rels'] = strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
   files['xl/workbook.xml'] = strToU8(`<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><workbookPr/><sheets>${bookSheets.join('')}</sheets></workbook>`);
   files['xl/_rels/workbook.xml.rels'] = strToU8(`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels.join('')}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
-  files['xl/styles.xml'] = strToU8('<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>');
+  files['xl/styles.xml'] = strToU8('<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleLight16"/></styleSheet>');
   return Buffer.from(zipSync(files));
 }
 
