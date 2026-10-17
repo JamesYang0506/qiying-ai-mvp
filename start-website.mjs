@@ -26,7 +26,9 @@ async function isWebsiteReady(){
     const html=await response.text();
     if(!response.ok||!html.includes('企盈智擎')||!html.includes('src="app.js"'))return false;
     const script=await fetch(new URL('app.js',url),{signal:AbortSignal.timeout(700)});
-    return script.ok&&(script.headers.get('content-type')||'').includes('javascript');
+    if(!script.ok||!(script.headers.get('content-type')||'').includes('javascript'))return false;
+    const session=await fetch(new URL('api/import-v1/session',url),{signal:AbortSignal.timeout(700)});
+    return session.ok&&(await session.json()).version==='import-v1';
   }catch{return false;}
 }
 function openBrowser(){
@@ -47,7 +49,8 @@ async function portInUse(){
 }
 try{
   await access(path.join(root,'serve.mjs'));
-  for(const asset of ['index.html','app.js','styles.css','data.js','metrics.js','charts.js','ui.js'])await access(path.join(root,'dist',asset));
+  await access(path.join(root,'runtime','server.mjs'));
+  for(const asset of ['index.html','app.js','styles.css','data.js','metrics.js','charts.js','ui.js','import-api.js','import-page.js','imported-workspace.js'])await access(path.join(root,'dist',asset));
   if(!explicitPort){
     for(let offset=0;offset<20;offset++){
       port=requestedPort+offset;
@@ -86,7 +89,7 @@ try{
     }
   }
 }catch(error){
-  console.error('启动失败：请确认 start-website.mjs、serve.mjs 和完整 dist 文件夹都在同一项目目录中；下载后必须先完整解压。');
+  console.error('启动失败：请确认 start-website.mjs、serve.mjs 及完整 dist、runtime 文件夹都在同一项目目录中；下载后必须先完整解压。');
   console.error(error.message);
   process.exitCode=1;
 }

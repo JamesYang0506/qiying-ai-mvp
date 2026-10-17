@@ -1,1 +1,24 @@
-{"name":"qiying-order-monitor","version":"0.1.0","private":true,"type":"module","engines":{"node":">=20"},"scripts":{"start":"node serve.mjs","test":"node --test"},"dependencies":{"busboy":"1.6.0","decimal.js":"10.6.0","fast-xml-parser":"5.11.2","fflate":"0.8.3"},"devDependencies":{"esbuild":"0.28.2"}}
+{
+  "name": "qiying-order-monitor",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node serve.mjs",
+    "test": "node --test",
+    "build": "node scripts/build-runtime.mjs",
+    "verify:case": "node scripts/verify-local-case.mjs"
+  },
+  "dependencies": {
+    "busboy": "1.6.0",
+    "decimal.js": "10.6.0",
+    "fast-xml-parser": "5.11.2",
+    "fflate": "0.8.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

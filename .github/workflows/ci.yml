@@ -19,10 +19,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build bundled server
+        run: npm run build
       - name: Verify JavaScript syntax
         run: |
           node --check dist/app.js
           node --check dist/charts.js
+          node --check dist/import-page.js
+          node --check dist/imported-workspace.js
           node --check serve.mjs
           node --check start-website.mjs
       - name: Verify business calculations
