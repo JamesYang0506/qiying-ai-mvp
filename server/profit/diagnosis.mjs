@@ -2,7 +2,9 @@ import {D} from './decimal.mjs';
 
 export const DIAGNOSIS_RULE_VERSION = 'DIAG-1.0';
 export const REFERENCE_RULE_VERSION = 'REF-1.0';
+export const SEVERITY_RULE_VERSION = 'SEV-1.0';
 export const PRIMARY_SHARE_THRESHOLD = '0.60';
+export const SEVERITY_THRESHOLDS = {normalMax: '0.10', attentionMax: '0.20', keyMax: '0.30'};
 
 const dec = v => v == null || v === '' ? null : new D(v);
 const amount = (d, places = 2) => d == null ? null : d.toFixed(places);
@@ -185,6 +187,45 @@ export function buildReferenceThresholds({order, cumulative, theoreticalBudget, 
   };
 }
 
+export function buildSeverity(analysis = {}) {
+  const actual = dec(analysis.cumulative?.actual?.margin);
+  const expected = dec(analysis.cumulative?.expected?.margin);
+  const reasons = [];
+  if (actual == null) reasons.push('累计实际毛利率待补齐');
+  if (expected == null) reasons.push('同进度理论毛利率待补齐');
+  else if (expected.lte(0)) reasons.push('同进度理论毛利率为零或负，不能计算相对下降');
+  const base = {
+    actual: ratio(actual), expected: ratio(expected),
+    decline: null, declinePct: null, declineAbsPct: null,
+    differencePp: null, differenceAbsPp: null,
+    thresholds: {
+      normalMaxPct: new D(SEVERITY_THRESHOLDS.normalMax).times(100).toFixed(2),
+      attentionMaxPct: new D(SEVERITY_THRESHOLDS.attentionMax).times(100).toFixed(2),
+      keyMaxPct: new D(SEVERITY_THRESHOLDS.keyMax).times(100).toFixed(2)
+    },
+    ruleVersion: SEVERITY_RULE_VERSION,
+    source: '累计实际毛利率 vs 同进度理论毛利率（当前对照基线）',
+    note: '按相对下降分档：0–10% 可接受误差，10–20% 需关注，20–30% 重点注意，超过 30% 为大型偏差；该分级不是预算参考阈值越线判断。',
+    reasons
+  };
+  if (reasons.length) return {...base, level: 'not_applicable', label: '待核算', tone: 'pending'};
+  const decline = expected.minus(actual).div(expected);
+  const difference = actual.minus(expected);
+  let level, label, tone;
+  if (decline.lt(0)) { level = 'better'; label = '优于同进度理论'; tone = 'ok'; }
+  else if (decline.isZero()) { level = 'normal'; label = '与同进度理论持平'; tone = 'ok'; }
+  else if (decline.lte(SEVERITY_THRESHOLDS.normalMax)) { level = 'normal'; label = '可接受误差'; tone = 'ok'; }
+  else if (decline.lte(SEVERITY_THRESHOLDS.attentionMax)) { level = 'attention'; label = '需要关注'; tone = 'caution'; }
+  else if (decline.lte(SEVERITY_THRESHOLDS.keyMax)) { level = 'key'; label = '重点注意'; tone = 'caution'; }
+  else { level = 'severe'; label = '大型偏差'; tone = 'bad'; }
+  return {
+    ...base,
+    level, label, tone,
+    decline: ratio(decline), declinePct: pp(decline), declineAbsPct: pp(decline.abs()),
+    differencePp: pp(difference), differenceAbsPp: pp(difference.abs())
+  };
+}
+
 export function buildDiagnosis(analysis = {}) {
   const raw = analysis.bridge?.components ?? {};
   const total = dec(analysis.bridge?.total);
@@ -265,6 +306,7 @@ export function buildDiagnosis(analysis = {}) {
 
   return {
     state,
+    severity: buildSeverity(analysis),
     total: amount(total),
     attributionComplete: productionComplete,
     closureComplete,

@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
   buildDiagnosis,
   buildReferenceThresholds,
+  buildSeverity,
   DIAGNOSIS_RULE_VERSION,
   REFERENCE_RULE_VERSION,
+  SEVERITY_RULE_VERSION,
   PRIMARY_SHARE_THRESHOLD
 } from '../../server/profit/diagnosis.mjs';
 
@@ -22,6 +24,7 @@ const components = values => ({
   otherManufacturing: '0', otherProduction: '0', budgetAdjustment: '0', rounding: '0',
   ...values
 });
+const severity = (expected, actual) => buildSeverity({cumulative: {actual: {margin: actual}, expected: {margin: expected}}});
 const reference = overrides => buildReferenceThresholds({
   order: {quantity: '100'},
   cumulative: {processed: 108, defects: 8, actual: {margin: '0.10000000'}},
@@ -221,4 +224,56 @@ test('P0-D: a known actual value is still shown when the baseline threshold is u
   assert.equal(r.margin.actual, '0.10000000');
   assert.equal(r.margin.threshold, null);
   assert.ok(r.margin.reasons.some(x => x.includes('预算理论毛利待补齐')));
+});
+
+test('SEV-1.0: relative margin decline is split into three colors with documented boundaries', () => {
+  const normal = severity('0.20000000', '0.18000000');
+  assert.equal(normal.level, 'normal');
+  assert.equal(normal.label, '可接受误差');
+  assert.equal(normal.tone, 'ok');
+  assert.equal(normal.declineAbsPct, '10.00');
+
+  const attention = severity('0.20000000', '0.16000000');
+  assert.equal(attention.level, 'attention');
+  assert.equal(attention.tone, 'caution');
+  assert.equal(attention.declineAbsPct, '20.00');
+
+  const key = severity('0.20000000', '0.14000000');
+  assert.equal(key.level, 'key');
+  assert.equal(key.tone, 'caution');
+  assert.equal(key.declineAbsPct, '30.00');
+
+  const severe = severity('0.20000000', '0.13000000');
+  assert.equal(severe.level, 'severe');
+  assert.equal(severe.label, '大型偏差');
+  assert.equal(severe.tone, 'bad');
+  assert.equal(severe.declineAbsPct, '35.00');
+  assert.equal(severe.ruleVersion, SEVERITY_RULE_VERSION);
+  assert.ok(severe.source.includes('同进度理论'));
+});
+
+test('SEV-1.0: a decline just above a boundary moves to the next level', () => {
+  assert.equal(severity('0.20000000', '0.17990000').level, 'attention');
+  assert.equal(severity('0.20000000', '0.13990000').level, 'severe');
+});
+
+test('SEV-1.0: better, flat and unknown margins are handled without a false warning', () => {
+  const better = severity('0.20000000', '0.22000000');
+  assert.equal(better.level, 'better');
+  assert.equal(better.tone, 'ok');
+
+  const flat = severity('0.20000000', '0.20000000');
+  assert.equal(flat.level, 'normal');
+  assert.equal(flat.label, '与同进度理论持平');
+
+  const zero = severity('0', '0.10000000');
+  assert.equal(zero.level, 'not_applicable');
+  assert.equal(zero.tone, 'pending');
+  assert.equal(zero.decline, null);
+  assert.ok(zero.reasons.some(x => x.includes('为零或负')));
+
+  const missing = severity(null, null);
+  assert.equal(missing.tone, 'pending');
+  assert.equal(missing.actual, null);
+  assert.equal(missing.expected, null);
 });

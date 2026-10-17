@@ -5,8 +5,27 @@ export function renderImportedVariance(items){const max=Math.max(1,...items.map(
 export function renderImportedDiagnosis(a){
  const d=a?.diagnosis,ref=a?.referenceThresholds;
  if(!d)return `<section class="diagnosis-verdict pending"><div class="verdict-mark">…</div><div><h2>差距原因待补齐</h2><p>诊断结果未返回，暂不判断主因。</p></div></section>`;
- const verdictClass=d.state==='gap'?'bad':d.state==='at_target'?'ok':'pending';
- const mark=d.state==='gap'?'!':d.state==='at_target'?'✓':'…';
+ const sev=d.severity,sevKnown=sev&&sev.tone&&sev.tone!=='pending';
+ let verdictClass=d.state==='gap'?'bad':d.state==='at_target'?'ok':'pending';
+ let mark=d.state==='gap'?'!':d.state==='at_target'?'✓':'…';
+ let verdictTitle=d.summary.title,verdictSub=d.summary.sub;
+ if(sevKnown){
+  const one=x=>Number(x).toFixed(1);
+  const sevSub=sev.level==='better'
+   ?`实际毛利率 ${pct(sev.actual)}，高于同进度理论 ${pct(sev.expected)} ${one(sev.differenceAbsPp)} 个百分点。`
+   :sev.level==='normal'&&Number(sev.decline)===0
+   ?`实际毛利率 ${pct(sev.actual)}，与同进度理论 ${pct(sev.expected)} 持平。`
+   :`实际毛利率 ${pct(sev.actual)}，同进度理论 ${pct(sev.expected)}，下降 ${one(sev.declineAbsPct)}%（${one(sev.differenceAbsPp)} 个百分点），属于${sev.label}。`;
+  if(sev.tone==='ok'&&d.state==='pending'){
+   verdictClass='pending';mark='…';verdictTitle='毛利率处于可接受范围，差距原因待补齐';verdictSub=`${sevSub} ${d.summary.sub}`;
+  }else{
+   verdictClass=sev.tone==='bad'?'bad':sev.tone==='caution'?'caution':'ok';
+   mark=sev.tone==='ok'?'✓':'!';
+   verdictTitle=sev.level==='better'?'毛利率优于同进度理论':sev.level==='normal'?(Number(sev.decline)===0?'毛利率与同进度理论持平':'毛利率处于可接受误差范围'):sev.level==='severe'?'毛利率出现大型偏差':sev.level==='key'?'毛利率偏差较大':'毛利率需要关注';
+   verdictSub=(d.state==='gap'||d.state==='pending')?`${sevSub} ${d.summary.sub}`:sevSub;
+  }
+ }
+ const sevNote=sev?`<p class="verdict-rule">偏差分级 ${esc(sev.ruleVersion)}：相对同进度理论毛利率下降 0–10% 为可接受误差，10–20% 需关注，20–30% 重点注意，超过 30% 为大型偏差。</p>`:'';
  const signed=v=>v==null?'待补齐':(Number(v)>0?'+¥':Number(v)<0?'−¥':'¥')+fmt(Math.abs(Number(v)));
  const share=c=>c.shareOfIncrease==null?'':`占增支 ${(Number(c.shareOfIncrease)*100).toFixed(1)}%`;
  const cause=c=>`<article class="cause ${c.effect==='increase'?'bad':c.effect==='offset'?'ok':'pending'}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${c.effect==='increase'?(share(c)||'增支项'):c.effect==='offset'?'抵消差距':c.effect==='neutral'?'无净影响':'待补齐'}</em><p>${esc(c.fact)}</p></article>`;
@@ -31,7 +50,7 @@ export function renderImportedDiagnosis(a){
  const unknownProd=d.unknowns.filter(c=>c.kind==='production');
  const unknownHtml=unknownProd.length?`<section class="panel diagnosis-group"><div class="panel-head"><h2>待补齐项目</h2><span class="muted">资料不完整时不按零计</span></div><div class="panel-body">${causeGrid(unknownProd)}</div></section>`:'';
  const adjustHtml=`<section class="panel diagnosis-group"><div class="panel-head"><h2>基线调整与舍入</h2><span class="muted">对照口径，不计入生产原因</span></div><div class="panel-body"><div class="adjust-list">${[d.baseline,d.rounding].map(c=>`<div class="adjust-row ${c.amount==null?'pending':''}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><p>${esc(c.fact)}</p></div>`).join('')}</div><p class="footnote">归因规则 ${esc(d.rule.version)} · 主因阈值 ${esc(d.rule.primaryShareThreshold)} · 占比口径：${esc(d.rule.shareLabel)}（分母为${esc(d.rule.shareDenominator)}）。${esc(d.rule.note)}</p></div></section>`;
- return `<section class="diagnosis-verdict ${verdictClass}"><div class="verdict-mark">${mark}</div><div><h2>${esc(d.summary.title)}</h2><p>${esc(d.summary.sub)}</p></div></section>${advice}${increaseHtml}${offsetHtml}${unknownHtml}${adjustHtml}${refHtml}`;
+ return `<section class="diagnosis-verdict ${verdictClass}"><div class="verdict-mark">${mark}</div><div><h2>${esc(verdictTitle)}</h2><p>${esc(verdictSub)}</p>${sevNote}</div></section>${advice}${increaseHtml}${offsetHtml}${unknownHtml}${adjustHtml}${refHtml}`;
 }
 const pct=x=>x==null?'—':(Number(x)*100).toFixed(1)+'%';
 const stateText={complete:'资料完整',provisional:'含暂估资料',incomplete:'生产或成本待补齐',operating_incomplete:'经营费用待补齐',not_started:'尚未开工'};
