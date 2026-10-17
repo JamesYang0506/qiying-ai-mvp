@@ -1,5 +1,5 @@
 import {randomUUID,randomBytes} from 'node:crypto';
-import {readXlsx} from '../import/xlsx.mjs';import {normalizePair,FIX_HINTS} from '../import/normalize.mjs';import {evaluate} from '../profit/evaluate.mjs';import {trend} from '../profit/trend.mjs';import {createStore,digest} from '../storage/store.mjs';import {readUpload,readJson} from './uploads.mjs';
+import {readXlsx} from '../import/xlsx.mjs';import {normalizePair,FIX_HINTS} from '../import/normalize.mjs';import {evaluate} from '../profit/evaluate.mjs';import {calculateSeries} from '../profit/series.mjs';import {createCalculationCache} from '../profit/cache.mjs';import {createStore,digest} from '../storage/store.mjs';import {readUpload,readJson} from './uploads.mjs';
 import {D,money,sum} from '../profit/decimal.mjs';import {CATEGORIES} from '../model.mjs';
 import path from 'node:path';
 import {createRepository} from '../orders/repository.mjs';
@@ -16,9 +16,9 @@ function previewStats(ds){
 }
 export function createRoutes({dataDir,clock=Date.now,calculateOrder,allocateManufacturing,monitorCompute}){
  const store=createStore(dataDir),token=randomBytes(24).toString('hex'),previews=new Map();let busy=false;
- const repository=createRepository(path.join(dataDir,'b-module')),monitorRepository=createMonitorRepository(path.join(dataDir,'monitor-state'));
+ const repository=createRepository(path.join(dataDir,'b-module')),monitorRepository=createMonitorRepository(path.join(dataDir,'monitor-state')),calculationCache=createCalculationCache({maxEntries:64});
  const service=createOrderService({repository,clock,calculateOrder,allocateManufacturing});
- const formal=createOrderRoutes({service,token}),monitor=createMonitorService({store,repository:monitorRepository,clock,compute:monitorCompute});
+ const formal=createOrderRoutes({service,token}),monitor=createMonitorService({store,repository:monitorRepository,clock,compute:monitorCompute,cache:calculationCache});
  service.drain().catch(()=>{});
  const send=(res,status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(obj));};
  return async(req,res,url)=>{
@@ -51,7 +51,7 @@ export function createRoutes({dataDir,clock=Date.now,calculateOrder,allocateManu
     const known=rows.filter(r=>r.quality.state!=='not_started'&&r.cumulative.actual.gross!==null),comparable=known.filter(r=>r.cumulative.expected.gross!==null);
     send(res,200,{asOf,orders:rows,totals:{count:orders.length,known:known.length,comparable:comparable.length,excluded:orders.length-comparable.length,actualGross:known.length?money(sum(known.map(r=>r.cumulative.actual.gross))):null,expectedGross:comparable.length?money(sum(comparable.map(r=>r.cumulative.expected.gross))):null,gap:comparable.length?money(sum(comparable.map(r=>r.cumulative.gap))):null}});return true;
    }
-   if(req.method==='GET'&&parts[0]==='orders'&&parts.length===3){const id=parts[1],action=parts[2];if(action==='revisions'){send(res,200,{revisions:await store.listRevisions(id)});return true;}const dataset=await store.get(id,url.searchParams.get('revision'));if(action==='analysis'){send(res,200,evaluate(dataset,{asOf:url.searchParams.get('asOf')??dataset.order.start,baselineMode:url.searchParams.get('baselineMode')??'ideal'}));return true;}if(action==='trend'){send(res,200,{points:trend(dataset,{start:url.searchParams.get('start')??dataset.order.start,end:url.searchParams.get('end')??dataset.order.end,baselineMode:url.searchParams.get('baselineMode')??'ideal'})});return true;}}
+   if(req.method==='GET'&&parts[0]==='orders'&&parts.length===3){const id=parts[1],action=parts[2];if(action==='revisions'){send(res,200,{revisions:await store.listRevisions(id)});return true;}const dataset=await store.get(id,url.searchParams.get('revision'));if(action==='analysis'){send(res,200,evaluate(dataset,{asOf:url.searchParams.get('asOf')??dataset.order.start,baselineMode:url.searchParams.get('baselineMode')??'ideal'}));return true;}if(action==='trend'){const start=url.searchParams.get('start')??dataset.order.start,end=url.searchParams.get('end')??dataset.order.end,baselineMode=url.searchParams.get('baselineMode')??'ideal',key=`trend|${dataset.revision.id}|${start}|${end}|${baselineMode}|v1`;send(res,200,{points:await calculationCache.getOrCompute(key,()=>calculateSeries(dataset,{start,end,baselineMode}))});return true;}}
    throw Object.assign(new Error('接口不存在'),{status:404});
   }catch(e){req.resume();send(res,e.status??400,{error:{message:e.message,code:e.status??'REQUEST_FAILED'}});return true;}
  };

@@ -11120,32 +11120,6 @@ var six = (x2) => new D(x2).toDecimalPlaces(6);
 var sum2 = (xs) => xs.some((x2) => x2 == null) ? null : xs.reduce((s, x2) => s.plus(x2), new D(0));
 var valid = (r) => ["已确认", "模拟确认", "暂估", "不适用"].includes(r.status);
 
-// server/profit/baseline.mjs
-function prepareBaseline(dataset) {
-  const { order: o, baseline: b } = dataset;
-  const p = b.params;
-  const q = sum2(b.recipe.map((m) => m.quantity));
-  const ref = sum2(b.recipe.map((m) => m.quantity == null || m.referencePrice == null ? null : new D(m.quantity).times(m.referencePrice)));
-  const available = q?.gt(0) && ref?.gt(0) && o.price != null && o.weight != null && new D(o.weight).gt(0) && p.material_pct != null;
-  const factor = available ? new D(o.price).times(p.material_pct).div(o.weight).div(ref.div(q)) : null;
-  const materials = b.recipe.map((m) => ({ ...m, share: available ? new D(m.quantity).div(q) : null, price: available ? six(new D(m.referencePrice).times(factor)) : null }));
-  function theoretical(quantity, mode = "ideal") {
-    const revenue = o.price == null || quantity == null ? null : new D(quantity).times(o.price);
-    const material = quantity == null ? null : sum2(materials.map((m) => m.price == null ? null : new D(money(six(new D(quantity).times(o.weight).times(m.share)).times(m.price)))));
-    const byQty = (k) => quantity == null || p[k] == null ? null : new D(money(new D(quantity).times(p[k])));
-    const byRevenue = (k) => revenue == null || p[k] == null ? null : new D(money(revenue.times(p[k])));
-    const labor = p.prep_piece == null || p.press_piece == null || quantity == null ? null : new D(money(new D(quantity).times(new D(p.prep_piece).plus(p.press_piece))));
-    const management = byRevenue("production_mgmt"), energy = byRevenue("energy_pct"), otherProduction = byQty("other_production_piece");
-    const reserve = mode === "budget" ? sum2([byRevenue("production_loss_budget"), byRevenue("defect_loss_budget")]) : new D(0);
-    const production = sum2([material, labor, management, energy, otherProduction, reserve]);
-    const gross = revenue != null && production != null ? revenue.minus(production) : null;
-    const operatingCosts = sum2([byRevenue("company_mgmt"), byRevenue("admin_pct"), byQty("logistics_piece"), byQty("finance_piece")]);
-    const operating = gross != null && operatingCosts != null ? gross.minus(operatingCosts) : null;
-    return { revenue: money(revenue), material: money(material), labor: money(labor), manufacturing: money(sum2([management, energy])), productionManagement: money(management), energy: money(energy), otherProduction: money(otherProduction), reserve: money(reserve), operatingCosts: money(operatingCosts), gross: money(gross), operating: money(operating) };
-  }
-  return { materials, theoretical };
-}
-
 // server/profit/diagnosis.mjs
 var DIAGNOSIS_RULE_VERSION = "DIAG-1.0";
 var REFERENCE_RULE_VERSION = "REF-1.0";
@@ -11526,42 +11500,80 @@ function buildDiagnosis(analysis = {}) {
   };
 }
 
-// server/profit/evaluate.mjs
-var amountSum = (xs) => money(sum2(xs));
-function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
+// server/profit/baseline.mjs
+function prepareBaseline(dataset) {
   const { order: o, baseline: b } = dataset;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf ?? "") || Number.isNaN(Date.parse(asOf)) || new Date(asOf).toISOString().slice(0, 10) !== asOf) throw new Error("请选择有效日期");
+  const p = b.params;
+  const q = sum2(b.recipe.map((m) => m.quantity));
+  const ref = sum2(b.recipe.map((m) => m.quantity == null || m.referencePrice == null ? null : new D(m.quantity).times(m.referencePrice)));
+  const available = q?.gt(0) && ref?.gt(0) && o.price != null && o.weight != null && new D(o.weight).gt(0) && p.material_pct != null;
+  const factor = available ? new D(o.price).times(p.material_pct).div(o.weight).div(ref.div(q)) : null;
+  const materials = b.recipe.map((m) => ({ ...m, share: available ? new D(m.quantity).div(q) : null, price: available ? six(new D(m.referencePrice).times(factor)) : null }));
+  function theoretical(quantity, mode = "ideal") {
+    const revenue = o.price == null || quantity == null ? null : new D(quantity).times(o.price);
+    const material = quantity == null ? null : sum2(materials.map((m) => m.price == null ? null : new D(money(six(new D(quantity).times(o.weight).times(m.share)).times(m.price)))));
+    const byQty = (k) => quantity == null || p[k] == null ? null : new D(money(new D(quantity).times(p[k])));
+    const byRevenue = (k) => revenue == null || p[k] == null ? null : new D(money(revenue.times(p[k])));
+    const labor = p.prep_piece == null || p.press_piece == null || quantity == null ? null : new D(money(new D(quantity).times(new D(p.prep_piece).plus(p.press_piece))));
+    const management = byRevenue("production_mgmt"), energy = byRevenue("energy_pct"), otherProduction = byQty("other_production_piece");
+    const reserve = mode === "budget" ? sum2([byRevenue("production_loss_budget"), byRevenue("defect_loss_budget")]) : new D(0);
+    const production = sum2([material, labor, management, energy, otherProduction, reserve]);
+    const gross = revenue != null && production != null ? revenue.minus(production) : null;
+    const operatingCosts = sum2([byRevenue("company_mgmt"), byRevenue("admin_pct"), byQty("logistics_piece"), byQty("finance_piece")]);
+    const operating = gross != null && operatingCosts != null ? gross.minus(operatingCosts) : null;
+    return { revenue: money(revenue), material: money(material), labor: money(labor), manufacturing: money(sum2([management, energy])), productionManagement: money(management), energy: money(energy), otherProduction: money(otherProduction), reserve: money(reserve), operatingCosts: money(operatingCosts), gross: money(gross), operating: money(operating) };
+  }
+  return { materials, theoretical };
+}
+
+// server/profit/series.mjs
+var amountSum = (xs) => money(sum2(xs));
+var byDate = (rows) => {
+  const map = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const list = map.get(row.date);
+    if (list) list.push(row);
+    else map.set(row.date, [row]);
+  }
+  return map;
+};
+var CUTOFF_SUFFIX = "T23:59:59+08:00";
+function createDailyEvaluator(dataset, { baselineMode = "ideal" } = {}) {
   if (!["ideal", "budget"].includes(baselineMode)) throw new Error("理论基线模式无效");
-  const base = prepareBaseline(dataset), missing2 = [], cutoff = asOf + "T23:59:59+08:00";
-  const cutoffMs = Date.parse(cutoff);
-  const visible = (r) => r.availableAt && Date.parse(r.availableAt) <= cutoffMs;
-  const miss = (date2, field, detail) => {
-    if (missing2.length < 1e3) missing2.push({ date: date2, field, detail });
+  const { order: o, baseline: b } = dataset, base = prepareBaseline(dataset), baseMissing = [];
+  const miss = (list, date2, field, detail) => {
+    if (list.length < 1e3) list.push({ date: date2, field, detail });
   };
-  for (const k of ["quantity", "price", "weight", "opening"]) if (o[k] == null) miss(null, "order", `订单${k}待补齐`);
-  for (const [k, v] of Object.entries(b.params)) if (v == null) miss(null, "baseline", `基线参数${k}待补齐`);
-  for (const r of b.recipe) if (r.quantity == null || r.referencePrice == null) miss(null, "baseline", `${r.id}配方量或参考价格待补齐`);
+  for (const k of ["quantity", "price", "weight", "opening"]) if (o[k] == null) miss(baseMissing, null, "order", `订单${k}待补齐`);
+  for (const [k, v] of Object.entries(b.params)) if (v == null) miss(baseMissing, null, "baseline", `基线参数${k}待补齐`);
+  for (const r of b.recipe) if (r.quantity == null || r.referencePrice == null) miss(baseMissing, null, "baseline", `${r.id}配方量或参考价格待补齐`);
   const sizePlanComplete = b.sizePlan.length > 0 && b.sizePlan.every((s) => s.quantity != null);
-  if (!sizePlanComplete) miss(null, "production", "分码合同量待补齐");
+  if (!sizePlanComplete) miss(baseMissing, null, "production", "分码合同量待补齐");
   const activeSizes = b.sizePlan.filter((s) => s.quantity != null && new D(s.quantity).gt(0));
-  const days = [];
-  for (let date2 = o.start; date2 <= o.end && date2 <= asOf; date2 = addDays(date2, 1)) {
-    const allProduction = dataset.production.filter((r) => r.date === date2);
-    const productions = allProduction.filter(visible);
+  const production = byDate(dataset.production), materials = byDate(dataset.materials), expenses = byDate(dataset.expenses), supplements = byDate(dataset.supplements);
+  const visibleAt = (cutoff) => {
+    const cutoffMs = Date.parse(cutoff + CUTOFF_SUFFIX);
+    return (row) => row.availableAt && Date.parse(row.availableAt) <= cutoffMs;
+  };
+  let calls = 0;
+  function day(date2, cutoff = date2) {
+    calls++;
+    const visible = visibleAt(cutoff), missing2 = [];
+    const allProduction = production.get(date2) ?? [], productions = allProduction.filter(visible);
     const complete = sizePlanComplete && activeSizes.length > 0 && productions.every((r) => valid(r) && r.dayStatus !== "待补录" && r.processed != null && r.defects != null) && activeSizes.every((s) => {
       const rs = productions.filter((r) => r.size === s.id);
       return rs.length === 1 && valid(rs[0]) && rs[0].processed !== null && rs[0].defects !== null;
     });
-    if (!complete) miss(date2, "production", "日码数量缺失、待确认或尚不可见");
+    if (!complete) miss(missing2, date2, "production", "日码数量缺失、待确认或尚不可见");
     const processed = complete ? productions.reduce((s, r) => s + Number(r.processed), 0) : null, defects = complete ? productions.reduce((s, r) => s + Number(r.defects), 0) : null, quantity = complete ? processed - defects : null;
     const revenue = quantity !== null && o.price !== null ? money(new D(quantity).times(o.price)) : null;
-    const allMaterials = dataset.materials.filter((r) => r.date === date2), materials = allMaterials.filter(visible);
+    const allMaterials = materials.get(date2) ?? [], visibleMaterials = allMaterials.filter(visible);
     let materialCost = new D(0), priceImpact = new D(0), usageImpact = new D(0), materialComplete = true;
     for (const m of base.materials) {
-      const all = allMaterials.filter((r) => r.materialId === m.id), rs = materials.filter((r) => r.materialId === m.id);
+      const all = allMaterials.filter((r) => r.materialId === m.id), rs = visibleMaterials.filter((r) => r.materialId === m.id);
       if (!rs.length || rs.length !== all.length || rs.some((r) => !valid(r) || r.net === null || r.price === null)) {
         materialComplete = false;
-        miss(date2, "material", `${m.id}净耗、单价或可见时间待补齐`);
+        miss(missing2, date2, "material", `${m.id}净耗、单价或可见时间待补齐`);
         continue;
       }
       materialCost = materialCost.plus(sum2(rs.map((r) => money(six(r.net).times(six(r.price))))));
@@ -11572,12 +11584,12 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
         usageImpact = usageImpact.plus(money(actualNet.minus(standard).times(m.price)));
       }
     }
-    const allExpenses = dataset.expenses.filter((r) => r.date === date2), expenses = allExpenses.filter(visible), costs = {};
+    const allExpenses = expenses.get(date2) ?? [], visibleExpenses = allExpenses.filter(visible), costs = {};
     for (const cat of CATEGORIES) {
-      const all = allExpenses.filter((r) => r.category === cat), rs = expenses.filter((r) => r.category === cat);
+      const all = allExpenses.filter((r) => r.category === cat), rs = visibleExpenses.filter((r) => r.category === cat);
       const good = rs.length > 0 && all.length === rs.length && rs.every((r) => valid(r) && r.amount !== null);
       costs[cat] = good ? amountSum(rs.map((r) => money(r.amount))) : null;
-      if (!good) miss(date2, cat, "费用未完整归属、尚不可见或待补齐");
+      if (!good) miss(missing2, date2, cat, "费用未完整归属、尚不可见或待补齐");
     }
     const actualCost = materialComplete ? sum2([money(materialCost), costs.人工, costs.制造, costs.其他生产]) : null;
     const gross = revenue !== null && actualCost !== null ? money(new D(revenue).minus(actualCost)) : null;
@@ -11585,17 +11597,78 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
     const operating = gross !== null && operatingCost !== null ? money(new D(gross).minus(operatingCost)) : null;
     const expected = base.theoretical(quantity, baselineMode), gap = expected.gross !== null && gross !== null ? money(new D(expected.gross).minus(gross)) : null;
     const diff = (a, e) => a !== null && e !== null ? money(new D(a).minus(e)) : null;
-    const energyRows = expenses.filter((r) => r.category === "制造" && /能源/.test(r.item));
+    const energyRows = visibleExpenses.filter((r) => r.category === "制造" && /能源/.test(r.item));
     const energyActual = costs.制造 === null ? null : amountSum(energyRows.map((r) => r.amount));
     const energyDiff = diff(energyActual, expected.energy);
     const otherManufacturing = costs.制造 !== null && expected.productionManagement !== null && energyActual !== null ? money(new D(costs.制造).minus(energyActual).minus(expected.productionManagement)) : null;
-    const components2 = { materialPrice: materialComplete && matsReady(base) && quantity !== null ? money(priceImpact) : null, materialUsage: materialComplete && matsReady(base) && quantity !== null ? money(usageImpact) : null, labor: diff(costs.人工, expected.labor), energy: energyDiff, otherManufacturing, otherProduction: diff(costs.其他生产, expected.otherProduction), budgetAdjustment: expected.reserve === null ? null : money(new D(expected.reserve).negated()) };
-    components2.rounding = gap !== null && Object.values(components2).every((v) => v !== null) ? money(new D(gap).minus(sum2(Object.values(components2)))) : null;
-    days.push({ date: date2, quantity, processed, defects, revenue, actual: { material: materialComplete ? money(materialCost) : null, costs, productionCost: money(actualCost), gross, operating, margin: gross !== null && Number(revenue) > 0 ? new D(gross).div(revenue).toFixed(8) : null }, expected, gap, delta: gap === null ? null : money(new D(gap).negated()), components: components2, rows: { production: productions, materials, expenses, supplements: dataset.supplements.filter((s) => s.date === date2 && visible(s)) } });
+    const components = { materialPrice: materialComplete && matsReady(base) && quantity !== null ? money(priceImpact) : null, materialUsage: materialComplete && matsReady(base) && quantity !== null ? money(usageImpact) : null, labor: diff(costs.人工, expected.labor), energy: energyDiff, otherManufacturing, otherProduction: diff(costs.其他生产, expected.otherProduction), budgetAdjustment: expected.reserve === null ? null : money(new D(expected.reserve).negated()) };
+    components.rounding = gap !== null && Object.values(components).every((v) => v !== null) ? money(new D(gap).minus(sum2(Object.values(components)))) : null;
+    return { missing: missing2, daily: { date: date2, quantity, processed, defects, revenue, actual: { material: materialComplete ? money(materialCost) : null, costs, productionCost: money(actualCost), gross, operating, margin: gross !== null && Number(revenue) > 0 ? new D(gross).div(revenue).toFixed(8) : null }, expected, gap, delta: gap === null ? null : money(new D(gap).negated()), components, rows: { production: productions, materials: visibleMaterials, expenses: visibleExpenses, supplements: (supplements.get(date2) ?? []).filter(visible) } } };
   }
-  const aggregate = (field, side) => amountSum(days.map((d) => side ? d[side][field] : d[field]));
+  return { dataset, order: o, baseline: b, base, baseMissing, sizePlanComplete, activeSizes, day, visibleAt, get calls() {
+    return calls;
+  } };
+}
+function matsReady(base) {
+  return base.materials.every((m) => m.price !== null);
+}
+function provisionalFrom(dataset) {
+  let earliest = null;
+  for (const row of [...dataset.production, ...dataset.materials, ...dataset.expenses]) {
+    if (row.status !== "暂估" || !row.availableAt || !Number.isFinite(Date.parse(row.availableAt))) continue;
+    let shown = new Date(Date.parse(row.availableAt) + 8 * 36e5).toISOString().slice(0, 10);
+    if (Date.parse(row.availableAt) > Date.parse(shown + CUTOFF_SUFFIX)) shown = addDays(shown, 1);
+    const from = row.date > shown ? row.date : shown;
+    if (earliest === null || from < earliest) earliest = from;
+  }
+  return earliest;
+}
+function calculateSeries(dataset, { start, end, baselineMode = "ideal" } = {}, { createEvaluator = createDailyEvaluator } = {}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start ?? "") || !/^\d{4}-\d{2}-\d{2}$/.test(end ?? "") || start > end || (new Date(end) - new Date(start)) / 864e5 > 3660) throw new Error("趋势日期范围无效");
+  const evaluator = createEvaluator(dataset, { baselineMode }), order = dataset.order, provisional = provisionalFrom(dataset);
+  const inc = { quantity: 0, quantityNull: order.opening == null, gross: new D(0), grossNull: false, expected: new D(0), expectedNull: false, gap: new D(0), gapNull: false };
+  const blockingFields = /* @__PURE__ */ new Set(["order", "baseline", "production", "material", "人工", "制造", "其他生产"]);
+  let blocking = evaluator.baseMissing.some((m) => blockingFields.has(m.field)), anyMissing = evaluator.baseMissing.length > 0;
+  const apply = ({ daily, missing: missing2 }) => {
+    if (daily.quantity == null) inc.quantityNull = true;
+    else inc.quantity += daily.quantity;
+    if (daily.actual.gross == null) inc.grossNull = true;
+    else inc.gross = inc.gross.plus(daily.actual.gross);
+    if (daily.expected.gross == null) inc.expectedNull = true;
+    else inc.expected = inc.expected.plus(daily.expected.gross);
+    if (daily.gap == null) inc.gapNull = true;
+    else inc.gap = inc.gap.plus(daily.gap);
+    if (missing2.length) anyMissing = true;
+    if (missing2.some((m) => blockingFields.has(m.field))) blocking = true;
+  };
+  const state = (date2) => date2 < order.start ? "not_started" : blocking ? "incomplete" : provisional !== null && date2 >= provisional ? "provisional" : anyMissing ? "operating_incomplete" : "complete";
+  const points = [];
+  let cursor = order.start;
+  for (let date2 = start; date2 <= end; date2 = addDays(date2, 1)) {
+    while (cursor <= date2 && cursor <= order.end) {
+      apply(evaluator.day(cursor, cursor));
+      cursor = addDays(cursor, 1);
+    }
+    points.push({ date: date2, actual: inc.grossNull ? null : money(inc.gross), expected: inc.expectedNull ? null : money(inc.expected), gap: inc.gapNull ? null : money(inc.gap), quantity: inc.quantityNull ? null : inc.quantity, state: state(date2) });
+  }
+  return points;
+}
+
+// server/profit/evaluate.mjs
+var amountSum2 = (xs) => money(sum2(xs));
+function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
+  const { order: o, baseline: b } = dataset;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf ?? "") || Number.isNaN(Date.parse(asOf)) || new Date(asOf).toISOString().slice(0, 10) !== asOf) throw new Error("请选择有效日期");
+  const evaluator = createDailyEvaluator(dataset, { baselineMode }), base = evaluator.base, missing2 = [...evaluator.baseMissing], days = [];
+  for (let date2 = o.start; date2 <= o.end && date2 <= asOf; date2 = addDays(date2, 1)) {
+    const result2 = evaluator.day(date2, asOf);
+    for (const entry of result2.missing) if (missing2.length < 1e3) missing2.push(entry);
+    days.push(result2.daily);
+  }
+  const visible = evaluator.visibleAt(asOf);
+  const aggregate = (field, side) => amountSum2(days.map((d) => side ? d[side][field] : d[field]));
   const totalQuantity = days.some((d) => d.quantity === null) || o.opening === null ? null : days.reduce((s, d) => s + d.quantity, 0);
-  const dailySum = (fn) => amountSum(days.map(fn));
+  const dailySum = (fn) => amountSum2(days.map(fn));
   const cumulative = { quantity: totalQuantity, processed: days.some((d) => d.processed === null) ? null : days.reduce((s, d) => s + d.processed, 0), defects: days.some((d) => d.defects === null) ? null : days.reduce((s, d) => s + d.defects, 0), revenue: aggregate("revenue"), actual: { gross: aggregate("gross", "actual"), operating: aggregate("operating", "actual") }, expected: { gross: aggregate("gross", "expected"), operating: aggregate("operating", "expected") }, gap: aggregate("gap"), delta: aggregate("delta") };
   cumulative.actual.material = dailySum((d) => d.actual.material);
   cumulative.actual.costs = Object.fromEntries(CATEGORIES.map((c) => [c, dailySum((d) => d.actual.costs[c])]));
@@ -11605,7 +11678,7 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
   cumulative.progress = totalQuantity !== null && Number(o.quantity) > 0 ? new D(totalQuantity).div(o.quantity).toFixed(8) : null;
   cumulative.remaining = totalQuantity === null ? null : Math.max(0, Number(o.quantity) - totalQuantity);
   cumulative.overproduction = totalQuantity === null ? null : Math.max(0, totalQuantity - Number(o.quantity));
-  const components = Object.fromEntries(["materialPrice", "materialUsage", "labor", "energy", "otherManufacturing", "otherProduction", "budgetAdjustment", "rounding"].map((k) => [k, amountSum(days.map((d) => d.components[k]))]));
+  const components = Object.fromEntries(["materialPrice", "materialUsage", "labor", "energy", "otherManufacturing", "otherProduction", "budgetAdjustment", "rounding"].map((k) => [k, amountSum2(days.map((d) => d.components[k]))]));
   const state = asOf < o.start ? "not_started" : missing2.some((m) => ["order", "baseline", "production", "material", "人工", "制造", "其他生产"].includes(m.field)) ? "incomplete" : dataset.production.concat(dataset.materials, dataset.expenses).some((r) => r.date <= asOf && visible(r) && r.status === "暂估") ? "provisional" : missing2.length ? "operating_incomplete" : "complete";
   const visibleSupplements = dataset.supplements.filter((r) => r.date <= asOf && visible(r));
   const visibilityEnd = dataset.production.concat(dataset.materials, dataset.expenses, dataset.supplements).reduce((end, r) => r.availableAt?.slice(0, 10) > end ? r.availableAt.slice(0, 10) : end, o.end);
@@ -11619,25 +11692,41 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
     progress: dimension(missing2.filter((m) => m.field === "production" || m.field === "order"))
   };
   const profitScope = { grossProfit: cumulative.actual.gross, managementProfit: cumulative.actual.operating, forecastProfit: null, finalProfit: null, settlement: { state: "open", reason: "导入首版不包含正式结算资料；最终利润待结算后提供" } };
-  const daySummaries = days.map((d) => ({ date: d.date, quantity: d.quantity, revenue: d.revenue, actual: { material: d.actual.material, costs: d.actual.costs, gross: d.actual.gross, operating: d.actual.operating }, expected: { gross: d.expected.gross, revenue: d.expected.revenue }, gap: d.gap, components: d.components }));
+  const daySummaries = days.map((d) => ({ date: d.date, quantity: d.quantity, revenue: d.revenue, actual: { material: d.actual.material, costs: d.actual.costs, productionCost: d.actual.productionCost, gross: d.actual.gross, operating: d.actual.operating, margin: d.actual.margin }, expected: { gross: d.expected.gross, revenue: d.expected.revenue }, gap: d.gap, components: d.components }));
   const result = { visibilityEnd, theoreticalRounding, order: o, revisionId: dataset.revision.id, baselineId: b.id, baselineMode, asOf, daily: days.find((d) => d.date === asOf) ?? null, daySummaries, cumulative, theoreticalTotal: base.theoretical(o.quantity, baselineMode), bridge: { total: cumulative.gap, components }, profitScope, quality: { state, missing: missing2, completeness, isDemo: o.isDemo }, evidence: days.flatMap((d) => [...d.rows.production, ...d.rows.materials, ...d.rows.expenses].map((r) => r.source)), warnings: visibleSupplements.length ? [`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter((r) => r.date <= asOf && visible(r)).reduce((s, r) => s + Number(r.defects ?? 0), 0) - visibleSupplements.reduce((s, r) => s + Number(r.quantity ?? 0), 0)}双`] : [] };
   result.referenceThresholds = buildReferenceThresholds({ order: o, cumulative, theoreticalBudget: base.theoretical(o.quantity, "budget"), baselineId: b.id, asOf });
   result.diagnosis = buildDiagnosis(result);
   return result;
 }
-function matsReady(base) {
-  return base.materials.every((m) => m.price !== null);
-}
 
-// server/profit/trend.mjs
-function trend(dataset, { start, end, baselineMode = "ideal" }) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(start ?? "") || !/^\d{4}-\d{2}-\d{2}$/.test(end ?? "") || start > end || (new Date(end) - new Date(start)) / 864e5 > 3660) throw new Error("趋势日期范围无效");
-  const points = [];
-  for (let date2 = start; date2 <= end; date2 = addDays(date2, 1)) {
-    const a = evaluate(dataset, { asOf: date2, baselineMode });
-    points.push({ date: date2, actual: a.cumulative.actual.gross, expected: a.cumulative.expected.gross, gap: a.cumulative.gap, quantity: a.cumulative.quantity, state: a.quality.state });
+// server/profit/cache.mjs
+function createCalculationCache({ maxEntries = 64 } = {}) {
+  if (!Number.isInteger(maxEntries) || maxEntries < 1) throw new Error("maxEntries 必须是正整数");
+  const entries = /* @__PURE__ */ new Map(), pending = /* @__PURE__ */ new Map();
+  async function getOrCompute(key, compute) {
+    if (typeof key !== "string" || !key) throw new Error("缓存键必须是非空字符串");
+    if (entries.has(key)) {
+      const value = entries.get(key);
+      entries.delete(key);
+      entries.set(key, value);
+      return value;
+    }
+    if (pending.has(key)) return pending.get(key);
+    const job = Promise.resolve().then(compute).then((value) => {
+      entries.delete(key);
+      entries.set(key, value);
+      while (entries.size > maxEntries) entries.delete(entries.keys().next().value);
+      return value;
+    }).finally(() => pending.delete(key));
+    pending.set(key, job);
+    return job;
   }
-  return points;
+  return { getOrCompute, get size() {
+    return entries.size;
+  }, clear() {
+    entries.clear();
+    pending.clear();
+  } };
 }
 
 // server/storage/store.mjs
@@ -18039,25 +18128,22 @@ function compare(dataset, today, previous, asOf) {
   const change = new D(today.actual.gross).div(today.revenue).minus(new D(previous.actual.gross).div(previous.revenue)).times(100), now = new D(today.actual.productionCost).div(today.quantity), before = new D(previous.actual.productionCost).div(previous.quantity);
   return { status: "comparable", reasons: [], marginChangePp: change.toString(), unitCost: now.toFixed(6), previousUnitCost: before.toFixed(6), unitCostChange: now.minus(before).toFixed(6), deteriorated: change.lt(0) };
 }
-async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal", knownAt, viewId = randomUUID3(), compute = evaluate, customer = "", status = "", risk = "", search = "" } = {}) {
+async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal", knownAt, viewId = randomUUID3(), compute = evaluate, cache = null, customer = "", status = "", risk = "", search = "" } = {}) {
   date(asOf);
   knownAt = timestamp(knownAt ?? (/* @__PURE__ */ new Date()).toISOString());
   if (!["ideal", "budget"].includes(baselineMode) || !Number.isInteger(period) || period < 1 || period > 90) throw fail("INVALID_REQUEST", "理论模式或趋势窗口无效（1–90 天）");
   const requestedStart = shift(asOf, 1 - period), firstStart = entries.map((e) => e.dataset.order.start).sort()[0], start = firstStart && firstStart <= asOf && firstStart > requestedStart ? firstStart : requestedStart, snapshots = [], orders = [];
   for (const entry of entries) {
     const dataset = entry.dataset, visible = atKnown(dataset, knownAt), evaluation = compute(visible, { asOf, baselineMode }), snapshotId = randomUUID3();
-    const previous = evaluation.days?.find((d) => d.date === shift(asOf, -1)) ?? compute(visible, { asOf: shift(asOf, -1), baselineMode }).daily;
+    const previousDay = shift(asOf, -1), previousKnown = evaluation.daySummaries.some((d) => d.date === previousDay), previous = previousKnown ? createDailyEvaluator(visible, { baselineMode }).day(previousDay, previousDay).daily : null;
     const comparison = compare({ ...dataset, _revisionCount: entry.revisionCount }, evaluation.daily, previous, asOf);
     const contract = toCalculationResult(evaluation, { dataset, snapshotId, computedAt: (/* @__PURE__ */ new Date()).toISOString() });
     const cumulative = evaluation.cumulative, eligible = asOf >= dataset.order.start && cumulative.actual.gross != null && cumulative.expected.gross != null;
     const monitoringStatus = asOf < dataset.order.start ? "未开工" : cumulative.quantity == null ? "待确认" : dataset.order.quantity != null && new D(cumulative.quantity).gte(dataset.order.quantity) ? "已完工" : "生产中";
     const riskInfo = classifyMonitorRisk({ actual: cumulative.actual.gross, expected: cumulative.expected.gross, revenue: cumulative.revenue, baselineComplete: evaluation.quality.completeness?.baseline.state === "complete" });
     const marginDeviationPp = eligible && cumulative.revenue != null && new D(cumulative.revenue).gt(0) ? new D(cumulative.actual.gross).minus(cumulative.expected.gross).div(cumulative.revenue).times(100).toString() : null;
-    const points = [];
-    for (let d = start; d <= asOf; d = shift(d, 1)) {
-      const a = d === asOf ? evaluation : compute(visible, { asOf: d, baselineMode });
-      points.push({ date: d, actual: a.cumulative.actual.gross, expected: a.cumulative.expected.gross, comparable: a.cumulative.actual.gross != null && a.cumulative.expected.gross != null && d >= dataset.order.start });
-    }
+    const seriesKey = `monitor-series|${dataset.revision.id}|${knownAt}|${start}|${asOf}|${baselineMode}|v1`, points = await (cache ? cache.getOrCompute(seriesKey, () => calculateSeries(visible, { start, end: asOf, baselineMode })) : Promise.resolve(calculateSeries(visible, { start, end: asOf, baselineMode })));
+    for (const p of points) p.comparable = p.actual != null && p.expected != null && p.date >= dataset.order.start;
     const row = { order: dataset.order, revisionId: dataset.revision.id, baselineId: dataset.baseline.id, snapshotId, cumulative, daily: evaluation.daily, comparison, quality: evaluation.quality, comparable: eligible, distribution: asOf < dataset.order.start ? "not_started" : distributionKey(evaluation.daily), points, loss: cumulative.actual.gross != null && new D(cumulative.actual.gross).lt(0), cumulativeDeviation: eligible && new D(cumulative.gap).gt(0), recommendations: recommendations({ today: evaluation.daily, previous, comparison, orderId: dataset.order.id, revisionId: dataset.revision.id, baselineMode, asOf, snapshotId }) };
     row.evidence = [...evaluation.evidence.map((source, i2) => ({ evidenceId: `${snapshotId}:source-${i2}`, source })), ...row.recommendations.flatMap((r) => r.evidence)];
     Object.assign(row, { monitoringStatus, risk: riskInfo, marginDeviationPp });
@@ -18075,15 +18161,15 @@ async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal"
     return x2 == null ? y == null ? a.order.id.localeCompare(b.order.id) : 1 : y == null ? -1 : new D(x2).cmp(y) || a.order.id.localeCompare(b.order.id);
   });
   const comparable = orders.filter((r) => r.comparable), intersection = orders.filter((r) => r.points.every((p) => p.comparable));
-  const trend2 = Array.from({ length: filteredPointCount }, (_, i2) => {
+  const trend = Array.from({ length: filteredPointCount }, (_, i2) => {
     const day = shift(displayStart, i2), rows = intersection.map((r) => r.points[i2]);
     return { date: day, actual: sum3(rows, (r) => r.actual), expected: sum3(rows, (r) => r.expected), includedCount: rows.length, excludedCount: orders.length - rows.length };
   });
   const buckets = [["high", "≥30%"], ["medium", "10%–不足30%"], ["low", "0%–不足10%"], ["negative", "<0%"], ["unknown", "无法计算"], ["not_started", "未开工"]].map(([key, label]) => ({ key, label, count: orders.filter((r) => r.distribution === key).length, ratio: orders.length ? new D(orders.filter((r) => r.distribution === key).length).div(orders.length).toFixed(6) : null }));
-  const overview = { viewId, filterOptions, filters: { customer, status, risk, search }, scope: { asOf, knownAt, periodStart: displayStart, baselineMode, source: "imported", currency: "CNY", versionSet: orders.map((r) => ({ orderId: r.order.id, revisionId: r.revisionId, baselineId: r.baselineId, snapshotId: r.snapshotId })), note: "本地标准导入口径：CNY、生产等价收入、模拟报价不拆税。迟录和整套修订不纳入纯经营恶化判断。" }, coverage: { total: orders.length, known: orders.filter((r) => r.cumulative.actual.gross != null && asOf >= r.order.start).length, comparable: comparable.length, dayComparable: orders.filter((r) => r.comparison.status === "comparable").length, incomplete: orders.filter((r) => r.quality.missing.length > 0).length, exclusions: orders.filter((r) => !r.comparable || r.comparison.status !== "comparable").map((r) => ({ orderId: r.order.id, reasons: [...r.comparison.reasons, ...r.quality.missing.map((m) => `${m.date ?? ""} ${m.detail}`)] })) }, summary: { actualGross: sum3(comparable, (r) => r.cumulative.actual.gross), expectedGross: sum3(comparable, (r) => r.cumulative.expected.gross), gap: sum3(comparable, (r) => r.cumulative.gap), deteriorated: orders.filter((r) => r.comparison.deteriorated).length }, trend: { includedCount: intersection.length, excludedCount: orders.length - intersection.length, points: trend2 }, distribution: buckets, attention: orders.filter((r) => r.comparison.deteriorated).slice(0, 5).map((r) => r.order.id), reminders: orders.filter((r) => r.loss || r.cumulativeDeviation || r.quality.missing.length).map((r) => ({ orderId: r.order.id, loss: r.loss, cumulativeDeviation: r.cumulativeDeviation, incomplete: r.quality.missing.length > 0 })), orders };
+  const overview = { viewId, filterOptions, filters: { customer, status, risk, search }, scope: { asOf, knownAt, periodStart: displayStart, baselineMode, source: "imported", currency: "CNY", versionSet: orders.map((r) => ({ orderId: r.order.id, revisionId: r.revisionId, baselineId: r.baselineId, snapshotId: r.snapshotId })), note: "本地标准导入口径：CNY、生产等价收入、模拟报价不拆税。迟录和整套修订不纳入纯经营恶化判断。" }, coverage: { total: orders.length, known: orders.filter((r) => r.cumulative.actual.gross != null && asOf >= r.order.start).length, comparable: comparable.length, dayComparable: orders.filter((r) => r.comparison.status === "comparable").length, incomplete: orders.filter((r) => r.quality.missing.length > 0).length, exclusions: orders.filter((r) => !r.comparable || r.comparison.status !== "comparable").map((r) => ({ orderId: r.order.id, reasons: [...r.comparison.reasons, ...r.quality.missing.map((m) => `${m.date ?? ""} ${m.detail}`)] })) }, summary: { actualGross: sum3(comparable, (r) => r.cumulative.actual.gross), expectedGross: sum3(comparable, (r) => r.cumulative.expected.gross), gap: sum3(comparable, (r) => r.cumulative.gap), deteriorated: orders.filter((r) => r.comparison.deteriorated).length }, trend: { includedCount: intersection.length, excludedCount: orders.length - intersection.length, points: trend }, distribution: buckets, attention: orders.filter((r) => r.comparison.deteriorated).slice(0, 5).map((r) => r.order.id), reminders: orders.filter((r) => r.loss || r.cumulativeDeviation || r.quality.missing.length).map((r) => ({ orderId: r.order.id, loss: r.loss, cumulativeDeviation: r.cumulativeDeviation, incomplete: r.quality.missing.length > 0 })), orders };
   return { overview, snapshots };
 }
-function createMonitorService({ store, repository, clock = Date.now, compute = evaluate }) {
+function createMonitorService({ store, repository, clock = Date.now, compute = evaluate, cache = null }) {
   return {
     async create(options = {}) {
       const knownAt = timestamp(options.knownAt ?? new Date(clock()).toISOString());
@@ -18095,7 +18181,7 @@ function createMonitorService({ store, repository, clock = Date.now, compute = e
         selected.set(v.dataset.order.id, { ...v, revisionCount: (old?.revisionCount ?? 0) + 1 });
       }
       const entries = [...selected.values()], asOf = options.asOf ?? (entries.length ? entries.reduce((s, v) => v.dataset.order.end > s ? v.dataset.order.end : s, entries[0].dataset.order.end) : new Date(clock() + 8 * 36e5).toISOString().slice(0, 10));
-      const built = await buildOverview(entries, { ...options, asOf, knownAt, compute });
+      const built = await buildOverview(entries, { ...options, asOf, knownAt, compute, cache });
       built.overview.coverage.unfilteredTotal = entries.length;
       await repository.saveView({ overview: built.overview, snapshots: built.snapshots, recordedAt: new Date(clock()).toISOString() });
       return built.overview;
@@ -18794,9 +18880,9 @@ function previewStats(ds) {
 function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManufacturing, monitorCompute }) {
   const store = createStore(dataDir), token = randomBytes(24).toString("hex"), previews = /* @__PURE__ */ new Map();
   let busy = false;
-  const repository = createRepository(path5.join(dataDir, "b-module")), monitorRepository = createMonitorRepository(path5.join(dataDir, "monitor-state"));
+  const repository = createRepository(path5.join(dataDir, "b-module")), monitorRepository = createMonitorRepository(path5.join(dataDir, "monitor-state")), calculationCache = createCalculationCache({ maxEntries: 64 });
   const service = createOrderService({ repository, clock, calculateOrder, allocateManufacturing });
-  const formal = createOrderRoutes({ service, token }), monitor = createMonitorService({ store, repository: monitorRepository, clock, compute: monitorCompute });
+  const formal = createOrderRoutes({ service, token }), monitor = createMonitorService({ store, repository: monitorRepository, clock, compute: monitorCompute, cache: calculationCache });
   service.drain().catch(() => {
   });
   const send = (res, status, obj) => {
@@ -18889,7 +18975,8 @@ function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManuf
           return true;
         }
         if (action === "trend") {
-          send(res, 200, { points: trend(dataset, { start: url.searchParams.get("start") ?? dataset.order.start, end: url.searchParams.get("end") ?? dataset.order.end, baselineMode: url.searchParams.get("baselineMode") ?? "ideal" }) });
+          const start = url.searchParams.get("start") ?? dataset.order.start, end = url.searchParams.get("end") ?? dataset.order.end, baselineMode = url.searchParams.get("baselineMode") ?? "ideal", key = `trend|${dataset.revision.id}|${start}|${end}|${baselineMode}|v1`;
+          send(res, 200, { points: await calculationCache.getOrCompute(key, () => calculateSeries(dataset, { start, end, baselineMode })) });
           return true;
         }
       }
