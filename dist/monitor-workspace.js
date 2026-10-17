@@ -1,18 +1,30 @@
 import {renderMonitorDashboard} from './monitor-dashboard.js';
 import {renderMonitorEvidence} from './monitor-evidence.js';
 const saved={asOf:'',mode:'ideal',period:16,customer:'',status:'',risk:'',search:'',filter:'',sort:'risk',selected:null,page:1,view:null};
+export function hideNotStarted(state){return !state.search&&state.status!=='未开工'&&state.filter!=='not_started';}
+export function filterMonitorRows(orders,state){
+ const hide=hideNotStarted(state);
+ return (orders??[]).filter(row=>{
+  if(hide&&row.monitoringStatus==='未开工')return false;
+  if(!state.filter)return true;
+  if(state.filter==='deteriorated')return row.comparison.deteriorated;
+  if(state.filter==='incomplete')return row.quality.missing.length>0;
+  return row.distribution===state.filter;
+ });
+}
 export function mountMonitor(root,{client=fetch}={}){
  let alive=true,sequence=0,loading=false,error='',data=saved.view,detail=null,searchTimer,controller=null;
  const request=async(path,opts={})=>{const r=await client(path,opts);let body;try{body=await r.json();}catch{throw new Error('监测服务未就绪，请重启网站后重试');}if(!r.ok)throw new Error(body.error?.message??'查询失败');return body;};
  const persist=()=>{saved.view=data;};
  function render(){
   const searchFocused=document.activeElement?.id==='bm-search',searchPosition=searchFocused?document.activeElement.selectionStart:null,searchEnd=searchFocused?document.activeElement.selectionEnd:null,searchDirection=searchFocused?document.activeElement.selectionDirection:'none';
-  const d=data,rows=(d?.orders??[]).filter(r=>!saved.filter||saved.filter==='deteriorated'?saved.filter!=='deteriorated'||r.comparison.deteriorated:saved.filter==='incomplete'?r.quality.missing.length>0:r.distribution===saved.filter);
+  const d=data,rows=filterMonitorRows(d?.orders??[],saved),hiddenNotStarted=hideNotStarted(saved)?(d?.orders??[]).filter(r=>r.monitoringStatus==='未开工').length:0;
   rows.sort((a,b)=>(saved.sort==='risk'?(a.risk?.priority??5)-(b.risk?.priority??5):saved.sort==='deviation'?(a.marginDeviationPp==null?b.marginDeviationPp==null?0:1:b.marginDeviationPp==null?-1:Number(a.marginDeviationPp)-Number(b.marginDeviationPp)):saved.sort==='yesterday'?(a.comparison.marginChangePp==null?b.comparison.marginChangePp==null?0:1:b.comparison.marginChangePp==null?-1:Number(a.comparison.marginChangePp)-Number(b.comparison.marginChangePp)):0)||a.order.id.localeCompare(b.order.id));
   const pages=Math.max(1,Math.ceil(rows.length/6));saved.page=Math.min(saved.page,pages);const page=rows.slice((saved.page-1)*6,saved.page*6),selected=d?.orders.find(r=>r.order.id===saved.selected)??d?.orders.find(r=>d.attention.includes(r.order.id));
-  root.innerHTML=renderMonitorDashboard({data:d,rows,page,pages,selected,state:saved,loading,error,detailMarkup:detail?renderMonitorEvidence(detail):''});
+  root.innerHTML=renderMonitorDashboard({data:d,rows,page,pages,selected,state:saved,loading,error,detailMarkup:detail?renderMonitorEvidence(detail):'',hiddenNotStarted});
   root.querySelector('#bm-refresh').onclick=()=>load();
   root.querySelector('#bm-see-all')?.addEventListener('click',()=>{saved.filter='deteriorated';saved.page=1;render();root.querySelector('.bm-orders').scrollIntoView({behavior:'smooth',block:'start'});});
+  root.querySelector('#bm-show-not-started')?.addEventListener('click',()=>{saved.filter='not_started';saved.page=1;render();});
   root.querySelector('#bm-date').onchange=e=>{saved.asOf=e.target.value;saved.page=1;load();};
   root.querySelector('#bm-mode').onchange=e=>{saved.mode=e.target.value;load();};
   root.querySelector('#bm-period').onchange=e=>{saved.period=Number(e.target.value);load();};

@@ -23,6 +23,8 @@
 #monitor-workspace .bm-orders .table-top{padding:18px 20px 20px;justify-content:space-between}
 #monitor-workspace .bm-orders .table-top h2{font-size:16px;color:#173957}
 .bm-orders .count{font-size:10px;background:#f1f4f8;color:#9baabe;border-radius:3px;font-weight:400;padding:3px 7px;margin-left:3px}
+.bm-hidden-note{font-size:10px;color:#8b9db6;font-weight:400;margin-left:8px}
+.bm-hidden-note:hover{color:#2868ee;text-decoration:underline}
 .bm-orders-table table{min-width:1050px;width:100%;table-layout:auto}
 .bm-orders-table th{padding:16px 18px;background:#f7f9fd;font-size:11px;color:#8b9db6;font-weight:400;text-align:left;border-top:1px solid #edf2f8;border-bottom:1px solid #edf2f8;white-space:nowrap}
 .bm-orders-table td{padding:18px;font-size:12px;color:#637f9e;border-bottom:1px solid #edf2f8;vertical-align:middle}

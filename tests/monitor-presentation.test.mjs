@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {formatMarginChange,formatMarginDeviation,formatRecommendationText,renderMonitorEvidence} from '../dist/monitor-evidence.js';
+import {filterMonitorRows,hideNotStarted} from '../dist/monitor-workspace.js';
 
 const source={fileRole:'daily',sheet:'每日生产',cell:'A6',recordId:'RAW-PROD-ID',fileHash:'secret-hash'};
 const detail=()=>({asOf:'2026-10-12',knownAt:'2026-10-17T08:00:00Z',revisionId:'INTERNAL-REVISION',snapshotId:'SECRET-SNAPSHOT',baselineMode:'ideal',order:{order:{id:'A-011'},quality:{missing:[]}},previous:{rows:{production:[{id:'RAW-PROD-ID',date:'2026-10-11',size:'38#',processed:'1200',defects:'0',source}]}},daily:{rows:{materials:[{id:'RAW-MAT-ID',date:'2026-10-12',materialId:'EVA-01',net:'65.25',price:'17.2',source:{...source,sheet:'每日材料'}}],expenses:[{id:'RAW-FEE-ID',date:'2026-10-12',category:'人工',item:'计件工资',amount:'0',source:{...source,sheet:'每日费用'}}],supplements:[{id:'RAW-SUP-ID',date:'2026-10-12',size:'38#',quantity:null,parentId:'RAW-PROD-ID',inclusion:'已含当日加工量与净耗，不重复计入',reason:'返工补产',source:{...source,fileRole:'cost',sheet:'补单用量'}}]}}});
@@ -13,6 +14,20 @@ test('margin changes use percentage points with honest small-value precision',()
  assert.equal(formatMarginChange(null),'不可比较');
  assert.equal(formatMarginDeviation('0'),'与预期持平');
  assert.equal(formatMarginDeviation('-1.5'),'低于 1.5 个百分点');
+});
+
+test('not-started orders stay out of the order table unless explicitly requested',()=>{
+ const rows=[
+  {order:{id:'ACTIVE'},monitoringStatus:'生产中',distribution:'medium',comparison:{deteriorated:false,marginChangePp:'-0.1'},quality:{missing:[]}},
+  {order:{id:'FUTURE'},monitoringStatus:'未开工',distribution:'not_started',comparison:{deteriorated:false,marginChangePp:null},quality:{missing:[]}}
+ ];
+ const ids=list=>list.map(r=>r.order.id),state={status:'',filter:'',search:''};
+ assert.equal(hideNotStarted(state),true);
+ assert.deepEqual(ids(filterMonitorRows(rows,state)),['ACTIVE']);
+ assert.deepEqual(ids(filterMonitorRows([rows[1]],{...state,status:'未开工'})),['FUTURE']);
+ assert.deepEqual(ids(filterMonitorRows(rows,{...state,filter:'not_started'})),['FUTURE']);
+ assert.deepEqual(ids(filterMonitorRows([...rows,{...rows[0],order:{id:'MISSING'},quality:{missing:['baseline']}}],{...state,filter:'incomplete'})),['MISSING']);
+ assert.deepEqual(ids(filterMonitorRows([rows[1]],{...state,search:'FUTURE'})),['FUTURE']);
 });
 
 test('evidence shows business labels, table positions and units rather than raw records',()=>{
