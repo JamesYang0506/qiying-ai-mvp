@@ -1,5 +1,5 @@
-import {esc} from './ui.js';
 import {renderMonitorDashboard} from './monitor-dashboard.js';
+import {renderMonitorEvidence} from './monitor-evidence.js';
 const saved={asOf:'',mode:'ideal',period:16,customer:'',status:'',risk:'',search:'',filter:'',sort:'risk',selected:null,page:1,view:null};
 export function mountMonitor(root,{client=fetch}={}){
  let alive=true,sequence=0,loading=false,error='',data=saved.view,detail=null,searchTimer,controller=null;
@@ -10,7 +10,7 @@ export function mountMonitor(root,{client=fetch}={}){
   const d=data,rows=(d?.orders??[]).filter(r=>!saved.filter||saved.filter==='deteriorated'?saved.filter!=='deteriorated'||r.comparison.deteriorated:saved.filter==='incomplete'?r.quality.missing.length>0:r.distribution===saved.filter);
   rows.sort((a,b)=>(saved.sort==='risk'?(a.risk?.priority??5)-(b.risk?.priority??5):saved.sort==='deviation'?(a.marginDeviationPp==null?b.marginDeviationPp==null?0:1:b.marginDeviationPp==null?-1:Number(a.marginDeviationPp)-Number(b.marginDeviationPp)):saved.sort==='yesterday'?(a.comparison.marginChangePp==null?b.comparison.marginChangePp==null?0:1:b.comparison.marginChangePp==null?-1:Number(a.comparison.marginChangePp)-Number(b.comparison.marginChangePp)):0)||a.order.id.localeCompare(b.order.id));
   const pages=Math.max(1,Math.ceil(rows.length/6));saved.page=Math.min(saved.page,pages);const page=rows.slice((saved.page-1)*6,saved.page*6),selected=d?.orders.find(r=>r.order.id===saved.selected)??d?.orders.find(r=>d.attention.includes(r.order.id));
-  root.innerHTML=renderMonitorDashboard({data:d,rows,page,pages,selected,state:saved,loading,error,detailMarkup:detail?renderDetail(detail):''});
+  root.innerHTML=renderMonitorDashboard({data:d,rows,page,pages,selected,state:saved,loading,error,detailMarkup:detail?renderMonitorEvidence(detail):''});
   root.querySelector('#bm-refresh').onclick=()=>load();
   root.querySelector('#bm-see-all')?.addEventListener('click',()=>{saved.filter='deteriorated';saved.page=1;render();root.querySelector('.bm-orders').scrollIntoView({behavior:'smooth',block:'start'});});
   root.querySelector('#bm-date').onchange=e=>{saved.asOf=e.target.value;saved.page=1;load();};
@@ -44,4 +44,3 @@ export function mountMonitor(root,{client=fetch}={}){
  root.addEventListener('pointermove',chartTip);root.addEventListener('pointerleave',hideTip);root.addEventListener('focusin',chartTip);root.addEventListener('focusout',hideTip);
  render();load();return ()=>{alive=false;sequence++;controller?.abort();clearTimeout(searchTimer);persist();root.removeEventListener('pointermove',chartTip);root.removeEventListener('pointerleave',hideTip);root.removeEventListener('focusin',chartTip);root.removeEventListener('focusout',hideTip);};
 }
-function renderDetail(d){const rows=d.daily?.rows??{},all=[...['production','materials','expenses','supplements'].flatMap(k=>d.previous?.rows[k]??[]),...(rows.production??[]),...(rows.materials??[]),...(rows.expenses??[]),...(rows.supplements??[])];return `<div class="bm-overlay"><section class="panel bm-dialog" role="dialog" aria-modal="true" aria-label="固定快照原始依据" tabindex="-1"><div class="panel-head"><h2>固定快照原始依据</h2><button class="button" id="bm-close">关闭</button></div><div class="panel-body"><p>订单 ${esc(d.order.order.id)} · 业务日 ${esc(d.asOf)} · 修订 ${esc(d.revisionId)} · ${esc(d.baselineMode)}</p><p>快照 ${esc(d.snapshotId)} · 信息截止 ${esc(d.knownAt)}</p><p>单订单分析入口默认显示其版本选择；本窗口显示本次首页的固定版本证据。</p>${d.order.quality.missing.map(m=>`<p class="negative">${esc(m.date??'')} ${esc(m.detail)}</p>`).join('')}<div class="table-wrap"><table><thead><tr><th>记录 ID / 证据 ID</th><th>业务日</th><th>类别 / 材料</th><th>来源</th><th>数量 / 单价 / 金额</th></tr></thead><tbody>${all.map(r=>`<tr><td>${esc(r.id)}<small>${esc(d.snapshotId+':'+r.id)}</small></td><td>${esc(r.date)}</td><td>${esc(r.category??r.materialId??r.size??'补单')}</td><td>${esc(JSON.stringify(r.source??{}))}</td><td>${esc(JSON.stringify(Object.fromEntries(['processed','defects','quantity','net','price','amount'].filter(k=>k in r).map(k=>[k,r[k]]))))}</td></tr>`).join('')}</tbody></table></div>${!all.length?'<p>该日暂无可见原始记录。</p>':''}</div></section></div>`;}
