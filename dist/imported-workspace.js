@@ -2,41 +2,36 @@ import {esc} from './ui.js';import {renderTrend,renderCostDonut} from './charts.
 const fmt=x=>x==null?'待补齐':new Intl.NumberFormat('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(x));
 const num=x=>x==null?null:Number(x);
 export function renderImportedVariance(items){const max=Math.max(1,...items.map(x=>Math.abs(x.delta??0)));return `<div class="variance-bars">${items.map(x=>`<button class="variance-row" data-variance="${esc(x.key??'')}" ${x.key?'':'tabindex="-1"'}>${x.key?'<span class="variance-name">':'<span>'}${esc(x.name)}</span><div class="bar-track"><div class="bar-fill ${x.delta>0?'red':'green'}" style="width:${Math.abs(x.delta??0)/max*100}%"></div></div><strong class="${x.delta>0?'negative':x.delta<0?'positive':''}">${x.delta===null?'待补齐':(x.delta>0?'+':x.delta<0?'−':'')+'¥'+fmt(Math.abs(x.delta))}</strong></button>`).join('')}</div>`;}
-export function renderImportedDiagnosis(a,budget){
- const c=a.cumulative,b=a.bridge,comps=b?.components??{},n=v=>v==null?null:Number(v);
- const total=n(b?.total),loss=total!=null&&total>0?total:0;
- const process=['materialUsage','labor','energy','otherProduction','otherManufacturing'].reduce((s,k)=>s+(n(comps[k])??0),0);
- const price=n(comps.materialPrice)??0;
- const share=v=>loss>0?Math.max(0,v)/loss*100:null;
- const processShare=share(process),priceShare=share(price);
- let title,sub;
- if(total==null){title='差距原因待补齐';sub='缺少完整资料，暂无法归因。';}
- else if(total<=0){title='当前没有少赚差距';sub='实际利润已达到或高于同进度理论。';}
- else if(priceShare>=60){title='差距主要来自原料价格';sub=`原料价格占 ${priceShare.toFixed(1)}%，生产与工艺占 ${processShare.toFixed(1)}%。`;}
- else if(processShare>=60){title='差距主要来自生产损耗与工艺';sub=`生产与工艺相关差异占 ${processShare.toFixed(1)}%，原料价格占 ${priceShare.toFixed(1)}%。`;}
- else {title='生产损耗与原料价格共同造成差距';sub=`生产与工艺占 ${processShare.toFixed(1)}%，原料价格占 ${priceShare.toFixed(1)}%。`;}
- const other=['energy','otherProduction','otherManufacturing','rounding','budgetAdjustment'].reduce((s,k)=>s+(n(comps[k])??0),0)-0;
- const causes=[
-  ['材料耗用',n(comps.materialUsage),'不良品也消耗材料，实际净耗高于合格量标准。'],
-  ['人工',n(comps.labor),'不良品也计工，实际人工高于同进度标准。'],
-  ['材料价格',n(comps.materialPrice),'实际采购单价高于理论报价单价。'],
-  ['其他',other,'能源、制造等其余差异。']
- ].filter(([,v])=>v!==null&&Math.abs(v)>0.005);
- const cards=causes.map(([name,v,desc])=>`<article class="cause${v>0?' bad':' ok'}"><span>${name}</span><strong>${(v>0?'+':v<0?'−':'')+'¥'+fmt(Math.abs(v))}</strong><em>${loss>0&&v>0?'占差距 '+(v/loss*100).toFixed(1)+'%':'缩小差距'}</em><p>${desc}</p></article>`).join('');
- const bt=budget?.theoreticalTotal,revenue=n(bt?.revenue),gross=n(bt?.gross),reserve=n(bt?.reserve);
- const floor=revenue>0&&gross!=null?gross/revenue:null;
- const qty=n(a.order.quantity);
- const unit=qty>0?((n(bt?.material)??0)+(n(bt?.labor)??0))/qty:null;
- const allowed=reserve!=null&&unit>0?reserve/unit:null;
- const allowedRate=allowed!=null&&qty>0?allowed/(qty+allowed):null;
- const actualMargin=n(c.actual?.margin),processed=n(c.processed),defects=n(c.defects);
- const defectRate=processed>0&&defects!=null?defects/processed:null;
- const limit=(label,actual,floorVal,higherIsBad)=>{const known=actual!=null&&floorVal!=null,bad=known&&(higherIsBad?actual>floorVal:actual<floorVal),pp=known?Math.abs(actual-floorVal)*100:null;return `<div class="limit ${!known?'pending':bad?'bad':'ok'}"><span>${label}</span><strong>${actual==null?'待补齐':pct(actual)}<em> / 底线 ${floorVal==null?'待核算':pct(floorVal)}</em></strong><p>${!known?'资料完整后判断':bad?`${higherIsBad?'高于':'低于'}底线 ${pp.toFixed(1)} 个百分点`:'达标'}</p></div>`;};
- const marginBad=actualMargin!=null&&floor!=null&&actualMargin<floor,defectBad=defectRate!=null&&allowedRate!=null&&defectRate>allowedRate;
- const breaches=[];if(marginBad)breaches.push(`毛利率低于底线 ${((floor-actualMargin)*100).toFixed(1)} 个百分点`);if(defectBad)breaches.push(`不良率高于底线 ${((defectRate-allowedRate)*100).toFixed(1)} 个百分点`);
- const unknown=actualMargin==null||defectRate==null||floor==null||allowedRate==null;
- const alert=breaches.length?`<div class="limit-alert bad"><h3>已跌破利润安全线</h3><p>${breaches.join('；')}。</p></div>`:unknown?`<div class="limit-alert"><h3>利润安全线待核算</h3><p>资料完整后判断。</p></div>`:`<div class="limit-alert ok"><h3>利润安全线正常</h3><p>毛利率与不良率均在底线内。</p></div>`;
- return `<section class="diagnosis-verdict ${total>0?'bad':'ok'}"><div class="verdict-mark">${total>0?'!':'✓'}</div><div><h2>${title}</h2><p>${sub}</p></div></section>${cards?`<div class="cause-grid">${cards}</div>`:''}<section class="panel diagnosis-limits"><div class="panel-head"><h2>利润安全线</h2><span class="muted">按含损耗预算核定</span></div><div class="panel-body"><div class="limit-grid">${limit('毛利率',actualMargin,floor,false)}${limit('产品不良率',defectRate,allowedRate,true)}</div>${alert}</div></section>`;
+export function renderImportedDiagnosis(a){
+ const d=a?.diagnosis,ref=a?.referenceThresholds;
+ if(!d)return `<section class="diagnosis-verdict pending"><div class="verdict-mark">…</div><div><h2>差距原因待补齐</h2><p>诊断结果未返回，暂不判断主因。</p></div></section>`;
+ const verdictClass=d.state==='gap'?'bad':d.state==='at_target'?'ok':'pending';
+ const mark=d.state==='gap'?'!':d.state==='at_target'?'✓':'…';
+ const signed=v=>v==null?'待补齐':(Number(v)>0?'+¥':Number(v)<0?'−¥':'¥')+fmt(Math.abs(Number(v)));
+ const share=c=>c.shareOfIncrease==null?'':`占增支 ${(Number(c.shareOfIncrease)*100).toFixed(1)}%`;
+ const cause=c=>`<article class="cause ${c.effect==='increase'?'bad':c.effect==='offset'?'ok':'pending'}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${c.effect==='increase'?(share(c)||'增支项'):c.effect==='offset'?'抵消差距':c.effect==='neutral'?'无净影响':'待补齐'}</em><p>${esc(c.fact)}</p></article>`;
+ const causeGrid=list=>`<div class="cause-grid">${list.map(cause).join('')}</div>`;
+ const incNote=d.increasesTotal!=null?`增支合计 ¥${fmt(d.increasesTotal)}`:`已知增支合计 ¥${fmt(d.knownIncreasesTotal)}，归因不完整`;
+ const offNote=d.offsetsTotal!=null?`抵消合计 ${signed(d.offsetsTotal)}`:`已知抵消合计 ${signed(d.knownOffsetsTotal)}，归因不完整`;
+ const advice=d.suggestions?.length?`<section class="panel diagnosis-advice"><div class="panel-head"><h2>建议核查</h2><span class="muted">可能原因，需进一步核实</span></div><div class="panel-body"><ol>${d.suggestions.map(s=>`<li><strong>${esc(s.label)}</strong><span>${esc(s.text)}</span><small>证据：截至 ${esc(s.evidence?.asOf??'待补齐')} · 修订 ${esc(s.evidence?.revisionId??'待补齐')} · 基线 ${esc(s.evidence?.baselineId??'待补齐')} · ${esc(s.evidence?.source??'')}</small></li>`).join('')}</ol></div></section>`:'';
+ const basisLabels={revenue:'预算理论收入',gross:'预算理论毛利',reserve:'预算损耗准备金',material:'预算材料',labor:'预算人工',quantity:'合同数量',unitCost:'材料及人工单位成本',allowedQuantity:'允许补产量',processed:'累计加工量',defects:'累计不良量'};
+ const moneyKeys=new Set(['revenue','gross','reserve','material','labor','unitCost','allowedQuantity']);
+ const basisRows=t=>Object.entries(t.basis??{}).map(([k,v])=>`<div><dt>${esc(basisLabels[k]??k)}</dt><dd>${v==null?'待补齐':(moneyKeys.has(k)?'¥'+fmt(v):v)}</dd></div>`).join('');
+ const refCard=t=>{
+  const bad=t.breached===true,known=t.status==='known',state=!known?'pending':bad?'bad':'ok';
+  const verdict=!known?'待核算':bad?`${t.key==='margin'?'低于':'高于'}参考阈值 ${t.gapPp} 个百分点`:'未越过参考阈值';
+  return `<div class="limit ${state}"><span>${esc(t.label)}</span><strong>${t.actual==null?'待补齐':pct(t.actual)}<em> / 参考阈值 ${t.threshold==null?'待核算':pct(t.threshold)}</em></strong><p>${verdict}</p>${t.reasons?.length?`<p class="limit-reasons">${esc(t.reasons.join('；'))}</p>`:''}<details class="threshold-detail"><summary>查看公式与参数</summary><div class="threshold-body"><p>${esc(t.formula)}</p><dl class="threshold-kv">${basisRows(t)}</dl><p class="footnote">单位：${esc(t.unit)} · 基线：${esc(ref?.baselineId??'待补齐')} · 规则：${esc(ref?.ruleVersion??'待补齐')}</p><p class="footnote">参数来源：${esc(t.source)}</p><p class="footnote">适用条件：${esc(t.applicability)}</p></div></details></div>`;
+ };
+ const refState=ref?.state,refTitle=refState==='breach'?'参考阈值提示':refState==='ok'?'未越过参考阈值':'参考阈值待核算';
+ const refLines=ref?[...(ref.breaches??[]),...(ref.unknownItems??[]).map(x=>`${x.label}：${x.reasons.join('；')}`)]:[];
+ const refAlert=`<div class="limit-alert ${refState==='breach'?'bad':refState==='ok'?'ok':''}"><h3>${esc(refTitle)}</h3><p>${refLines.length?esc(refLines.join('；'))+'。':'毛利率与不良率均未越过参考阈值。'}</p></div>`;
+ const refHtml=ref?`<section class="panel diagnosis-limits"><div class="panel-head"><h2>预算模型参考阈值</h2><span class="muted">${esc(ref.ruleVersion)} · 基线 ${esc(ref.baselineId??'待补齐')}</span></div><div class="panel-body"><div class="limit-grid">${refCard(ref.margin)}${refCard(ref.defect)}</div>${refAlert}<p class="footnote">${esc(ref.note)} 适用条件：${esc(ref.applicability)}</p></div></section>`:`<section class="panel diagnosis-limits"><div class="panel-head"><h2>预算模型参考阈值</h2></div><div class="panel-body"><div class="limit-alert"><h3>参考阈值待核算</h3><p>服务端未返回参考阈值结果。</p></div></div></section>`;
+ const increaseHtml=d.increases.length?`<section class="panel diagnosis-group"><div class="panel-head"><h2>增加差距的项目</h2><span class="muted">${incNote}</span></div><div class="panel-body">${causeGrid(d.increases)}</div></section>`:'';
+ const offsetHtml=d.offsets.length?`<section class="panel diagnosis-group"><div class="panel-head"><h2>抵消差距的项目</h2><span class="muted">${offNote}</span></div><div class="panel-body">${causeGrid(d.offsets)}</div></section>`:'';
+ const unknownProd=d.unknowns.filter(c=>c.kind==='production');
+ const unknownHtml=unknownProd.length?`<section class="panel diagnosis-group"><div class="panel-head"><h2>待补齐项目</h2><span class="muted">资料不完整时不按零计</span></div><div class="panel-body">${causeGrid(unknownProd)}</div></section>`:'';
+ const adjustHtml=`<section class="panel diagnosis-group"><div class="panel-head"><h2>基线调整与舍入</h2><span class="muted">对照口径，不计入生产原因</span></div><div class="panel-body"><div class="adjust-list">${[d.baseline,d.rounding].map(c=>`<div class="adjust-row ${c.amount==null?'pending':''}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><p>${esc(c.fact)}</p></div>`).join('')}</div><p class="footnote">归因规则 ${esc(d.rule.version)} · 主因阈值 ${esc(d.rule.primaryShareThreshold)} · 占比口径：${esc(d.rule.shareLabel)}（分母为${esc(d.rule.shareDenominator)}）。${esc(d.rule.note)}</p></div></section>`;
+ return `<section class="diagnosis-verdict ${verdictClass}"><div class="verdict-mark">${mark}</div><div><h2>${esc(d.summary.title)}</h2><p>${esc(d.summary.sub)}</p></div></section>${advice}${increaseHtml}${offsetHtml}${unknownHtml}${adjustHtml}${refHtml}`;
 }
 const pct=x=>x==null?'—':(Number(x)*100).toFixed(1)+'%';
 const stateText={complete:'资料完整',provisional:'含暂估资料',incomplete:'生产或成本待补齐',operating_incomplete:'经营费用待补齐',not_started:'尚未开工'};
@@ -58,7 +53,7 @@ const varianceDefs={
  rounding:{formula:'总差距 − 其余各项合计，用于保证归因精确闭合',source:'逐日舍入后的差值，不是业务成本。'}
 };
 export function mountImported(root,{orderId,client=importClient}={}){
- let alive=true,seq=0,orders=[],selected=null,revision='',revisions=[],date='',mode='ideal',analysis=null,budgetAnalysis=null,points=[],portfolio=null,tab='production',view='overview',drill=null;
+ let alive=true,seq=0,orders=[],selected=null,revision='',revisions=[],date='',mode='ideal',analysis=null,points=[],portfolio=null,tab='production',view='overview',drill=null;
  const status=()=>root.querySelector('#imported-status');
  const renderDetails=()=>{
   const rows=analysis?.daily?.rows??{production:[],materials:[],expenses:[],supplements:[]};
@@ -106,7 +101,7 @@ export function mountImported(root,{orderId,client=importClient}={}){
  };
  function render(){
   if(!alive||!analysis)return;const a=analysis;
-  root.innerHTML=`<section class="panel imported-controls"><label>订单<select id="imported-order" class="control">${orders.map(o=>option(o.id,`${o.id} · ${o.product}`,selected.id)).join('')}</select></label>${revisions.length>1?`<label>资料版本<select id="imported-revision" class="control">${revisions.map(r=>option(r.revisionId,r.revisionId,revision)).join('')}</select></label>`:''}<label>对照基线<select id="imported-mode" class="control">${option('ideal','无额外损耗理想上界',mode)}${option('budget','含损耗预算的预期利润',mode)}</select></label><div class="imported-date"><button class="button" id="imported-prev" ${date<=a.order.start?'disabled':''}>上一天</button><input class="control" id="imported-date" type="date" aria-label="模拟截至日期" min="${esc(a.order.start)}" max="${esc((a.visibilityEnd??a.order.end))}" value="${esc(date)}"><button class="button" id="imported-next" ${date>=(a.visibilityEnd??a.order.end)?'disabled':''}>下一天</button></div><span class="demo-pill">${a.order.isDemo?'模拟案例':'导入资料'}</span><span class="imported-state ${['complete','provisional'].includes(a.quality.state)?'':'warn'}">${esc(stateText[a.quality.state])}</span><span id="imported-status" role="status"></span></section><div class="imported-tabs" role="tablist">${[['overview','利润概览'],['diagnosis','差距归因'],['detail','明细数据']].map(([k,t])=>`<button role="tab" aria-selected="${view===k}" class="imported-tab ${view===k?'active':''}" data-view="${k}">${t}</button>`).join('')}</div>${view==='diagnosis'?renderImportedDiagnosis(a,budgetAnalysis):view==='overview'?overviewHtml(a):detailHtml(a)}<div class="chart-tip" id="imported-chart-tip" hidden></div>`;
+  root.innerHTML=`<section class="panel imported-controls"><label>订单<select id="imported-order" class="control">${orders.map(o=>option(o.id,`${o.id} · ${o.product}`,selected.id)).join('')}</select></label>${revisions.length>1?`<label>资料版本<select id="imported-revision" class="control">${revisions.map(r=>option(r.revisionId,r.revisionId,revision)).join('')}</select></label>`:''}<label>对照基线<select id="imported-mode" class="control">${option('ideal','无额外损耗理想上界',mode)}${option('budget','含损耗预算的预期利润',mode)}</select></label><div class="imported-date"><button class="button" id="imported-prev" ${date<=a.order.start?'disabled':''}>上一天</button><input class="control" id="imported-date" type="date" aria-label="模拟截至日期" min="${esc(a.order.start)}" max="${esc((a.visibilityEnd??a.order.end))}" value="${esc(date)}"><button class="button" id="imported-next" ${date>=(a.visibilityEnd??a.order.end)?'disabled':''}>下一天</button></div><span class="demo-pill">${a.order.isDemo?'模拟案例':'导入资料'}</span><span class="imported-state ${['complete','provisional'].includes(a.quality.state)?'':'warn'}">${esc(stateText[a.quality.state])}</span><span id="imported-status" role="status"></span></section><div class="imported-tabs" role="tablist">${[['overview','利润概览'],['diagnosis','差距归因'],['detail','明细数据']].map(([k,t])=>`<button role="tab" aria-selected="${view===k}" class="imported-tab ${view===k?'active':''}" data-view="${k}">${t}</button>`).join('')}</div>${view==='diagnosis'?renderImportedDiagnosis(a):view==='overview'?overviewHtml(a):detailHtml(a)}<div class="chart-tip" id="imported-chart-tip" hidden></div>`;
   root.querySelector('#imported-date').addEventListener('change',e=>{if(!e.target.value||e.target.value<a.order.start||e.target.value>(a.visibilityEnd??a.order.end)){render();return;}date=e.target.value;load();});
   root.querySelector('#imported-prev').onclick=()=>{date=offset(date,-1);load();};root.querySelector('#imported-next').onclick=()=>{date=offset(date,1);load();};
   root.querySelector('#imported-mode').onchange=e=>{mode=e.target.value;drill=null;load();};const revSel=root.querySelector('#imported-revision');if(revSel)revSel.onchange=e=>{revision=e.target.value;drill=null;load();};
@@ -123,8 +118,8 @@ export function mountImported(root,{orderId,client=importClient}={}){
   const request=++seq;if(status())status().textContent='正在核算…';
   try{const a=await client.getAnalysis(selected.id,{asOf:date,revision,baselineMode:mode});if(!alive||request!==seq)return;
    if(date<a.order.start||date>(a.visibilityEnd??a.order.end)){date=date<a.order.start?a.order.start:(a.visibilityEnd??a.order.end);return load();}
-   const [t,p,bud]=await Promise.all([client.getTrend(selected.id,{start:a.order.start,end:date,revision,baselineMode:mode}),client.getPortfolio({asOf:date,baselineMode:mode}),mode==='budget'?Promise.resolve(null):client.getAnalysis(selected.id,{asOf:date,revision,baselineMode:'budget'}).catch(()=>null)]);if(!alive||request!==seq)return;
-   analysis=a;budgetAnalysis=mode==='budget'?a:bud;points=t.points;portfolio=p;render();
+   const [t,p]=await Promise.all([client.getTrend(selected.id,{start:a.order.start,end:date,revision,baselineMode:mode}),client.getPortfolio({asOf:date,baselineMode:mode})]);if(!alive||request!==seq)return;
+   analysis=a;points=t.points;portfolio=p;render();
   }catch(e){if(alive&&request===seq){if(status())status().textContent=e.message;else root.innerHTML=`<section class="panel import-intro"><h2>数据载入失败</h2><p>${esc(e.message)}</p><a class="button" href="#import">返回导入</a></section>`;}}
  }
  root.innerHTML='<div class="loading">正在读取本地订单版本…</div>';
