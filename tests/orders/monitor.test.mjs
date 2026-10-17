@@ -45,6 +45,13 @@ test('known_at is independent from as_of while future records stay unavailable',
  const early=await buildOverview([{dataset:d}],{...options,knownAt:'2026-10-13T00:00:00Z'}),late=await buildOverview([{dataset:d}],options);
  assert.equal(early.overview.summary.actualGross,null);assert.notEqual(late.overview.summary.actualGross,null);
 });
+test('end-of-day visibility means the imported daily sheet is known on the same day',async()=>{
+ const d=dataset();for(const key of ['production','materials','expenses'])for(const r of d[key])r.availableAt=r.date+'T23:59:59+08:00';
+ const sameDay={...options,knownAt:'2026-10-12T10:00:00Z'};
+ assert.notEqual((await buildOverview([{dataset:d}],sameDay)).overview.orders[0].cumulative.actual.gross,null);
+ d.materials[0].availableAt='2026-10-12T20:00:00+08:00';
+ assert.equal((await buildOverview([{dataset:d}],sameDay)).overview.orders[0].cumulative.actual.gross,null);
+});
 test('empty, missing yesterday, zero quantity and unstarted orders stay explicit',async()=>{
  const empty=await buildOverview([],options);assert.equal(empty.overview.summary.actualGross,null);
  const a=dataset('A');a.production=a.production.filter(r=>r.date!=='2026-10-11');

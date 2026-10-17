@@ -15,7 +15,10 @@ export const distributionKey=day=>{const margin=day?.actual.gross!=null&&day?.re
 
 // Freeze information visibility before invoking A. A still exclusively owns profit formulas.
 // Records not yet known remain unavailable; known late records become usable for their business day.
-function atKnown(dataset,knownAt){const d=structuredClone(dataset);for(const key of ['production','materials','expenses','supplements'])for(const r of d[key])r.availableAt=r.availableAt&&Date.parse(r.availableAt)<=Date.parse(knownAt)?r.date+'T00:00:00+08:00':'9999-12-31T23:59:59+08:00';return d;}
+// 23:59:59 on the row's own date means "known by the end of that business day", not a late record:
+// the revision is already imported, so the daily sheet for that day is known. Other later times are
+// explicit late records and stay hidden until knownAt reaches them.
+function atKnown(dataset,knownAt){const d=structuredClone(dataset);for(const key of ['production','materials','expenses','supplements'])for(const r of d[key]){const visible=r.availableAt&&(Date.parse(r.availableAt)<=Date.parse(knownAt)||r.availableAt===r.date+'T23:59:59+08:00');r.availableAt=visible?r.date+'T00:00:00+08:00':'9999-12-31T23:59:59+08:00';}return d;}
 function compare(dataset,today,previous,asOf){
  const reasons=[];
  if(!today||!previous)reasons.push('缺少当日或昨日明确报工');

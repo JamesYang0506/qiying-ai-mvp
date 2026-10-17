@@ -18281,7 +18281,10 @@ var distributionKey = (day) => {
 };
 function atKnown(dataset, knownAt) {
   const d = structuredClone(dataset);
-  for (const key of ["production", "materials", "expenses", "supplements"]) for (const r of d[key]) r.availableAt = r.availableAt && Date.parse(r.availableAt) <= Date.parse(knownAt) ? r.date + "T00:00:00+08:00" : "9999-12-31T23:59:59+08:00";
+  for (const key of ["production", "materials", "expenses", "supplements"]) for (const r of d[key]) {
+    const visible = r.availableAt && (Date.parse(r.availableAt) <= Date.parse(knownAt) || r.availableAt === r.date + "T23:59:59+08:00");
+    r.availableAt = visible ? r.date + "T00:00:00+08:00" : "9999-12-31T23:59:59+08:00";
+  }
   return d;
 }
 function compare(dataset, today, previous, asOf) {
