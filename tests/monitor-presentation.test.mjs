@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {formatMarginChange,formatMarginDeviation,formatRecommendationText,renderMonitorEvidence} from '../dist/monitor-evidence.js';
 import {filterMonitorRows,hideNotStarted} from '../dist/monitor-workspace.js';
+import {renderScopeFilters} from '../dist/monitor-table.js';
 
 const source={fileRole:'daily',sheet:'每日生产',cell:'A6',recordId:'RAW-PROD-ID',fileHash:'secret-hash'};
 const detail=()=>({asOf:'2026-10-12',knownAt:'2026-10-17T08:00:00Z',revisionId:'INTERNAL-REVISION',snapshotId:'SECRET-SNAPSHOT',baselineMode:'ideal',order:{order:{id:'A-011'},quality:{missing:[]}},previous:{rows:{production:[{id:'RAW-PROD-ID',date:'2026-10-11',size:'38#',processed:'1200',defects:'0',source}]}},daily:{rows:{materials:[{id:'RAW-MAT-ID',date:'2026-10-12',materialId:'EVA-01',net:'65.25',price:'17.2',source:{...source,sheet:'每日材料'}}],expenses:[{id:'RAW-FEE-ID',date:'2026-10-12',category:'人工',item:'计件工资',amount:'0',source:{...source,sheet:'每日费用'}}],supplements:[{id:'RAW-SUP-ID',date:'2026-10-12',size:'38#',quantity:null,parentId:'RAW-PROD-ID',inclusion:'已含当日加工量与净耗，不重复计入',reason:'返工补产',source:{...source,fileRole:'cost',sheet:'补单用量'}}]}}});
@@ -14,6 +15,13 @@ test('margin changes use percentage points with honest small-value precision',()
  assert.equal(formatMarginChange(null),'不可比较');
  assert.equal(formatMarginDeviation('0'),'与预期持平');
  assert.equal(formatMarginDeviation('-1.5'),'低于 1.5 个百分点');
+});
+
+test('risk filter keeps only the three actionable severity levels',()=>{
+ const html=renderScopeFilters(null,{asOf:'2026-10-01',mode:'ideal',customer:'',status:'',risk:'',period:16},false);
+ const select=html.match(/<select[^>]*id="bm-risk"[^>]*>([\s\S]*?)<\/select>/)?.[1]??'';
+ assert.deepEqual([...select.matchAll(/<option value="([^"]*)"/g)].map(m=>m[1]),['','严重','重点','注意']);
+ for(const hidden of ['数据不足','缺少基线','不可评级','正常','优于预期'])assert.ok(!select.includes(hidden),hidden);
 });
 
 test('not-started orders stay out of the order table unless explicitly requested',()=>{
