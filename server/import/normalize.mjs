@@ -13,7 +13,11 @@ export function normalizePair(costBook,dailyBook){
  const mn=(k,integer=false)=>{mv(k);return num(info,meta[k]??'B0',{role:'cost',integer});};
  const md=k=>{const x=mv(k);try{return excelDate(x,costBook.epoch1904);}catch(e){issue('error','DATE_INVALID',info.name,meta[k],k,e.message,'cost');return null;}};
  const template=mv('模板版本');if(template!=='A-ORDER-0.2')issue('error','VERSION_UNSUPPORTED',info.name,meta['模板版本'],'模板版本','只支持A-ORDER-0.2','cost');
- const order={id:mv('订单ID'),lineId:mv('核算子项ID'),quantity:mn('合同数量',true),price:mn('核算报价'),weight:mn('模拟标准重量'),start:md('生产覆盖开始'),end:md('生产覆盖结束'),timezone:mv('时区'),isDemo:mv('是否模拟')==='是',product:mv('产品'),customer:mv('客户代号'),taxBasis:mv('税口径'),incomeBasis:mv('收入口径'),opening:mn('期初加工/不良',true)};
+ const demo=(value,sheet,cell,role)=>{if(!['是','否'].includes(value))issue('error','DEMO_INVALID',sheet.name,cell,null,'是否模拟必须明确为是或否',role);return value==='是';};
+ if(!/^AB-TIME-0\.2(?:\s*\||$)/.test(read(prod,'A4')??''))issue('error','VERSION_UNSUPPORTED',prod.name,'A4',null,'每日表只支持AB-TIME-0.2');
+ const order={id:mv('订单ID'),lineId:mv('核算子项ID'),quantity:mn('合同数量',true),price:mn('核算报价'),weight:mn('模拟标准重量'),start:md('生产覆盖开始'),end:md('生产覆盖结束'),timezone:mv('时区'),isDemo:demo(mv('是否模拟'),info,meta['是否模拟'],'cost'),product:mv('产品'),customer:mv('客户代号'),taxBasis:mv('税口径'),incomeBasis:mv('收入口径'),opening:mn('期初加工/不良',true)};
+ if(order.opening!==null&&order.opening!=='0')issue('error','OPENING_UNSUPPORTED',info.name,meta['期初加工/不良'],null,'首版仅支持完整周期零期初；非零期初需要配套收入和成本','cost');
+ if(order.taxBasis!=='模拟报价不拆税')issue('error','TAX_UNSUPPORTED',info.name,meta['税口径'],null,'首版仅支持模拟报价不拆税','cost');
  for(const key of ['id','lineId'])if(!order[key]||order[key].length>128)issue('error','ID_INVALID',info.name,null,key,'订单标识必填且不超过128字符','cost');
  if(order.timezone!=='Asia/Shanghai'||order.incomeBasis!=='生产等价')issue('error','BASIS_UNSUPPORTED',info.name,null,null,'首版只支持Asia/Shanghai和生产等价收入','cost');
  if(order.start&&order.end&&(order.start>order.end||(new Date(order.end)-new Date(order.start))/86400000>3660))issue('error','DATE_RANGE',info.name,null,null,'日期范围须有序且不超过3660天','cost');
@@ -22,6 +26,7 @@ export function normalizePair(costBook,dailyBook){
  const source=(s,ref,role,id)=>({fileRole:role,sheet:s.name,cell:ref,recordId:id,fileHash:(role==='cost'?costBook:dailyBook).hash});
  const tableRows=(sheet,tableName,headerRow=5,firstColumn='A')=>{
   const tb=sheet.tables?.find(t=>t.name===tableName);let last=0,lo=0,hi=16384;
+  if(!tb){issue('error','TABLE_REQUIRED',sheet.name,null,tableName,`缺少命名Table：${tableName}`,sheet===orig||sheet===cost||sheet===supp?'cost':'daily');return [];}
   if(tb){const mm=tb.ref.match(/([A-Z]+)(\d+):([A-Z]+)(\d+)/);if(!mm){issue('error','TABLE_INVALID',sheet.name,null,null,'Excel表范围无效');return [];}headerRow=Number(mm[2]);last=Number(mm[4]);lo=columnIndex(mm[1]);hi=columnIndex(mm[3]);}
   const heads={};for(const [ref,c]of Object.entries(sheet.cells)){const mm=ref.match(/^([A-Z]+)(\d+)$/);if(Number(mm?.[2])===headerRow&&columnIndex(mm[1])>=lo&&columnIndex(mm[1])<=hi&&c.value)heads[c.value]=mm[1];}
   if(!last){last=headerRow;while(sheet.cells[firstColumn+(last+1)]?.value!=null&&sheet.cells[firstColumn+(last+1)]?.value!=='')last++;}
@@ -48,7 +53,7 @@ export function normalizePair(costBook,dailyBook){
   if(role==='daily'){
    if(r.get('预期基线版本')!==baseline.id||r.get('数据修订版本')!==revision.id)issue('error','VERSION_MISMATCH',s.name,r.ref('预期基线版本'),null,'预期基线或修订版本跨文件不一致');
    try{x.availableAt=excelDate(r.get('数据可见时间'),dailyBook.epoch1904,true);if(x.date&&x.availableAt.slice(0,10)<x.date)throw new Error('可见时间早于发生日期');}catch(e){issue('error','DATE_INVALID',s.name,r.ref('数据可见时间'),null,e.message);x.availableAt=null;}
-   x.isDemo=r.get('是否模拟')==='是';if(x.isDemo!==order.isDemo)issue('error','DEMO_MISMATCH',s.name,r.ref('是否模拟'),null,'模拟标记不一致');
+   x.isDemo=demo(r.get('是否模拟'),s,r.ref('是否模拟'),role);if(x.isDemo!==order.isDemo)issue('error','DEMO_MISMATCH',s.name,r.ref('是否模拟'),null,'模拟标记不一致');
    if(!r.get('来源'))issue('error','SOURCE_REQUIRED',s.name,r.ref('来源'),null,'来源必填');
   }else x.availableAt=x.date+'T23:59:59+08:00';
   return x;

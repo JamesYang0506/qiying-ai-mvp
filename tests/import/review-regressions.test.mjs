@@ -1,0 +1,18 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {pair} from './fixture.mjs';
+import {normalizePair} from '../../server/import/normalize.mjs';
+import {evaluate} from '../../server/profit/evaluate.mjs';
+import {excelDate} from '../../server/import/validation.mjs';
+const analyze=p=>evaluate(normalizePair(...p).dataset,{asOf:'2026-08-03'});
+test('unknown size coverage cannot confirm zero production',()=>{const p=pair();p[0].sheets[2].cells.M6.value=null;p[1].sheets[0].cells.F6.value=null;const a=analyze(p);assert.equal(a.cumulative.quantity,null);assert.equal(a.cumulative.actual.gross,null);assert.equal(a.quality.state,'incomplete');});
+test('nonzero opening is rejected until opening costs are supported',()=>{const p=pair();p[0].sheets[1].cells.B22.value='10';assert.ok(normalizePair(...p).issues.some(x=>x.code==='OPENING_UNSUPPORTED'));});
+test('baseline and opening missingness survives analysis',()=>{for(const [sheet,ref] of [[0,'C35'],[1,'B22']]){const p=pair();p[0].sheets[sheet].cells[ref].value=null;assert.notEqual(analyze(p).quality.state,'complete');assert.ok(analyze(p).quality.missing.length);}});
+test('missing named tables and wrong daily version are rejected',()=>{const p=pair();p[1].sheets[2].tables=[];assert.ok(normalizePair(...p).issues.some(x=>x.code==='TABLE_REQUIRED'));const q=pair();q[1].sheets[0].cells.A4={value:'AB-TIME-9',kind:'text'};assert.ok(normalizePair(...q).issues.some(x=>x.code==='VERSION_UNSUPPORTED'));});
+test('invalid clock and unknown simulation marker are rejected',()=>{const p=pair();p[1].sheets[1].cells.J6.value='2026-08-03T99:99:99';p[0].sheets[1].cells.B17.value='未知';const issues=normalizePair(...p).issues;assert.ok(issues.some(x=>x.code==='DATE_INVALID'));assert.ok(issues.some(x=>x.code==='DEMO_INVALID'));});
+test('pending production does not produce actual profit',()=>{const p=pair();p[1].sheets[0].cells.H6.value='待补录';assert.equal(analyze(p).cumulative.actual.gross,null);});
+test('late cost extends visibility range and is counted when visible',()=>{const p=pair();p[1].sheets[1].cells.J6.value='2026-08-04T00:00:00';const d=normalizePair(...p).dataset;const a=evaluate(d,{asOf:'2026-08-04'});assert.equal(a.visibilityEnd,'2026-08-04');assert.equal(a.cumulative.actual.gross,'602.00');});
+test('historic warnings exclude future production and supplement quantities',()=>{const d=normalizePair(...pair()).dataset;d.production.push({...d.production[0],id:'future',date:'2026-08-04',availableAt:'2026-08-04T00:00:00+08:00',defects:'8'});d.supplements.push({date:'2026-08-04',availableAt:'2026-08-04T00:00:00+08:00',quantity:'3'});assert.deepEqual(evaluate(d,{asOf:'2026-08-03'}).warnings,[]);});
+test('OOXML ISO date cells are accepted and UTC timestamps retain their instant',()=>{assert.equal(excelDate('2026-08-03T00:00:00.000Z'),'2026-08-03');assert.equal(excelDate('2026-08-03T23:00:00.000Z',false,true),'2026-08-04T07:00:00+08:00');assert.throws(()=>excelDate('2026-08-03T99:99:99.000Z',false,true));});
+test('unsupported tax basis is rejected rather than silently calculated',()=>{const p=pair();p[0].sheets[1].cells.B20.value='未知税口径';assert.ok(normalizePair(...p).issues.some(x=>x.code==='TAX_UNSUPPORTED'));});
+test('same quantity theoretical rounding has a separate reconciliation field',()=>{assert.equal(analyze(pair()).theoreticalRounding,'0.00');});

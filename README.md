@@ -92,12 +92,14 @@ dist/                  可直接运行的前端
   metrics.js           演示计算纯函数
   app.js               页面、筛选和导航
   charts.js / ui.js     图表与展示工具
-tests/                 当前演示业务指标测试
+tests/                 导入、核算、版本及启动回归测试
 contracts/             三模块OpenAPI与示例校验脚本
 examples/              合成请求、响应及Schema映射
 docs/modules/          三模块职责、时间版本与联调说明
 docs/reference/        公式与已确认毛利规则参考
-serve.mjs              本机静态服务
+server/                Excel解析、逐日核算及本地API源码
+runtime/               无node_modules依赖的服务运行包
+serve.mjs              本机服务入口
 ```
 
 ## 验证
@@ -108,10 +110,16 @@ python -m pip install -r requirements-dev.txt
 python contracts/validate_examples.py
 ```
 
-当前有12项业务指标测试和6项启动回归测试（Windows `.cmd` 测试在Windows上运行）；契约校验覆盖Schema、路径及引用完整性、7份示例、独立金额复算和AI证据关联。仓库CI在Windows和Linux上执行检查。
+当前有56项测试，覆盖Excel导入、缺项与日期可见性、利润归因、版本保存及启动回归（Windows `.cmd` 测试在Windows上运行）；契约校验覆盖Schema、路径及引用完整性、7份示例、独立金额复算和AI证据关联。仓库CI在Windows和Linux上执行检查。
 
 ## 旧版恢复与资料边界
 
 旧版完整源码保存在Git历史和标签 [`archive/pre-order-monitor-20261017`](https://github.com/JamesYang0506/qiying-ai-mvp/tree/archive/pre-order-monitor-20261017)。需要复用旧计算引擎、Excel适配器或Ollama适配时，从该标签提取相应模块，通过新契约适配后再整合；旧版Python启动及免安装包不适用于当前主分支。
 
 本仓库不提交真实企业工作簿、计算输出、训练材料、模型权重、密钥或本机Sites配置。推送源码不等于部署公共网站。
+
+### 当前导入边界
+
+成本册必须包含命名Table：CostParameters、OriginalRecipe、OriginalSizePlan、SupplementEvents；每日册包含DailyProductionCase、DailyMaterialCase、DailyExpenseCase，每日生产A4以AB-TIME-0.2开头。缺失Table或版本不符会阻止保存，不猜测输入区域。
+
+首版支持完整周期零期初、生产等价收入、模拟报价不拆税及Asia/Shanghai。是否模拟必须明确填写“是”或“否”。缺失基线、分码量及待补录生产均保留待补齐状态；日期范围延长至最后补录可见日期。整单理论一次计算与逐日累计的舍入差单独说明。

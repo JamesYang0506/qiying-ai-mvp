@@ -10833,10 +10833,12 @@ function decimal(value) {
 function excelDate(value, epoch1904 = false, withTime = false) {
   if (value === null || value === void 0 || value === "") throw new Error("日期缺失");
   if (/^\d{4}-\d{2}-\d{2}/.test(String(value))) {
-    const s = String(value);
-    const date = s.slice(0, 10);
+    const s = String(value), m = s.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|\+08:00)?)?$/);
+    if (!m || Number(m[2] ?? 0) > 23 || Number(m[3] ?? 0) > 59 || Number(m[4] ?? 0) > 59) throw new Error("日期或时间无效；时区须为+08:00");
+    const date = m[1];
     if ((/* @__PURE__ */ new Date(date + "T00:00:00Z")).toISOString().slice(0, 10) !== date) throw new Error("日期无效");
-    return withTime ? `${date}T${s.slice(11, 19) || "00:00:00"}+08:00` : date;
+    if (withTime && m[5] === "Z") return new Date(Date.parse(s) + 8 * 36e5).toISOString().slice(0, 19) + "+08:00";
+    return withTime ? `${date}T${m[2] ?? "00"}:${m[3] ?? "00"}:${m[4] ?? "00"}+08:00` : date;
   }
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 2958465 || !epoch1904 && Math.floor(n) === 60) throw new Error("Excel日期无效");
@@ -10917,7 +10919,14 @@ function normalizePair(costBook, dailyBook) {
   };
   const template = mv("模板版本");
   if (template !== "A-ORDER-0.2") issue("error", "VERSION_UNSUPPORTED", info.name, meta["模板版本"], "模板版本", "只支持A-ORDER-0.2", "cost");
-  const order = { id: mv("订单ID"), lineId: mv("核算子项ID"), quantity: mn("合同数量", true), price: mn("核算报价"), weight: mn("模拟标准重量"), start: md("生产覆盖开始"), end: md("生产覆盖结束"), timezone: mv("时区"), isDemo: mv("是否模拟") === "是", product: mv("产品"), customer: mv("客户代号"), taxBasis: mv("税口径"), incomeBasis: mv("收入口径"), opening: mn("期初加工/不良", true) };
+  const demo = (value, sheet, cell, role) => {
+    if (!["是", "否"].includes(value)) issue("error", "DEMO_INVALID", sheet.name, cell, null, "是否模拟必须明确为是或否", role);
+    return value === "是";
+  };
+  if (!/^AB-TIME-0\.2(?:\s*\||$)/.test(read(prod, "A4") ?? "")) issue("error", "VERSION_UNSUPPORTED", prod.name, "A4", null, "每日表只支持AB-TIME-0.2");
+  const order = { id: mv("订单ID"), lineId: mv("核算子项ID"), quantity: mn("合同数量", true), price: mn("核算报价"), weight: mn("模拟标准重量"), start: md("生产覆盖开始"), end: md("生产覆盖结束"), timezone: mv("时区"), isDemo: demo(mv("是否模拟"), info, meta["是否模拟"], "cost"), product: mv("产品"), customer: mv("客户代号"), taxBasis: mv("税口径"), incomeBasis: mv("收入口径"), opening: mn("期初加工/不良", true) };
+  if (order.opening !== null && order.opening !== "0") issue("error", "OPENING_UNSUPPORTED", info.name, meta["期初加工/不良"], null, "首版仅支持完整周期零期初；非零期初需要配套收入和成本", "cost");
+  if (order.taxBasis !== "模拟报价不拆税") issue("error", "TAX_UNSUPPORTED", info.name, meta["税口径"], null, "首版仅支持模拟报价不拆税", "cost");
   for (const key of ["id", "lineId"]) if (!order[key] || order[key].length > 128) issue("error", "ID_INVALID", info.name, null, key, "订单标识必填且不超过128字符", "cost");
   if (order.timezone !== "Asia/Shanghai" || order.incomeBasis !== "生产等价") issue("error", "BASIS_UNSUPPORTED", info.name, null, null, "首版只支持Asia/Shanghai和生产等价收入", "cost");
   if (order.start && order.end && (order.start > order.end || (new Date(order.end) - new Date(order.start)) / 864e5 > 3660)) issue("error", "DATE_RANGE", info.name, null, null, "日期范围须有序且不超过3660天", "cost");
@@ -10927,6 +10936,10 @@ function normalizePair(costBook, dailyBook) {
   const tableRows = (sheet, tableName, headerRow = 5, firstColumn = "A") => {
     const tb = sheet.tables?.find((t) => t.name === tableName);
     let last = 0, lo = 0, hi = 16384;
+    if (!tb) {
+      issue("error", "TABLE_REQUIRED", sheet.name, null, tableName, `缺少命名Table：${tableName}`, sheet === orig || sheet === cost || sheet === supp ? "cost" : "daily");
+      return [];
+    }
     if (tb) {
       const mm = tb.ref.match(/([A-Z]+)(\d+):([A-Z]+)(\d+)/);
       if (!mm) {
@@ -11000,7 +11013,7 @@ function normalizePair(costBook, dailyBook) {
         issue("error", "DATE_INVALID", s.name, r.ref("数据可见时间"), null, e.message);
         x2.availableAt = null;
       }
-      x2.isDemo = r.get("是否模拟") === "是";
+      x2.isDemo = demo(r.get("是否模拟"), s, r.ref("是否模拟"), role);
       if (x2.isDemo !== order.isDemo) issue("error", "DEMO_MISMATCH", s.name, r.ref("是否模拟"), null, "模拟标记不一致");
       if (!r.get("来源")) issue("error", "SOURCE_REQUIRED", s.name, r.ref("来源"), null, "来源必填");
     } else x2.availableAt = x2.date + "T23:59:59+08:00";
@@ -11100,12 +11113,17 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
   const miss = (date, field, detail) => {
     if (missing.length < 1e3) missing.push({ date, field, detail });
   };
+  for (const k of ["quantity", "price", "weight", "opening"]) if (o[k] == null) miss(null, "order", `订单${k}待补齐`);
+  for (const [k, v] of Object.entries(b.params)) if (v == null) miss(null, "baseline", `基线参数${k}待补齐`);
+  for (const r of b.recipe) if (r.quantity == null || r.referencePrice == null) miss(null, "baseline", `${r.id}配方量或参考价格待补齐`);
+  const sizePlanComplete = b.sizePlan.length > 0 && b.sizePlan.every((s) => s.quantity != null);
+  if (!sizePlanComplete) miss(null, "production", "分码合同量待补齐");
   const activeSizes = b.sizePlan.filter((s) => s.quantity != null && new D(s.quantity).gt(0));
   const days = [];
   for (let date = o.start; date <= o.end && date <= asOf; date = addDays(date, 1)) {
     const allProduction = dataset.production.filter((r) => r.date === date);
     const productions = allProduction.filter(visible);
-    const complete = activeSizes.every((s) => {
+    const complete = sizePlanComplete && activeSizes.length > 0 && productions.every((r) => valid(r) && r.dayStatus !== "待补录" && r.processed != null && r.defects != null) && activeSizes.every((s) => {
       const rs = productions.filter((r) => r.size === s.id);
       return rs.length === 1 && valid(rs[0]) && rs[0].processed !== null && rs[0].defects !== null;
     });
@@ -11151,7 +11169,7 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
     days.push({ date, quantity, processed, defects, revenue, actual: { material: materialComplete ? money(materialCost) : null, costs, productionCost: money(actualCost), gross, operating, margin: gross !== null && Number(revenue) > 0 ? new D(gross).div(revenue).toFixed(8) : null }, expected, gap, delta: gap === null ? null : money(new D(gap).negated()), components: components2, rows: { production: productions, materials, expenses, supplements: dataset.supplements.filter((s) => s.date === date && visible(s)) } });
   }
   const aggregate = (field, side) => amountSum(days.map((d) => side ? d[side][field] : d[field]));
-  const totalQuantity = days.some((d) => d.quantity === null) || o.opening === null ? null : days.reduce((s, d) => s + d.quantity, Number(o.opening));
+  const totalQuantity = days.some((d) => d.quantity === null) || o.opening === null ? null : days.reduce((s, d) => s + d.quantity, 0);
   const cumulative = { quantity: totalQuantity, processed: days.some((d) => d.processed === null) ? null : days.reduce((s, d) => s + d.processed, 0), defects: days.some((d) => d.defects === null) ? null : days.reduce((s, d) => s + d.defects, 0), revenue: aggregate("revenue"), actual: { gross: aggregate("gross", "actual"), operating: aggregate("operating", "actual") }, expected: { gross: aggregate("gross", "expected"), operating: aggregate("operating", "expected") }, gap: aggregate("gap"), delta: aggregate("delta") };
   cumulative.actual.margin = cumulative.actual.gross !== null && Number(cumulative.revenue) > 0 ? new D(cumulative.actual.gross).div(cumulative.revenue).toFixed(8) : null;
   cumulative.expected.margin = cumulative.expected.gross !== null && Number(cumulative.revenue) > 0 ? new D(cumulative.expected.gross).div(cumulative.revenue).toFixed(8) : null;
@@ -11159,8 +11177,12 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
   cumulative.remaining = totalQuantity === null ? null : Math.max(0, Number(o.quantity) - totalQuantity);
   cumulative.overproduction = totalQuantity === null ? null : Math.max(0, totalQuantity - Number(o.quantity));
   const components = Object.fromEntries(["materialPrice", "materialUsage", "labor", "energy", "otherManufacturing", "otherProduction", "budgetAdjustment", "rounding"].map((k) => [k, amountSum(days.map((d) => d.components[k]))]));
-  const state = asOf < o.start ? "not_started" : missing.some((m) => ["production", "material", "人工", "制造", "其他生产"].includes(m.field)) ? "incomplete" : dataset.production.concat(dataset.materials, dataset.expenses).some((r) => r.date <= asOf && visible(r) && r.status === "暂估") ? "provisional" : missing.length ? "operating_incomplete" : "complete";
-  return { order: o, revisionId: dataset.revision.id, baselineId: b.id, baselineMode, asOf, daily: days.find((d) => d.date === asOf) ?? null, cumulative, theoreticalTotal: base.theoretical(o.quantity, baselineMode), bridge: { total: cumulative.gap, components }, quality: { state, missing, isDemo: o.isDemo }, evidence: days.flatMap((d) => [...d.rows.production, ...d.rows.materials, ...d.rows.expenses].map((r) => r.source)), warnings: dataset.supplements.length ? [`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.reduce((s, r) => s + Number(r.defects ?? 0), 0) - dataset.supplements.reduce((s, r) => s + Number(r.quantity ?? 0), 0)}双`] : [] };
+  const state = asOf < o.start ? "not_started" : missing.some((m) => ["order", "baseline", "production", "material", "人工", "制造", "其他生产"].includes(m.field)) ? "incomplete" : dataset.production.concat(dataset.materials, dataset.expenses).some((r) => r.date <= asOf && visible(r) && r.status === "暂估") ? "provisional" : missing.length ? "operating_incomplete" : "complete";
+  const visibleSupplements = dataset.supplements.filter((r) => r.date <= asOf && visible(r));
+  const visibilityEnd = dataset.production.concat(dataset.materials, dataset.expenses, dataset.supplements).reduce((end, r) => r.availableAt?.slice(0, 10) > end ? r.availableAt.slice(0, 10) : end, o.end);
+  const sameQuantityTheory = base.theoretical(totalQuantity, baselineMode);
+  const theoreticalRounding = sameQuantityTheory.gross !== null && cumulative.expected.gross !== null ? money(new D(sameQuantityTheory.gross).minus(cumulative.expected.gross)) : null;
+  return { visibilityEnd, theoreticalRounding, order: o, revisionId: dataset.revision.id, baselineId: b.id, baselineMode, asOf, daily: days.find((d) => d.date === asOf) ?? null, cumulative, theoreticalTotal: base.theoretical(o.quantity, baselineMode), bridge: { total: cumulative.gap, components }, quality: { state, missing, isDemo: o.isDemo }, evidence: days.flatMap((d) => [...d.rows.production, ...d.rows.materials, ...d.rows.expenses].map((r) => r.source)), warnings: visibleSupplements.length ? [`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter((r) => r.date <= asOf && visible(r)).reduce((s, r) => s + Number(r.defects ?? 0), 0) - visibleSupplements.reduce((s, r) => s + Number(r.quantity ?? 0), 0)}双`] : [] };
 }
 function matsReady(base) {
   return base.materials.every((m) => m.price !== null);

@@ -9,11 +9,16 @@ export function evaluate(dataset,{asOf,baselineMode='ideal'}={}){
  const base=prepareBaseline(dataset),missing=[],cutoff=asOf+'T23:59:59+08:00';const cutoffMs=Date.parse(cutoff);
  const visible=r=>r.availableAt&&Date.parse(r.availableAt)<=cutoffMs;
  const miss=(date,field,detail)=>{if(missing.length<1000)missing.push({date,field,detail});};
+ for(const k of ['quantity','price','weight','opening'])if(o[k]==null)miss(null,'order',`订单${k}待补齐`);
+ for(const [k,v] of Object.entries(b.params))if(v==null)miss(null,'baseline',`基线参数${k}待补齐`);
+ for(const r of b.recipe)if(r.quantity==null||r.referencePrice==null)miss(null,'baseline',`${r.id}配方量或参考价格待补齐`);
+ const sizePlanComplete=b.sizePlan.length>0&&b.sizePlan.every(s=>s.quantity!=null);
+ if(!sizePlanComplete)miss(null,'production','分码合同量待补齐');
  const activeSizes=b.sizePlan.filter(s=>s.quantity!=null&&new D(s.quantity).gt(0));
  const days=[];
  for(let date=o.start;date<=o.end&&date<=asOf;date=addDays(date,1)){
   const allProduction=dataset.production.filter(r=>r.date===date);const productions=allProduction.filter(visible);
-  const complete=activeSizes.every(s=>{const rs=productions.filter(r=>r.size===s.id);return rs.length===1&&valid(rs[0])&&rs[0].processed!==null&&rs[0].defects!==null;});
+  const complete=sizePlanComplete&&activeSizes.length>0&&productions.every(r=>valid(r)&&r.dayStatus!=='待补录'&&r.processed!=null&&r.defects!=null)&&activeSizes.every(s=>{const rs=productions.filter(r=>r.size===s.id);return rs.length===1&&valid(rs[0])&&rs[0].processed!==null&&rs[0].defects!==null;});
   if(!complete)miss(date,'production','日码数量缺失、待确认或尚不可见');
   const processed=complete?productions.reduce((s,r)=>s+Number(r.processed),0):null,defects=complete?productions.reduce((s,r)=>s+Number(r.defects),0):null,quantity=complete?processed-defects:null;
   const revenue=quantity!==null&&o.price!==null?money(new D(quantity).times(o.price)):null;
@@ -43,13 +48,17 @@ export function evaluate(dataset,{asOf,baselineMode='ideal'}={}){
   days.push({date,quantity,processed,defects,revenue,actual:{material:materialComplete?money(materialCost):null,costs,productionCost:money(actualCost),gross,operating,margin:gross!==null&&Number(revenue)>0?new D(gross).div(revenue).toFixed(8):null},expected,gap,delta:gap===null?null:money(new D(gap).negated()),components,rows:{production:productions,materials,expenses,supplements:dataset.supplements.filter(s=>s.date===date&&visible(s))}});
  }
  const aggregate=(field,side)=>amountSum(days.map(d=>side?d[side][field]:d[field]));
- const totalQuantity=days.some(d=>d.quantity===null)||o.opening===null?null:days.reduce((s,d)=>s+d.quantity,Number(o.opening));
+ const totalQuantity=days.some(d=>d.quantity===null)||o.opening===null?null:days.reduce((s,d)=>s+d.quantity,0);
  const cumulative={quantity:totalQuantity,processed:days.some(d=>d.processed===null)?null:days.reduce((s,d)=>s+d.processed,0),defects:days.some(d=>d.defects===null)?null:days.reduce((s,d)=>s+d.defects,0),revenue:aggregate('revenue'),actual:{gross:aggregate('gross','actual'),operating:aggregate('operating','actual')},expected:{gross:aggregate('gross','expected'),operating:aggregate('operating','expected')},gap:aggregate('gap'),delta:aggregate('delta')};
  cumulative.actual.margin=cumulative.actual.gross!==null&&Number(cumulative.revenue)>0?new D(cumulative.actual.gross).div(cumulative.revenue).toFixed(8):null;
  cumulative.expected.margin=cumulative.expected.gross!==null&&Number(cumulative.revenue)>0?new D(cumulative.expected.gross).div(cumulative.revenue).toFixed(8):null;
  cumulative.progress=totalQuantity!==null&&Number(o.quantity)>0?new D(totalQuantity).div(o.quantity).toFixed(8):null;cumulative.remaining=totalQuantity===null?null:Math.max(0,Number(o.quantity)-totalQuantity);cumulative.overproduction=totalQuantity===null?null:Math.max(0,totalQuantity-Number(o.quantity));
  const components=Object.fromEntries(['materialPrice','materialUsage','labor','energy','otherManufacturing','otherProduction','budgetAdjustment','rounding'].map(k=>[k,amountSum(days.map(d=>d.components[k]))]));
- const state=asOf<o.start?'not_started':missing.some(m=>['production','material','人工','制造','其他生产'].includes(m.field))?'incomplete':dataset.production.concat(dataset.materials,dataset.expenses).some(r=>r.date<=asOf&&visible(r)&&r.status==='暂估')?'provisional':missing.length?'operating_incomplete':'complete';
- return {order:o,revisionId:dataset.revision.id,baselineId:b.id,baselineMode,asOf,daily:days.find(d=>d.date===asOf)??null,cumulative,theoreticalTotal:base.theoretical(o.quantity,baselineMode),bridge:{total:cumulative.gap,components},quality:{state,missing,isDemo:o.isDemo},evidence:days.flatMap(d=>[...d.rows.production,...d.rows.materials,...d.rows.expenses].map(r=>r.source)),warnings:dataset.supplements.length?[`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.reduce((s,r)=>s+Number(r.defects??0),0)-dataset.supplements.reduce((s,r)=>s+Number(r.quantity??0),0)}双`]:[]};
+ const state=asOf<o.start?'not_started':missing.some(m=>['order','baseline','production','material','人工','制造','其他生产'].includes(m.field))?'incomplete':dataset.production.concat(dataset.materials,dataset.expenses).some(r=>r.date<=asOf&&visible(r)&&r.status==='暂估')?'provisional':missing.length?'operating_incomplete':'complete';
+ const visibleSupplements=dataset.supplements.filter(r=>r.date<=asOf&&visible(r));
+ const visibilityEnd=dataset.production.concat(dataset.materials,dataset.expenses,dataset.supplements).reduce((end,r)=>r.availableAt?.slice(0,10)>end?r.availableAt.slice(0,10):end,o.end);
+ const sameQuantityTheory=base.theoretical(totalQuantity,baselineMode);
+ const theoreticalRounding=sameQuantityTheory.gross!==null&&cumulative.expected.gross!==null?money(new D(sameQuantityTheory.gross).minus(cumulative.expected.gross)):null;
+ return {visibilityEnd,theoreticalRounding,order:o,revisionId:dataset.revision.id,baselineId:b.id,baselineMode,asOf,daily:days.find(d=>d.date===asOf)??null,cumulative,theoreticalTotal:base.theoretical(o.quantity,baselineMode),bridge:{total:cumulative.gap,components},quality:{state,missing,isDemo:o.isDemo},evidence:days.flatMap(d=>[...d.rows.production,...d.rows.materials,...d.rows.expenses].map(r=>r.source)),warnings:visibleSupplements.length?[`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter(r=>r.date<=asOf&&visible(r)).reduce((s,r)=>s+Number(r.defects??0),0)-visibleSupplements.reduce((s,r)=>s+Number(r.quantity??0),0)}双`]:[]};
 }
 function matsReady(base){return base.materials.every(m=>m.price!==null);}
