@@ -10864,6 +10864,50 @@ var STATUSES = ["已确认", "暂估", "缺失", "不适用", "模拟确认"];
 var SCHEMA_VERSION = "IMPORT-0.2";
 
 // server/import/normalize.mjs
+var FIX_HINTS = {
+  SHEET_REQUIRED: "按标准模板补齐同名工作表，表名需完全一致。",
+  TABLE_REQUIRED: "在指定工作表插入对应命名 Table，并核对表名拼写。",
+  TABLE_INVALID: "重新选择该表的数据范围，确保范围有效。",
+  INPUT_FORMULA: "原始输入填计算后的数值，不填公式。",
+  INPUT_ERROR: "清除Excel错误值（如#N/A），填写有效数值。",
+  NUMBER_INVALID: "填写有效数值；数量字段必须是整数。",
+  VALUE_MISSING: "补录数值；确实没有时填明确的0或“不适用”，不能留空。",
+  FIELD_REQUIRED: "在“订单信息”工作表补齐该字段名和值。",
+  DATE_INVALID: "使用有效日期（yyyy-mm-dd 或 Excel 日期），且不超出订单覆盖区间。",
+  VERSION_UNSUPPORTED: "成本表用 A-ORDER-0.2，每日表A4用 AB-TIME-0.2 开头。",
+  DEMO_INVALID: "“是否模拟”只能填“是”或“否”。",
+  OPENING_UNSUPPORTED: "首版期初加工/不良必须为0；非零期初需另立验收案例。",
+  TAX_UNSUPPORTED: "税口径填写“模拟报价不拆税”。",
+  ID_INVALID: "订单ID、子项ID、记录ID必填且不超过128字符。",
+  BASIS_UNSUPPORTED: "时区填 Asia/Shanghai，收入口径填 生产等价。",
+  DATE_RANGE: "生产覆盖开始不得晚于结束，且跨度不超过3660天。",
+  WEIGHT_INVALID: "模拟标准重量必须大于0。",
+  PARAM_DUPLICATE: "参数ID必须唯一，删除重复参数行。",
+  PARAM_MISSING: "补齐成本计算表中的该参数行。",
+  RATE_INVALID: "比例按小数填写（65%填0.65），取值在0到1之间。",
+  RECIPE_INVALID: "原订单用量配方量合计必须大于0。",
+  KEY_DUPLICATE: "材料编号或码号必须唯一。",
+  QUANTITY_MISMATCH: "分码合同量合计必须等于订单合同数量。",
+  ORDER_MISMATCH: "每日表的订单ID和核算子项ID必须与成本表一致。",
+  STATUS_INVALID: "资料状态只能填 已确认/暂估/缺失/不适用/模拟确认。",
+  VERSION_MISMATCH: "每日表的预期基线版本、数据修订版本必须与成本表一致。",
+  SOURCE_REQUIRED: "来源字段必填，填写数据来源说明。",
+  SIZE_UNKNOWN: "码号必须是分码合同量大于0的码号。",
+  QUANTITY_INVALID: "当日不良量不能大于当日加工量。",
+  DAY_STATUS_INVALID: "当日状态填 已报工/停产/待补录；停产时加工量和不良量都必须为0。",
+  MATERIAL_UNKNOWN: "材料编号必须存在于原订单用量表中。",
+  MATERIAL_BASIS: "材料口径填写 actual_net。",
+  CATEGORY_INVALID: "成本类别只能使用 人工/制造/其他生产/管理/销售/财务。",
+  METHOD_UNSUPPORTED: "首版计价方式填写“直接金额”。",
+  SUPPLEMENT_BASIS: "计入规则必须以“已含”开头；补单不重复追加产量或成本。",
+  SUPPLEMENT_LINK: "关联生产记录必须同日同码，且补产数量不超过当日加工量。",
+  RECORD_DUPLICATE: "记录ID必须唯一，删除重复记录。",
+  DAY_SIZE_DUPLICATE: "同一天同一码号只允许一条生产记录。",
+  DAY_MISSING: "补齐该日该码生产记录；停产填停产且数量为0，未上报填待补录。",
+  SUPPLEMENT_DIFFERENCE: "差异保留不自动补造；请核对不良与补单记录。",
+  VERSION_REQUIRED: "预期基线版本和数据修订版本必填且不超过128字符。",
+  SCOPE_INCOMPLETE: "补齐该日期的生产、材料或费用记录，或明确标记停产/不适用；不要用0代替缺失。"
+};
 function normalizePair(costBook, dailyBook) {
   const issues = [];
   const issue = (severity, code, sheet, cell, field, message, fileRole = "daily", recordId = null) => issues.push({ severity, code, fileRole, sheet, cell, field, recordId, message });
@@ -10995,54 +11039,54 @@ function normalizePair(costBook, dailyBook) {
   const common = (r, s, idKey = "记录ID", role = "daily") => {
     const x2 = { id: r.get(idKey), orderId: r.get("订单ID"), lineId: r.get("核算子项ID"), status: r.get("资料状态"), source: source(s, r.ref(idKey), role, r.get(idKey)) };
     if (!x2.id) issue("error", "ID_INVALID", s.name, r.ref(idKey), idKey, "记录ID必填", role);
-    if (x2.orderId !== order.id || x2.lineId !== order.lineId) issue("error", "ORDER_MISMATCH", s.name, r.ref("订单ID"), null, "订单与子项跨文件不一致", role);
-    if (!STATUSES.includes(x2.status)) issue("error", "STATUS_INVALID", s.name, r.ref("资料状态"), null, "资料状态无效", role);
+    if (x2.orderId !== order.id || x2.lineId !== order.lineId) issue("error", "ORDER_MISMATCH", s.name, r.ref("订单ID"), null, "订单与子项跨文件不一致", role, x2.id);
+    if (!STATUSES.includes(x2.status)) issue("error", "STATUS_INVALID", s.name, r.ref("资料状态"), null, "资料状态无效", role, x2.id);
     try {
       x2.date = excelDate(r.get(s === prod ? "生产日期" : "发生日期"), role === "cost" ? costBook.epoch1904 : dailyBook.epoch1904);
       if (x2.date < order.start || x2.date > order.end) throw new Error("记录日期超出覆盖区间");
     } catch (e) {
       x2.date = null;
-      issue("error", "DATE_INVALID", s.name, r.ref("发生日期"), null, e.message, role);
+      issue("error", "DATE_INVALID", s.name, r.ref("发生日期"), null, e.message, role, x2.id);
     }
     if (role === "daily") {
-      if (r.get("预期基线版本") !== baseline.id || r.get("数据修订版本") !== revision.id) issue("error", "VERSION_MISMATCH", s.name, r.ref("预期基线版本"), null, "预期基线或修订版本跨文件不一致");
+      if (r.get("预期基线版本") !== baseline.id || r.get("数据修订版本") !== revision.id) issue("error", "VERSION_MISMATCH", s.name, r.ref("预期基线版本"), null, "预期基线或修订版本跨文件不一致", "daily", x2.id);
       try {
         x2.availableAt = excelDate(r.get("数据可见时间"), dailyBook.epoch1904, true);
         if (x2.date && x2.availableAt.slice(0, 10) < x2.date) throw new Error("可见时间早于发生日期");
       } catch (e) {
-        issue("error", "DATE_INVALID", s.name, r.ref("数据可见时间"), null, e.message);
+        issue("error", "DATE_INVALID", s.name, r.ref("数据可见时间"), null, e.message, "daily", x2.id);
         x2.availableAt = null;
       }
       x2.isDemo = demo(r.get("是否模拟"), s, r.ref("是否模拟"), role);
-      if (x2.isDemo !== order.isDemo) issue("error", "DEMO_MISMATCH", s.name, r.ref("是否模拟"), null, "模拟标记不一致");
-      if (!r.get("来源")) issue("error", "SOURCE_REQUIRED", s.name, r.ref("来源"), null, "来源必填");
+      if (x2.isDemo !== order.isDemo) issue("error", "DEMO_MISMATCH", s.name, r.ref("是否模拟"), null, "模拟标记不一致", "daily", x2.id);
+      if (!r.get("来源")) issue("error", "SOURCE_REQUIRED", s.name, r.ref("来源"), null, "来源必填", "daily", x2.id);
     } else x2.availableAt = x2.date + "T23:59:59+08:00";
     return x2;
   };
   const production = tableRows(prod, "DailyProductionCase").map((r) => {
     const x2 = { ...common(r, prod), size: r.get("码号"), processed: num(prod, r.ref("当日加工量"), { integer: true }), defects: num(prod, r.ref("当日不良量"), { integer: true }), dayStatus: r.get("当日状态") };
-    if (!baseline.sizePlan.some((s) => s.id === x2.size && s.quantity !== "0")) issue("error", "SIZE_UNKNOWN", prod.name, r.ref("码号"), null, "未知或非生产码号");
-    if (x2.processed !== null && x2.defects !== null && new decimal_default(x2.defects).gt(x2.processed)) issue("error", "QUANTITY_INVALID", prod.name, r.ref("当日不良量"), null, "不良量不能大于加工量");
-    if (!["已报工", "停产", "待补录"].includes(x2.dayStatus) || x2.dayStatus === "停产" && (x2.processed !== "0" || x2.defects !== "0")) issue("error", "DAY_STATUS_INVALID", prod.name, r.ref("当日状态"), null, "停产数量应明确为0，或报工状态无效");
+    if (!baseline.sizePlan.some((s) => s.id === x2.size && s.quantity !== "0")) issue("error", "SIZE_UNKNOWN", prod.name, r.ref("码号"), null, "未知或非生产码号", "daily", x2.id);
+    if (x2.processed !== null && x2.defects !== null && new decimal_default(x2.defects).gt(x2.processed)) issue("error", "QUANTITY_INVALID", prod.name, r.ref("当日不良量"), null, "不良量不能大于加工量", "daily", x2.id);
+    if (!["已报工", "停产", "待补录"].includes(x2.dayStatus) || x2.dayStatus === "停产" && (x2.processed !== "0" || x2.defects !== "0")) issue("error", "DAY_STATUS_INVALID", prod.name, r.ref("当日状态"), null, "停产数量应明确为0，或报工状态无效", "daily", x2.id);
     return x2;
   });
   const materials = tableRows(mat, "DailyMaterialCase").map((r) => {
     const x2 = { ...common(r, mat), materialId: r.get("材料编号"), net: num(mat, r.ref("实际净耗kg")), price: num(mat, r.ref("实际单价元/kg")) };
-    if (!baseline.recipe.some((m) => m.id === x2.materialId)) issue("error", "MATERIAL_UNKNOWN", mat.name, r.ref("材料编号"), null, "未知材料");
-    if (r.get("材料口径") !== "actual_net") issue("error", "MATERIAL_BASIS", mat.name, r.ref("材料口径"), null, "实际材料必须为actual_net净耗口径");
+    if (!baseline.recipe.some((m) => m.id === x2.materialId)) issue("error", "MATERIAL_UNKNOWN", mat.name, r.ref("材料编号"), null, "未知材料", "daily", x2.id);
+    if (r.get("材料口径") !== "actual_net") issue("error", "MATERIAL_BASIS", mat.name, r.ref("材料口径"), null, "实际材料必须为actual_net净耗口径", "daily", x2.id);
     return x2;
   });
   const expenses = tableRows(fee, "DailyExpenseCase").map((r) => {
     const x2 = { ...common(r, fee), category: r.get("成本类别"), item: r.get("费用项目"), amount: num(fee, r.ref("实际金额元")) };
-    if (!CATEGORIES.includes(x2.category)) issue("error", "CATEGORY_INVALID", fee.name, r.ref("成本类别"), null, "费用类别无效");
-    if (r.get("计价方式") !== "直接金额") issue("error", "METHOD_UNSUPPORTED", fee.name, r.ref("计价方式"), null, "首版每日费用采用已归属直接金额");
+    if (!CATEGORIES.includes(x2.category)) issue("error", "CATEGORY_INVALID", fee.name, r.ref("成本类别"), null, "费用类别无效", "daily", x2.id);
+    if (r.get("计价方式") !== "直接金额") issue("error", "METHOD_UNSUPPORTED", fee.name, r.ref("计价方式"), null, "首版每日费用采用已归属直接金额", "daily", x2.id);
     return x2;
   });
   const supplements = tableRows(supp, "SupplementEvents").map((r) => {
     const x2 = { ...common(r, supp, "补单记录ID", "cost"), size: r.get("码号"), quantity: num(supp, r.ref("补产数量双"), { role: "cost", integer: true }), parentId: r.get("生产关联ID"), inclusion: r.get("计入规则"), reason: r.get("原因") };
-    if (!x2.inclusion?.startsWith("已含")) issue("error", "SUPPLEMENT_BASIS", supp.name, r.ref("计入规则"), null, "首版只支持已含加工/净耗的补单", "cost");
+    if (!x2.inclusion?.startsWith("已含")) issue("error", "SUPPLEMENT_BASIS", supp.name, r.ref("计入规则"), null, "首版只支持已含加工/净耗的补单", "cost", x2.id);
     const p = production.find((p2) => p2.id === x2.parentId);
-    if (!p || p.date !== x2.date || p.size !== x2.size || x2.quantity !== null && p.processed !== null && new decimal_default(x2.quantity).gt(p.processed)) issue("error", "SUPPLEMENT_LINK", supp.name, r.ref("生产关联ID"), null, "补单关联生产记录无效", "cost");
+    if (!p || p.date !== x2.date || p.size !== x2.size || x2.quantity !== null && p.processed !== null && new decimal_default(x2.quantity).gt(p.processed)) issue("error", "SUPPLEMENT_LINK", supp.name, r.ref("生产关联ID"), null, "补单关联生产记录无效", "cost", x2.id);
     return x2;
   });
   for (const list of [production, materials, expenses, supplements]) {
@@ -11065,6 +11109,7 @@ function normalizePair(costBook, dailyBook) {
   if (defectTotal !== suppTotal) issue("warning", "SUPPLEMENT_DIFFERENCE", supp.name, null, null, `不良${defectTotal}双与补单${suppTotal}双不同；保留差异，不重复计入`, "cost");
   for (const name of [baseline.id, revision.id]) if (!name || name.length > 128) issue("error", "VERSION_REQUIRED", info.name, null, null, "基线与修订ID必填且不超过128字符", "cost");
   const dataset = { schemaVersion: SCHEMA_VERSION, order, baseline, revision, production, materials, expenses, supplements, sourceFiles: { cost: costBook.hash, daily: dailyBook.hash } };
+  for (const issue2 of issues) issue2.hint = issue2.hint ?? FIX_HINTS[issue2.code] ?? "按提示修正后重新导入。";
   return { dataset, issues, summary: { orderId: order.id, lineId: order.lineId, baselineId: baseline.id, revisionId: revision.id, isDemo: order.isDemo, start: order.start, end: order.end, counts: { production: production.length, supplements: supplements.length, materials: materials.length, expenses: expenses.length } } };
 }
 
@@ -11170,7 +11215,11 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
   }
   const aggregate = (field, side) => amountSum(days.map((d) => side ? d[side][field] : d[field]));
   const totalQuantity = days.some((d) => d.quantity === null) || o.opening === null ? null : days.reduce((s, d) => s + d.quantity, 0);
+  const dailySum = (fn) => amountSum(days.map(fn));
   const cumulative = { quantity: totalQuantity, processed: days.some((d) => d.processed === null) ? null : days.reduce((s, d) => s + d.processed, 0), defects: days.some((d) => d.defects === null) ? null : days.reduce((s, d) => s + d.defects, 0), revenue: aggregate("revenue"), actual: { gross: aggregate("gross", "actual"), operating: aggregate("operating", "actual") }, expected: { gross: aggregate("gross", "expected"), operating: aggregate("operating", "expected") }, gap: aggregate("gap"), delta: aggregate("delta") };
+  cumulative.actual.material = dailySum((d) => d.actual.material);
+  cumulative.actual.costs = Object.fromEntries(CATEGORIES.map((c) => [c, dailySum((d) => d.actual.costs[c])]));
+  for (const k of ["material", "labor", "manufacturing", "otherProduction", "reserve", "operatingCosts"]) cumulative.expected[k] = dailySum((d) => d.expected[k]);
   cumulative.actual.margin = cumulative.actual.gross !== null && Number(cumulative.revenue) > 0 ? new D(cumulative.actual.gross).div(cumulative.revenue).toFixed(8) : null;
   cumulative.expected.margin = cumulative.expected.gross !== null && Number(cumulative.revenue) > 0 ? new D(cumulative.expected.gross).div(cumulative.revenue).toFixed(8) : null;
   cumulative.progress = totalQuantity !== null && Number(o.quantity) > 0 ? new D(totalQuantity).div(o.quantity).toFixed(8) : null;
@@ -11181,8 +11230,16 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
   const visibleSupplements = dataset.supplements.filter((r) => r.date <= asOf && visible(r));
   const visibilityEnd = dataset.production.concat(dataset.materials, dataset.expenses, dataset.supplements).reduce((end, r) => r.availableAt?.slice(0, 10) > end ? r.availableAt.slice(0, 10) : end, o.end);
   const sameQuantityTheory = base.theoretical(totalQuantity, baselineMode);
+  cumulative.expected.revenue = sameQuantityTheory.revenue;
   const theoreticalRounding = sameQuantityTheory.gross !== null && cumulative.expected.gross !== null ? money(new D(sameQuantityTheory.gross).minus(cumulative.expected.gross)) : null;
-  return { visibilityEnd, theoreticalRounding, order: o, revisionId: dataset.revision.id, baselineId: b.id, baselineMode, asOf, daily: days.find((d) => d.date === asOf) ?? null, cumulative, theoreticalTotal: base.theoretical(o.quantity, baselineMode), bridge: { total: cumulative.gap, components }, quality: { state, missing, isDemo: o.isDemo }, evidence: days.flatMap((d) => [...d.rows.production, ...d.rows.materials, ...d.rows.expenses].map((r) => r.source)), warnings: visibleSupplements.length ? [`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter((r) => r.date <= asOf && visible(r)).reduce((s, r) => s + Number(r.defects ?? 0), 0) - visibleSupplements.reduce((s, r) => s + Number(r.quantity ?? 0), 0)}双`] : [] };
+  const dimension = (items) => ({ state: items.length ? "incomplete" : "complete", missing: items });
+  const completeness = {
+    actual: dimension(missing.filter((m) => m.field !== "baseline" && m.field !== "production")),
+    baseline: dimension(missing.filter((m) => m.field === "baseline")),
+    progress: dimension(missing.filter((m) => m.field === "production" || m.field === "order"))
+  };
+  const profitScope = { grossProfit: cumulative.actual.gross, managementProfit: cumulative.actual.operating, forecastProfit: null, finalProfit: null, settlement: { state: "open", reason: "导入首版不包含正式结算资料；最终利润待结算后提供" } };
+  return { visibilityEnd, theoreticalRounding, order: o, revisionId: dataset.revision.id, baselineId: b.id, baselineMode, asOf, daily: days.find((d) => d.date === asOf) ?? null, cumulative, theoreticalTotal: base.theoretical(o.quantity, baselineMode), bridge: { total: cumulative.gap, components }, profitScope, quality: { state, missing, completeness, isDemo: o.isDemo }, evidence: days.flatMap((d) => [...d.rows.production, ...d.rows.materials, ...d.rows.expenses].map((r) => r.source)), warnings: visibleSupplements.length ? [`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter((r) => r.date <= asOf && visible(r)).reduce((s, r) => s + Number(r.defects ?? 0), 0) - visibleSupplements.reduce((s, r) => s + Number(r.quantity ?? 0), 0)}双`] : [] };
 }
 function matsReady(base) {
   return base.materials.every((m) => m.price !== null);
@@ -11347,6 +11404,13 @@ async function readJson(req) {
 }
 
 // server/http/routes.mjs
+var decTotal = (rows, key) => !rows.length ? null : rows.some((r) => r[key] == null) ? null : rows.reduce((s, r) => s.plus(r[key]), new D(0)).toString();
+function previewStats(ds) {
+  const processed = decTotal(ds.production, "processed"), defects = decTotal(ds.production, "defects");
+  const good = processed !== null && defects !== null ? new D(processed).minus(defects).toString() : null;
+  const prices = ds.materials.map((r) => r.price).filter((v) => v != null);
+  return { production: { count: ds.production.length, processed, defects, good }, supplements: { count: ds.supplements.length, quantity: decTotal(ds.supplements, "quantity") }, materials: { count: ds.materials.length, net: decTotal(ds.materials, "net"), priceMin: prices.length ? prices.reduce((a, b) => new D(b).lt(a) ? b : a) : null, priceMax: prices.length ? prices.reduce((a, b) => new D(b).gt(a) ? b : a) : null }, expenses: { count: ds.expenses.length, amount: decTotal(ds.expenses, "amount"), byCategory: Object.fromEntries(CATEGORIES.map((c) => [c, decTotal(ds.expenses.filter((r) => r.category === c), "amount")]).filter(([, v]) => v !== null)) } };
+}
 function createRoutes({ dataDir, clock = Date.now }) {
   const store = createStore(dataDir), token = randomBytes(24).toString("hex"), previews = /* @__PURE__ */ new Map();
   let busy = false;
@@ -11380,11 +11444,11 @@ function createRoutes({ dataDir, clock = Date.now }) {
           }
           if (!result.issues.some((i2) => i2.severity === "error")) {
             const a = evaluate(result.dataset, { asOf: result.dataset.order.end });
-            for (const m of a.quality.missing) result.issues.push({ severity: "missing", code: "SCOPE_INCOMPLETE", fileRole: "daily", sheet: m.field === "material" ? "每日材料" : m.field === "production" ? "每日生产" : "每日费用", cell: null, field: m.field, recordId: null, message: `${m.date} ${m.detail}` });
+            for (const m of a.quality.missing) result.issues.push({ severity: "missing", code: "SCOPE_INCOMPLETE", fileRole: "daily", sheet: m.field === "material" ? "每日材料" : m.field === "production" ? "每日生产" : "每日费用", cell: null, field: m.field, recordId: null, message: `${m.date} ${m.detail}`, hint: FIX_HINTS.SCOPE_INCOMPLETE });
           }
           const previewId = randomUUID2(), hash = digest(result.dataset);
           previews.set(previewId, { at: clock(), result, digest: hash });
-          send(res, 200, { previewId, digest: hash, summary: result.summary, issues: result.issues, canCommit: !result.issues.some((i2) => i2.severity === "error"), requiresIncomplete: result.issues.some((i2) => i2.severity === "missing"), preview: Object.fromEntries(["production", "materials", "expenses", "supplements"].map((k) => [k, result.dataset[k].slice(0, 200)])) });
+          send(res, 200, { previewId, digest: hash, summary: result.summary, issues: result.issues, previewStats: previewStats(result.dataset), canCommit: !result.issues.some((i2) => i2.severity === "error"), requiresIncomplete: result.issues.some((i2) => i2.severity === "missing"), preview: Object.fromEntries(["production", "materials", "expenses", "supplements"].map((k) => [k, result.dataset[k].slice(0, 200)])) });
         } finally {
           busy = false;
         }

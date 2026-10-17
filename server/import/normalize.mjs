@@ -1,6 +1,50 @@
 import Decimal from 'decimal.js';
 import {decimal,excelDate,addDays,columnIndex} from './validation.mjs';
 import {CATEGORIES,STATUSES,SCHEMA_VERSION} from '../model.mjs';
+export const FIX_HINTS={
+ SHEET_REQUIRED:'按标准模板补齐同名工作表，表名需完全一致。',
+ TABLE_REQUIRED:'在指定工作表插入对应命名 Table，并核对表名拼写。',
+ TABLE_INVALID:'重新选择该表的数据范围，确保范围有效。',
+ INPUT_FORMULA:'原始输入填计算后的数值，不填公式。',
+ INPUT_ERROR:'清除Excel错误值（如#N/A），填写有效数值。',
+ NUMBER_INVALID:'填写有效数值；数量字段必须是整数。',
+ VALUE_MISSING:'补录数值；确实没有时填明确的0或“不适用”，不能留空。',
+ FIELD_REQUIRED:'在“订单信息”工作表补齐该字段名和值。',
+ DATE_INVALID:'使用有效日期（yyyy-mm-dd 或 Excel 日期），且不超出订单覆盖区间。',
+ VERSION_UNSUPPORTED:'成本表用 A-ORDER-0.2，每日表A4用 AB-TIME-0.2 开头。',
+ DEMO_INVALID:'“是否模拟”只能填“是”或“否”。',
+ OPENING_UNSUPPORTED:'首版期初加工/不良必须为0；非零期初需另立验收案例。',
+ TAX_UNSUPPORTED:'税口径填写“模拟报价不拆税”。',
+ ID_INVALID:'订单ID、子项ID、记录ID必填且不超过128字符。',
+ BASIS_UNSUPPORTED:'时区填 Asia/Shanghai，收入口径填 生产等价。',
+ DATE_RANGE:'生产覆盖开始不得晚于结束，且跨度不超过3660天。',
+ WEIGHT_INVALID:'模拟标准重量必须大于0。',
+ PARAM_DUPLICATE:'参数ID必须唯一，删除重复参数行。',
+ PARAM_MISSING:'补齐成本计算表中的该参数行。',
+ RATE_INVALID:'比例按小数填写（65%填0.65），取值在0到1之间。',
+ RECIPE_INVALID:'原订单用量配方量合计必须大于0。',
+ KEY_DUPLICATE:'材料编号或码号必须唯一。',
+ QUANTITY_MISMATCH:'分码合同量合计必须等于订单合同数量。',
+ ORDER_MISMATCH:'每日表的订单ID和核算子项ID必须与成本表一致。',
+ STATUS_INVALID:'资料状态只能填 已确认/暂估/缺失/不适用/模拟确认。',
+ VERSION_MISMATCH:'每日表的预期基线版本、数据修订版本必须与成本表一致。',
+ SOURCE_REQUIRED:'来源字段必填，填写数据来源说明。',
+ SIZE_UNKNOWN:'码号必须是分码合同量大于0的码号。',
+ QUANTITY_INVALID:'当日不良量不能大于当日加工量。',
+ DAY_STATUS_INVALID:'当日状态填 已报工/停产/待补录；停产时加工量和不良量都必须为0。',
+ MATERIAL_UNKNOWN:'材料编号必须存在于原订单用量表中。',
+ MATERIAL_BASIS:'材料口径填写 actual_net。',
+ CATEGORY_INVALID:'成本类别只能使用 人工/制造/其他生产/管理/销售/财务。',
+ METHOD_UNSUPPORTED:'首版计价方式填写“直接金额”。',
+ SUPPLEMENT_BASIS:'计入规则必须以“已含”开头；补单不重复追加产量或成本。',
+ SUPPLEMENT_LINK:'关联生产记录必须同日同码，且补产数量不超过当日加工量。',
+ RECORD_DUPLICATE:'记录ID必须唯一，删除重复记录。',
+ DAY_SIZE_DUPLICATE:'同一天同一码号只允许一条生产记录。',
+ DAY_MISSING:'补齐该日该码生产记录；停产填停产且数量为0，未上报填待补录。',
+ SUPPLEMENT_DIFFERENCE:'差异保留不自动补造；请核对不良与补单记录。',
+ VERSION_REQUIRED:'预期基线版本和数据修订版本必填且不超过128字符。',
+ SCOPE_INCOMPLETE:'补齐该日期的生产、材料或费用记录，或明确标记停产/不适用；不要用0代替缺失。'
+};
 export function normalizePair(costBook,dailyBook){
  const issues=[];const issue=(severity,code,sheet,cell,field,message,fileRole='daily',recordId=null)=>issues.push({severity,code,fileRole,sheet,cell,field,recordId,message});
  const find=(book,name,role)=>{const s=book.sheets.find(s=>s.name===name);if(!s)issue('error','SHEET_REQUIRED',name,null,null,`缺少工作表“${name}”`,role);return s??{name,cells:{},tables:[]};};
@@ -47,32 +91,33 @@ export function normalizePair(costBook,dailyBook){
  const common=(r,s,idKey='记录ID',role='daily')=>{
   const x={id:r.get(idKey),orderId:r.get('订单ID'),lineId:r.get('核算子项ID'),status:r.get('资料状态'),source:source(s,r.ref(idKey),role,r.get(idKey))};
   if(!x.id)issue('error','ID_INVALID',s.name,r.ref(idKey),idKey,'记录ID必填',role);
-  if(x.orderId!==order.id||x.lineId!==order.lineId)issue('error','ORDER_MISMATCH',s.name,r.ref('订单ID'),null,'订单与子项跨文件不一致',role);
-  if(!STATUSES.includes(x.status))issue('error','STATUS_INVALID',s.name,r.ref('资料状态'),null,'资料状态无效',role);
-  try{x.date=excelDate(r.get(s===prod?'生产日期':'发生日期'),role==='cost'?costBook.epoch1904:dailyBook.epoch1904);if(x.date<order.start||x.date>order.end)throw new Error('记录日期超出覆盖区间');}catch(e){x.date=null;issue('error','DATE_INVALID',s.name,r.ref('发生日期'),null,e.message,role);}
+  if(x.orderId!==order.id||x.lineId!==order.lineId)issue('error','ORDER_MISMATCH',s.name,r.ref('订单ID'),null,'订单与子项跨文件不一致',role,x.id);
+  if(!STATUSES.includes(x.status))issue('error','STATUS_INVALID',s.name,r.ref('资料状态'),null,'资料状态无效',role,x.id);
+  try{x.date=excelDate(r.get(s===prod?'生产日期':'发生日期'),role==='cost'?costBook.epoch1904:dailyBook.epoch1904);if(x.date<order.start||x.date>order.end)throw new Error('记录日期超出覆盖区间');}catch(e){x.date=null;issue('error','DATE_INVALID',s.name,r.ref('发生日期'),null,e.message,role,x.id);}
   if(role==='daily'){
-   if(r.get('预期基线版本')!==baseline.id||r.get('数据修订版本')!==revision.id)issue('error','VERSION_MISMATCH',s.name,r.ref('预期基线版本'),null,'预期基线或修订版本跨文件不一致');
-   try{x.availableAt=excelDate(r.get('数据可见时间'),dailyBook.epoch1904,true);if(x.date&&x.availableAt.slice(0,10)<x.date)throw new Error('可见时间早于发生日期');}catch(e){issue('error','DATE_INVALID',s.name,r.ref('数据可见时间'),null,e.message);x.availableAt=null;}
-   x.isDemo=demo(r.get('是否模拟'),s,r.ref('是否模拟'),role);if(x.isDemo!==order.isDemo)issue('error','DEMO_MISMATCH',s.name,r.ref('是否模拟'),null,'模拟标记不一致');
-   if(!r.get('来源'))issue('error','SOURCE_REQUIRED',s.name,r.ref('来源'),null,'来源必填');
+   if(r.get('预期基线版本')!==baseline.id||r.get('数据修订版本')!==revision.id)issue('error','VERSION_MISMATCH',s.name,r.ref('预期基线版本'),null,'预期基线或修订版本跨文件不一致','daily',x.id);
+   try{x.availableAt=excelDate(r.get('数据可见时间'),dailyBook.epoch1904,true);if(x.date&&x.availableAt.slice(0,10)<x.date)throw new Error('可见时间早于发生日期');}catch(e){issue('error','DATE_INVALID',s.name,r.ref('数据可见时间'),null,e.message,'daily',x.id);x.availableAt=null;}
+   x.isDemo=demo(r.get('是否模拟'),s,r.ref('是否模拟'),role);if(x.isDemo!==order.isDemo)issue('error','DEMO_MISMATCH',s.name,r.ref('是否模拟'),null,'模拟标记不一致','daily',x.id);
+   if(!r.get('来源'))issue('error','SOURCE_REQUIRED',s.name,r.ref('来源'),null,'来源必填','daily',x.id);
   }else x.availableAt=x.date+'T23:59:59+08:00';
   return x;
  };
  const production=tableRows(prod,'DailyProductionCase').map(r=>{
   const x={...common(r,prod),size:r.get('码号'),processed:num(prod,r.ref('当日加工量'),{integer:true}),defects:num(prod,r.ref('当日不良量'),{integer:true}),dayStatus:r.get('当日状态')};
-  if(!baseline.sizePlan.some(s=>s.id===x.size&&s.quantity!=='0'))issue('error','SIZE_UNKNOWN',prod.name,r.ref('码号'),null,'未知或非生产码号');
-  if(x.processed!==null&&x.defects!==null&&new Decimal(x.defects).gt(x.processed))issue('error','QUANTITY_INVALID',prod.name,r.ref('当日不良量'),null,'不良量不能大于加工量');
-  if(!['已报工','停产','待补录'].includes(x.dayStatus)||(x.dayStatus==='停产'&&(x.processed!=='0'||x.defects!=='0')))issue('error','DAY_STATUS_INVALID',prod.name,r.ref('当日状态'),null,'停产数量应明确为0，或报工状态无效');
+  if(!baseline.sizePlan.some(s=>s.id===x.size&&s.quantity!=='0'))issue('error','SIZE_UNKNOWN',prod.name,r.ref('码号'),null,'未知或非生产码号','daily',x.id);
+  if(x.processed!==null&&x.defects!==null&&new Decimal(x.defects).gt(x.processed))issue('error','QUANTITY_INVALID',prod.name,r.ref('当日不良量'),null,'不良量不能大于加工量','daily',x.id);
+  if(!['已报工','停产','待补录'].includes(x.dayStatus)||(x.dayStatus==='停产'&&(x.processed!=='0'||x.defects!=='0')))issue('error','DAY_STATUS_INVALID',prod.name,r.ref('当日状态'),null,'停产数量应明确为0，或报工状态无效','daily',x.id);
   return x;
  });
- const materials=tableRows(mat,'DailyMaterialCase').map(r=>{const x={...common(r,mat),materialId:r.get('材料编号'),net:num(mat,r.ref('实际净耗kg')),price:num(mat,r.ref('实际单价元/kg'))};if(!baseline.recipe.some(m=>m.id===x.materialId))issue('error','MATERIAL_UNKNOWN',mat.name,r.ref('材料编号'),null,'未知材料');if(r.get('材料口径')!=='actual_net')issue('error','MATERIAL_BASIS',mat.name,r.ref('材料口径'),null,'实际材料必须为actual_net净耗口径');return x;});
- const expenses=tableRows(fee,'DailyExpenseCase').map(r=>{const x={...common(r,fee),category:r.get('成本类别'),item:r.get('费用项目'),amount:num(fee,r.ref('实际金额元'))};if(!CATEGORIES.includes(x.category))issue('error','CATEGORY_INVALID',fee.name,r.ref('成本类别'),null,'费用类别无效');if(r.get('计价方式')!=='直接金额')issue('error','METHOD_UNSUPPORTED',fee.name,r.ref('计价方式'),null,'首版每日费用采用已归属直接金额');return x;});
- const supplements=tableRows(supp,'SupplementEvents').map(r=>{const x={...common(r,supp,'补单记录ID','cost'),size:r.get('码号'),quantity:num(supp,r.ref('补产数量双'),{role:'cost',integer:true}),parentId:r.get('生产关联ID'),inclusion:r.get('计入规则'),reason:r.get('原因')};if(!x.inclusion?.startsWith('已含'))issue('error','SUPPLEMENT_BASIS',supp.name,r.ref('计入规则'),null,'首版只支持已含加工/净耗的补单','cost');const p=production.find(p=>p.id===x.parentId);if(!p||p.date!==x.date||p.size!==x.size||(x.quantity!==null&&p.processed!==null&&new Decimal(x.quantity).gt(p.processed)))issue('error','SUPPLEMENT_LINK',supp.name,r.ref('生产关联ID'),null,'补单关联生产记录无效','cost');return x;});
+ const materials=tableRows(mat,'DailyMaterialCase').map(r=>{const x={...common(r,mat),materialId:r.get('材料编号'),net:num(mat,r.ref('实际净耗kg')),price:num(mat,r.ref('实际单价元/kg'))};if(!baseline.recipe.some(m=>m.id===x.materialId))issue('error','MATERIAL_UNKNOWN',mat.name,r.ref('材料编号'),null,'未知材料','daily',x.id);if(r.get('材料口径')!=='actual_net')issue('error','MATERIAL_BASIS',mat.name,r.ref('材料口径'),null,'实际材料必须为actual_net净耗口径','daily',x.id);return x;});
+ const expenses=tableRows(fee,'DailyExpenseCase').map(r=>{const x={...common(r,fee),category:r.get('成本类别'),item:r.get('费用项目'),amount:num(fee,r.ref('实际金额元'))};if(!CATEGORIES.includes(x.category))issue('error','CATEGORY_INVALID',fee.name,r.ref('成本类别'),null,'费用类别无效','daily',x.id);if(r.get('计价方式')!=='直接金额')issue('error','METHOD_UNSUPPORTED',fee.name,r.ref('计价方式'),null,'首版每日费用采用已归属直接金额','daily',x.id);return x;});
+ const supplements=tableRows(supp,'SupplementEvents').map(r=>{const x={...common(r,supp,'补单记录ID','cost'),size:r.get('码号'),quantity:num(supp,r.ref('补产数量双'),{role:'cost',integer:true}),parentId:r.get('生产关联ID'),inclusion:r.get('计入规则'),reason:r.get('原因')};if(!x.inclusion?.startsWith('已含'))issue('error','SUPPLEMENT_BASIS',supp.name,r.ref('计入规则'),null,'首版只支持已含加工/净耗的补单','cost',x.id);const p=production.find(p=>p.id===x.parentId);if(!p||p.date!==x.date||p.size!==x.size||(x.quantity!==null&&p.processed!==null&&new Decimal(x.quantity).gt(p.processed)))issue('error','SUPPLEMENT_LINK',supp.name,r.ref('生产关联ID'),null,'补单关联生产记录无效','cost',x.id);return x;});
  for(const list of [production,materials,expenses,supplements]){const seen=new Set();for(const x of list){if(seen.has(x.id))issue('error','RECORD_DUPLICATE',x.source.sheet,x.source.cell,null,'记录ID重复',x.source.fileRole,x.id);seen.add(x.id);}}
  const pkeys=new Set();for(const p of production){const k=p.date+'|'+p.size;if(pkeys.has(k))issue('error','DAY_SIZE_DUPLICATE',prod.name,p.source.cell,null,'日码记录重复');pkeys.add(k);}
  if(order.start&&order.end&&order.start<=order.end&&(new Date(order.end)-new Date(order.start))/86400000<=3660)for(let day=order.start;day<=order.end;day=addDays(day,1))for(const sz of baseline.sizePlan.filter(s=>s.quantity!==null&&new Decimal(s.quantity).gt(0)))if(!pkeys.has(day+'|'+sz.id))issue('missing','DAY_MISSING',prod.name,null,day,`${day} ${sz.id}生产记录待补齐`);
  const defectTotal=production.reduce((s,p)=>s+Number(p.defects??0),0),suppTotal=supplements.reduce((s,p)=>s+Number(p.quantity??0),0);if(defectTotal!==suppTotal)issue('warning','SUPPLEMENT_DIFFERENCE',supp.name,null,null,`不良${defectTotal}双与补单${suppTotal}双不同；保留差异，不重复计入`,'cost');
  for(const name of [baseline.id,revision.id])if(!name||name.length>128)issue('error','VERSION_REQUIRED',info.name,null,null,'基线与修订ID必填且不超过128字符','cost');
  const dataset={schemaVersion:SCHEMA_VERSION,order,baseline,revision,production,materials,expenses,supplements,sourceFiles:{cost:costBook.hash,daily:dailyBook.hash}};
+ for(const issue of issues)issue.hint=issue.hint??FIX_HINTS[issue.code]??'按提示修正后重新导入。';
  return {dataset,issues,summary:{orderId:order.id,lineId:order.lineId,baselineId:baseline.id,revisionId:revision.id,isDemo:order.isDemo,start:order.start,end:order.end,counts:{production:production.length,supplements:supplements.length,materials:materials.length,expenses:expenses.length}}};
 }
