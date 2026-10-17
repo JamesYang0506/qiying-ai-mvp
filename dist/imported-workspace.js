@@ -70,8 +70,33 @@ const varianceDefs={
  budgetAdjustment:{formula:'预算模式下理论损耗预算取相反数；理想模式为 0',source:'成本计算中的生产损耗与不良损耗预算。'},
  rounding:{formula:'总差距 − 其余各项合计，用于保证归因精确闭合',source:'逐日舍入后的差值，不是业务成本。'}
 };
+// Loads the first screen immediately, then fills trend and (only when visible) portfolio.
+// A newer scope aborts the old requests; late responses are dropped by sequence number.
+export function createOrderLoader(client){
+ let seq=0,controller=null;
+ const gone=e=>e?.name==='AbortError';
+ return {
+  async load(scope,handlers={}){
+   controller?.abort();controller=new AbortController();
+   const signal=controller.signal,request=++seq,active=()=>request===seq;
+   try{
+    const a=await client.getAnalysis(scope.orderId,{asOf:scope.date,revision:scope.revision,baselineMode:scope.mode},{signal});
+    if(!active())return null;
+    handlers.onAnalysis?.(a);
+    const later=promise=>promise.then(v=>{if(active())return v;}).catch(e=>{if(active()&&!gone(e))handlers.onError?.(e);});
+    const trend=later(client.getTrend(scope.orderId,{start:a.order.start,end:scope.date,revision:scope.revision,baselineMode:scope.mode},{signal})).then(t=>{if(active()&&t)handlers.onTrend?.(t.points);});
+    const portfolio=scope.withPortfolio?later(client.getPortfolio({asOf:scope.date,baselineMode:scope.mode},{signal})).then(p=>{if(active()&&p)handlers.onPortfolio?.(p);}):null;
+    await Promise.allSettled([trend,portfolio]);
+    return active()?a:null;
+   }catch(e){if(gone(e)||!active())return null;throw e;}
+  },
+  abort(){seq++;controller?.abort();controller=null;},
+  get signal(){return controller?.signal;},
+  get seq(){return seq;}
+ };
+}
 export function mountImported(root,{orderId,client=importClient,initialView='overview',initialDate='',initialRevision='',initialMode='ideal'}={}){
- let alive=true,seq=0,orders=[],selected=null,revision='',revisions=[],date='',mode=['ideal','budget'].includes(initialMode)?initialMode:'ideal',analysis=null,points=[],portfolio=null,tab='production',view=['overview','diagnosis','detail'].includes(initialView)?initialView:'overview',drill=null,varianceLimit=30,focus=null,drillNote='',returnState=null,loadError='',failedScope=null;
+ let alive=true,orders=[],selected=null,revision='',revisions=[],date='',mode=['ideal','budget'].includes(initialMode)?initialMode:'ideal',analysis=null,points=[],portfolio=null,tab='production',view=['overview','diagnosis','detail'].includes(initialView)?initialView:'overview',drill=null,varianceLimit=30,focus=null,drillNote='',returnState=null,loadError='',failedScope=null;
  const status=()=>root.querySelector('#imported-status');
  const fileRoleLabel={cost:'成本文件',daily:'每日文件'};
  const sourceCell=r=>{const s=r?.source;if(!s)return '待补齐';return {html:`<details class="source-detail"><summary>查看来源</summary><span>${esc(fileRoleLabel[s.fileRole]??s.fileRole??'')} · ${esc(s.sheet??'')} · ${esc(s.cell??'')}</span>${r.availableAt?`<span>可见 ${esc(r.availableAt)}</span>`:''}</details>`};};
@@ -151,7 +176,7 @@ export function mountImported(root,{orderId,client=importClient,initialView='ove
   root.querySelector('#imported-prev').onclick=()=>{date=offset(date,-1);returnState=null;focus=null;drillNote='';load();};root.querySelector('#imported-next').onclick=()=>{date=offset(date,1);returnState=null;focus=null;drillNote='';load();};
   root.querySelector('#imported-mode').onchange=e=>{mode=e.target.value;drill=null;varianceLimit=30;returnState=null;focus=null;drillNote='';load();};const revSel=root.querySelector('#imported-revision');if(revSel)revSel.onchange=e=>{revision=e.target.value;drill=null;varianceLimit=30;returnState=null;focus=null;drillNote='';load();};
   root.querySelector('#imported-order').onchange=e=>{location.hash='#imported/'+encodeURIComponent(e.target.value);};
-  root.querySelectorAll('[data-view]').forEach(btn=>btn.onclick=()=>{view=btn.dataset.view;drill=null;varianceLimit=30;returnState=null;focus=null;drillNote='';render();});
+  root.querySelectorAll('[data-view]').forEach(btn=>btn.onclick=()=>{view=btn.dataset.view;drill=null;varianceLimit=30;returnState=null;focus=null;drillNote='';render();if(view==='detail')ensurePortfolio();});
   root.querySelectorAll('[data-import-tab]').forEach(btn=>btn.onclick=()=>{tab=btn.dataset.importTab;focus=null;drillNote='';render();});
   root.querySelectorAll('[data-drill]').forEach(btn=>btn.onclick=()=>{drill=btn.dataset.drill;render();});
   root.querySelectorAll('[data-drill-close]').forEach(btn=>btn.onclick=()=>{drill=null;varianceLimit=30;render();});
@@ -164,14 +189,29 @@ export function mountImported(root,{orderId,client=importClient,initialView='ove
   root.querySelectorAll('[data-retry]').forEach(btn=>btn.onclick=()=>{if(failedScope){({date,revision,mode}=failedScope);}loadError='';load();});
   root.querySelectorAll('[data-import-day]').forEach(el=>{const run=()=>{date=el.dataset.importDay;returnState=null;focus=null;drillNote='';load();};el.onclick=run;el.onkeydown=e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();run();}};});
  }
- async function load(){
-  const request=++seq,requestedScope={date,revision,mode};if(status())status().textContent='正在核算…';
-  try{const a=await client.getAnalysis(selected.id,{asOf:date,revision,baselineMode:mode});if(!alive||request!==seq)return;
-   if(date<a.order.start||date>(a.visibilityEnd??a.order.end)){date=date<a.order.start?a.order.start:(a.visibilityEnd??a.order.end);return load();}
-   const [t,p]=await Promise.all([client.getTrend(selected.id,{start:a.order.start,end:date,revision,baselineMode:mode}),client.getPortfolio({asOf:date,baselineMode:mode})]);if(!alive||request!==seq)return;
-   analysis=a;points=t.points;portfolio=p;loadError='';failedScope=null;render();
-  }catch(e){if(alive&&request===seq){if(analysis){failedScope=requestedScope;date=analysis.asOf;revision=analysis.revisionId;mode=analysis.baselineMode;loadError=e.message;render();}else root.innerHTML=`<section class="panel import-intro"><h2>数据载入失败</h2><p>${esc(e.message)}</p><a class="button" href="#import">返回导入</a></section>`;}}
+ const loader=createOrderLoader(client);
+ async function ensurePortfolio(){
+  if(portfolio||view!=='detail'||!analysis)return;
+  const request=loader.seq;
+  try{const value=await client.getPortfolio({asOf:date,baselineMode:mode});if(alive&&request===loader.seq&&view==='detail'){portfolio=value;render();}}
+  catch(e){if(alive&&request===loader.seq&&e.name!=='AbortError'){loadError=e.message;render();}}
  }
+ async function load(){
+  const requestedScope={date,revision,mode};if(status())status().textContent='正在核算…';
+  try{
+   await loader.load({orderId:selected.id,date,revision,mode,withPortfolio:view==='detail'},{
+    onAnalysis:value=>{
+     if(!alive)return;
+     if(date<value.order.start||date>(value.visibilityEnd??value.order.end)){date=date<value.order.start?value.order.start:(value.visibilityEnd??value.order.end);load();return;}
+     analysis=value;points=[];portfolio=null;loadError='';failedScope=null;render();
+    },
+    onTrend:value=>{if(alive){points=value;render();}},
+    onPortfolio:value=>{if(alive){portfolio=value;render();}},
+    onError:e=>{if(alive){loadError=e.message;render();}}
+   });
+  }catch(e){if(alive){if(analysis){failedScope=requestedScope;date=analysis.asOf;revision=analysis.revisionId;mode=analysis.baselineMode;loadError=e.message;render();}else root.innerHTML=`<section class="panel import-intro"><h2>数据载入失败</h2><p>${esc(e.message)}</p><a class="button" href="#import">返回导入</a></section>`;}}
+ }
+
  root.innerHTML='<div class="loading">正在读取本地订单版本…</div>';
  (async()=>{try{orders=(await client.getImportedOrders()).orders;if(!alive)return;if(!orders.length){root.innerHTML='<section class="panel import-intro"><h2>还没有导入订单</h2><p>选择一份标准成本表和配套每日表，开始逐日查看利润。</p><a class="button primary" href="#import">导入 Excel</a></section>';return;}selected=orders.find(o=>o.id===orderId)||orders[0];revisions=(await client.getRevisions(selected.id)).revisions;if(!alive)return;revision=revisions.some(r=>r.revisionId===initialRevision)?initialRevision:selected.revisionId;date=initialDate||selected.start;await load();}catch(e){if(alive)root.innerHTML=`<section class="panel import-intro"><h2>本地服务不可用</h2><p>${esc(e.message)}</p><p>请关闭旧的服务窗口，再双击“启动网站.cmd”。</p></section>`;}})();
  const hideTip=()=>{const tip=root.querySelector('#imported-chart-tip');if(tip)tip.hidden=true;};
@@ -179,5 +219,5 @@ export function mountImported(root,{orderId,client=importClient,initialView='ove
  const chartTip=e=>{const el=e.target.closest?.('[data-tip]');if(el)showTip(el,e.clientX,e.clientY);else hideTip();};
  const focusTip=e=>{const el=e.target.closest?.('[data-tip]');if(!el)return;const r=el.getBoundingClientRect();showTip(el,r.left+r.width/2,r.top);};
  root.addEventListener('pointermove',chartTip);root.addEventListener('pointerdown',chartTip);root.addEventListener('pointerleave',hideTip);root.addEventListener('focusin',focusTip);root.addEventListener('focusout',e=>{if(!e.relatedTarget?.closest?.('[data-tip]'))hideTip();});
- return ()=>{alive=false;seq++;};
+ return ()=>{alive=false;loader.abort();};
 }

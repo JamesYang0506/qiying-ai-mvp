@@ -7,7 +7,7 @@ export function createImportClient(fetcher=(...args)=>fetch(...args)){
   async previewFiles(costFile,dailyFile){const form=new FormData();form.append('costFile',costFile);form.append('dailyFile',dailyFile);return request('/previews',{method:'POST',headers:{'X-Qiying-Token':await token()},body:form});},
   async commitPreview(id,allowIncomplete=false,digest){return request(`/previews/${encodeURIComponent(id)}/commit`,{method:'POST',headers:{'X-Qiying-Token':await token(),'Content-Type':'application/json'},body:JSON.stringify({digest,allowIncomplete})});},
   getImportedOrders:()=>request('/orders'),getRevisions:id=>request(`/orders/${encodeURIComponent(id)}/revisions`),
-  getAnalysis:(id,q)=>request(`/orders/${encodeURIComponent(id)}/analysis?${query(q)}`),getTrend:(id,q)=>request(`/orders/${encodeURIComponent(id)}/trend?${query(q)}`),getPortfolio:q=>request(`/portfolio?${query(q)}`),
+  getAnalysis:(id,q,opts={})=>request(`/orders/${encodeURIComponent(id)}/analysis?${query(q)}`,opts),getTrend:(id,q,opts={})=>request(`/orders/${encodeURIComponent(id)}/trend?${query(q)}`,opts),getPortfolio:(q,opts={})=>request(`/portfolio?${query(q)}`,opts),
  };
 }
 export const importClient=createImportClient();
