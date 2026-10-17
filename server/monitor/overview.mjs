@@ -15,10 +15,7 @@ export const distributionKey=day=>{const margin=day?.actual.gross!=null&&day?.re
 
 // Freeze information visibility before invoking A. A still exclusively owns profit formulas.
 // Records not yet known remain unavailable; known late records become usable for their business day.
-// 23:59:59 on the row's own date means "known by the end of that business day", not a late record:
-// the revision is already imported, so the daily sheet for that day is known. Other later times are
-// explicit late records and stay hidden until knownAt reaches them.
-function atKnown(dataset,knownAt){const d=structuredClone(dataset);for(const key of ['production','materials','expenses','supplements'])for(const r of d[key]){const visible=r.availableAt&&(Date.parse(r.availableAt)<=Date.parse(knownAt)||r.availableAt===r.date+'T23:59:59+08:00');r.availableAt=visible?r.date+'T00:00:00+08:00':'9999-12-31T23:59:59+08:00';}return d;}
+function atKnown(dataset,cutoff){const d=structuredClone(dataset);for(const key of ['production','materials','expenses','supplements'])for(const r of d[key])r.availableAt=r.availableAt&&Date.parse(r.availableAt)<=Date.parse(cutoff)?r.date+'T00:00:00+08:00':'9999-12-31T23:59:59+08:00';return d;}
 function compare(dataset,today,previous,asOf){
  const reasons=[];
  if(!today||!previous)reasons.push('缺少当日或昨日明确报工');
@@ -32,13 +29,13 @@ function compare(dataset,today,previous,asOf){
  return {status:'comparable',reasons:[],marginChangePp:change.toString(),unitCost:now.toFixed(6),previousUnitCost:before.toFixed(6),unitCostChange:now.minus(before).toFixed(6),deteriorated:change.lt(0)};
 }
 
-export async function buildOverview(entries,{asOf,period=7,baselineMode='ideal',knownAt,viewId=randomUUID(),compute=evaluate,cache=null,customer='',status='',risk='',search=''}={}){
- date(asOf);knownAt=timestamp(knownAt??new Date().toISOString());
+export async function buildOverview(entries,{asOf,period=7,baselineMode='ideal',knownAt,visibilityCutoff,viewId=randomUUID(),compute=evaluate,cache=null,customer='',status='',risk='',search=''}={}){
+ date(asOf);knownAt=timestamp(knownAt??new Date().toISOString());const cutoff=timestamp(visibilityCutoff??knownAt);
  if(!['ideal','budget'].includes(baselineMode)||!Number.isInteger(period)||period<1||period>90)throw fail('INVALID_REQUEST','理论模式或趋势窗口无效（1–90 天）');
  const requestedStart=shift(asOf,1-period),firstStart=entries.map(e=>e.dataset.order.start).sort()[0],start=firstStart&&firstStart<=asOf&&firstStart>requestedStart?firstStart:requestedStart,snapshots=[],orders=[];
 
  for(const entry of entries){
-  const dataset=entry.dataset,visible=atKnown(dataset,knownAt),evaluation=compute(visible,{asOf,baselineMode}),snapshotId=randomUUID();
+  const dataset=entry.dataset,visible=atKnown(dataset,cutoff),evaluation=compute(visible,{asOf,baselineMode}),snapshotId=randomUUID();
   const previousDay=shift(asOf,-1),previousKnown=evaluation.daySummaries.some(d=>d.date===previousDay),previous=previousKnown?createDailyEvaluator(visible,{baselineMode}).day(previousDay,previousDay).daily:null;
   const comparison=compare({...dataset,_revisionCount:entry.revisionCount},evaluation.daily,previous,asOf);
   const contract=toCalculationResult(evaluation,{dataset,snapshotId,computedAt:new Date().toISOString()});
@@ -46,7 +43,7 @@ export async function buildOverview(entries,{asOf,period=7,baselineMode='ideal',
   const monitoringStatus=asOf<dataset.order.start?'未开工':cumulative.quantity==null?'待确认':dataset.order.quantity!=null&&new D(cumulative.quantity).gte(dataset.order.quantity)?'已完工':'生产中';
   const riskInfo=classifyMonitorRisk({actual:cumulative.actual.gross,expected:cumulative.expected.gross,revenue:cumulative.revenue,baselineComplete:evaluation.quality.completeness?.baseline.state==='complete'});
   const marginDeviationPp=eligible&&cumulative.revenue!=null&&new D(cumulative.revenue).gt(0)?new D(cumulative.actual.gross).minus(cumulative.expected.gross).div(cumulative.revenue).times(100).toString():null;
-  const seriesKey=`monitor-series|${dataset.revision.id}|${knownAt}|${start}|${asOf}|${baselineMode}|v1`,points=await (cache?cache.getOrCompute(seriesKey,()=>calculateSeries(visible,{start,end:asOf,baselineMode})):Promise.resolve(calculateSeries(visible,{start,end:asOf,baselineMode})));for(const p of points)p.comparable=p.actual!=null&&p.expected!=null&&p.date>=dataset.order.start;
+  const seriesKey=`monitor-series|${dataset.revision.id}|${cutoff}|${start}|${asOf}|${baselineMode}|v1`,points=await (cache?cache.getOrCompute(seriesKey,()=>calculateSeries(visible,{start,end:asOf,baselineMode})):Promise.resolve(calculateSeries(visible,{start,end:asOf,baselineMode})));for(const p of points)p.comparable=p.actual!=null&&p.expected!=null&&p.date>=dataset.order.start;
   const row={order:dataset.order,revisionId:dataset.revision.id,baselineId:dataset.baseline.id,snapshotId,cumulative,daily:evaluation.daily,comparison,quality:evaluation.quality,comparable:eligible,distribution:asOf<dataset.order.start?'not_started':distributionKey(evaluation.daily),points,loss:cumulative.actual.gross!=null&&new D(cumulative.actual.gross).lt(0),cumulativeDeviation:eligible&&new D(cumulative.gap).gt(0),recommendations:recommendations({today:evaluation.daily,previous,comparison,orderId:dataset.order.id,revisionId:dataset.revision.id,baselineMode,asOf,snapshotId})};
   row.evidence=[...evaluation.evidence.map((source,i)=>({evidenceId:`${snapshotId}:source-${i}`,source})),...row.recommendations.flatMap(r=>r.evidence)];
   Object.assign(row,{monitoringStatus,risk:riskInfo,marginDeviationPp});
@@ -71,11 +68,14 @@ export async function buildOverview(entries,{asOf,period=7,baselineMode='ideal',
 export function createMonitorService({store,repository,clock=Date.now,compute=evaluate,cache=null}){
  return {
   async create(options={}){
-   const knownAt=timestamp(options.knownAt??new Date(clock()).toISOString());if(Date.parse(knownAt)>clock())throw fail('INVALID_REQUEST','信息截止时间不能晚于服务端当前时间');
+   const explicitKnown=options.knownAt!=null,knownAt=timestamp(options.knownAt??new Date(clock()).toISOString());if(explicitKnown&&Date.parse(knownAt)>clock())throw fail('INVALID_REQUEST','信息截止时间不能晚于服务端当前时间');
    const versions=await store.listVersions();
    const selected=new Map();for(const v of versions)if(Date.parse(v.createdAt)<=Date.parse(knownAt)){const old=selected.get(v.dataset.order.id);selected.set(v.dataset.order.id,{...v,revisionCount:(old?.revisionCount??0)+1});}
    const entries=[...selected.values()],asOf=options.asOf??(entries.length?entries.reduce((s,v)=>v.dataset.order.end>s?v.dataset.order.end:s,entries[0].dataset.order.end):new Date(clock()+8*3600000).toISOString().slice(0,10));
-   const built=await buildOverview(entries,{...options,asOf,knownAt,compute,cache});
+   // A review view sees everything up to the end of its business date. An explicit knownAt still
+   // freezes information earlier. Revision selection always uses knownAt (when it was known).
+   const visibilityCutoff=explicitKnown?knownAt:asOf+'T23:59:59+08:00';
+   const built=await buildOverview(entries,{...options,asOf,knownAt,visibilityCutoff,compute,cache});
    built.overview.coverage.unfilteredTotal=entries.length;
    await repository.saveView({overview:built.overview,snapshots:built.snapshots,recordedAt:new Date(clock()).toISOString()});
    return built.overview;

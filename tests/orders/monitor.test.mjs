@@ -8,6 +8,7 @@ import {buildOverview,createMonitorService,distributionKey} from '../../server/m
 import {createStore} from '../../server/storage/store.mjs';
 import {createMonitorRepository} from '../../server/monitor/storage.mjs';
 import {D} from '../../server/profit/decimal.mjs';
+import {evaluate} from '../../server/profit/evaluate.mjs';
 
 export function dataset(id='ORDER-A',prices=[17.2,17.2],quantities=[100,100]){
  const d=normalizePair(...pair()).dataset;d.order.id=id;d.order.start='2026-10-11';d.order.end='2026-10-12';
@@ -45,12 +46,25 @@ test('known_at is independent from as_of while future records stay unavailable',
  const early=await buildOverview([{dataset:d}],{...options,knownAt:'2026-10-13T00:00:00Z'}),late=await buildOverview([{dataset:d}],options);
  assert.equal(early.overview.summary.actualGross,null);assert.notEqual(late.overview.summary.actualGross,null);
 });
-test('end-of-day visibility means the imported daily sheet is known on the same day',async()=>{
+test('a review view sees the selected business day end while an explicit cutoff stays frozen',async()=>{
  const d=dataset();for(const key of ['production','materials','expenses'])for(const r of d[key])r.availableAt=r.date+'T23:59:59+08:00';
- const sameDay={...options,knownAt:'2026-10-12T10:00:00Z'};
- assert.notEqual((await buildOverview([{dataset:d}],sameDay)).overview.orders[0].cumulative.actual.gross,null);
- d.materials[0].availableAt='2026-10-12T20:00:00+08:00';
- assert.equal((await buildOverview([{dataset:d}],sameDay)).overview.orders[0].cumulative.actual.gross,null);
+ const knownAt='2026-10-12T10:00:00Z',review={...options,knownAt,visibilityCutoff:'2026-10-12T23:59:59+08:00'};
+ assert.notEqual((await buildOverview([{dataset:d}],review)).overview.orders[0].cumulative.actual.gross,null);
+ assert.equal((await buildOverview([{dataset:d}],{...options,knownAt})).overview.orders[0].cumulative.actual.gross,null);
+ d.materials[0].availableAt='2026-10-13T09:00:00+08:00';
+ assert.equal((await buildOverview([{dataset:d}],review)).overview.orders[0].cumulative.actual.gross,null);
+});
+test('default monitor views see records dated after the clock but within the selected day',async t=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'b-monitor-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const store=createStore(dir),repo=createMonitorRepository(path.join(dir,'monitor-state')),d=dataset();
+ d.order.end='2026-10-20';d.production.push({...d.production[0],id:'FUTURE-ROW',date:'2026-10-20',availableAt:'2026-10-20T23:59:59+08:00'});
+ await store.commit(d);
+ const seen=[],compute=(dataset,opts)=>{seen.push(dataset.production.find(r=>r.id==='FUTURE-ROW')?.availableAt);return evaluate(dataset,opts);};
+ const clock=Date.now(),service=createMonitorService({store,repository:repo,clock:()=>clock,compute});
+ await service.create({asOf:'2026-10-20',period:2});
+ assert.equal(seen.at(-1),'2026-10-20T00:00:00+08:00');
+ await service.create({asOf:'2026-10-20',period:2,knownAt:new Date(clock).toISOString()});
+ assert.equal(seen.at(-1),'9999-12-31T23:59:59+08:00');
 });
 test('empty, missing yesterday, zero quantity and unstarted orders stay explicit',async()=>{
  const empty=await buildOverview([],options);assert.equal(empty.overview.summary.actualGross,null);
