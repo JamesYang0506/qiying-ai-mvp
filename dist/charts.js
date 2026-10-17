@@ -9,3 +9,11 @@ export function renderTrend(series){
  return `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="实际与同期预期生产毛利趋势；点击数据点查看日期">${grid}<path d="${path('expected')}" fill="none" stroke="#a6b3c7" stroke-width="2" stroke-dasharray="5 5"/><path d="${path('actual')}" fill="none" stroke="#3274ef" stroke-width="3" stroke-linejoin="round"/>${dots}${labels}</svg>`;
 }
 export function renderCostVariance(items){const max=Math.max(1,...items.map(i=>Math.abs(i.delta??0)));return `<div class="variance-bars">${items.map(i=>`<div class="variance-row"><span>${esc(i.name)}</span><div class="bar-track"><div class="bar-fill ${i.delta>0?'red':'green'}" style="width:${Math.abs(i.delta??0)/max*100}%"></div></div><strong class="${i.delta>0?'negative':'positive'}">${i.delta===null?'—':(i.delta>0?'+':'−')+money(Math.abs(i.delta))}</strong></div>`).join('')}</div>`;}
+export function renderCostDonut(items){
+ const known=items.filter(i=>i.value!==null);const total=known.reduce((s,i)=>s+i.value,0);
+ if(!known.length||!(total>0))return empty('暂不可拆分成本构成','实际材料或费用资料不完整时不绘制构成图，缺失项不按零处理。');
+ const R=52,C=2*Math.PI*R;let offset=0;
+ const arcs=known.map(i=>{const len=i.value/total*C;const a=`<circle cx="70" cy="70" r="${R}" fill="none" stroke="${i.color}" stroke-width="20" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 70 70)"></circle>`;offset+=len;return a;}).join('');
+ const legend=items.map(i=>`<li><i class="donut-dot" style="background:${i.value===null?'#d6deea':i.color}"></i><span>${esc(i.name)}</span><b>${i.value===null?'待补齐':i.display}</b><em>${i.value===null?'—':(i.value/total*100).toFixed(1)+'%'}</em></li>`).join('');
+ return `<div class="donut-grid"><svg class="donut" viewBox="0 0 140 140" role="img" aria-label="已归集成本构成，合计 ${total.toLocaleString('zh-CN',{maximumFractionDigits:2})} 元"><circle cx="70" cy="70" r="${R}" fill="none" stroke="#f1f4f9" stroke-width="20"></circle>${arcs}<text x="70" y="64" text-anchor="middle" class="donut-label">已归集成本</text><text x="70" y="84" text-anchor="middle" class="donut-total">¥${total.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}</text></svg><ul class="donut-legend">${legend}</ul></div>`;
+}
