@@ -18264,6 +18264,41 @@ function recommendations({ today, previous, comparison, orderId, revisionId, bas
   return result;
 }
 
+// server/monitor/live-views.mjs
+function createLiveViews({ clock = Date.now, maxEntries = 16, maxBytes = 64 * 1024 * 1024, ttlMs = 30 * 60 * 1e3 } = {}) {
+  const entries = /* @__PURE__ */ new Map();
+  let bytes = 0;
+  const remove = (id3) => {
+    const entry = entries.get(id3);
+    if (entry) {
+      bytes -= entry.bytes;
+      entries.delete(id3);
+    }
+  };
+  const prune = () => {
+    for (const [id3, entry] of entries) if (clock() - entry.at >= ttlMs) remove(id3);
+  };
+  return {
+    put({ overview, snapshots }) {
+      prune();
+      const included = new Set(overview.scope.versionSet.map((r) => r.snapshotId));
+      const value = { overview, snapshots: snapshots.filter((s) => included.has(s.snapshot_id)).map((s) => ({ snapshot_id: s.snapshot_id, revision_id: s.revision_id, baseline_mode: s.baseline_mode, as_of: s.as_of, known_at: s.known_at, evaluation: { daily: s.evaluation.daily }, previous: s.previous, evidence: s.evidence })) };
+      const serialized = JSON.stringify(value), size = Buffer.byteLength(serialized);
+      if (size > maxBytes) throw fail("MONITOR_VIEW_TOO_LARGE", "监测结果过大，请减少查询范围", 413);
+      remove(overview.viewId);
+      while (entries.size >= maxEntries || bytes + size > maxBytes) remove(entries.keys().next().value);
+      entries.set(overview.viewId, { at: clock(), bytes: size, serialized });
+      bytes += size;
+    },
+    get(id3) {
+      prune();
+      const entry = entries.get(id3);
+      if (!entry) throw fail("MONITOR_VIEW_EXPIRED", "监测结果已过期或服务已重启，请刷新监测页面后重试", 410);
+      return JSON.parse(entry.serialized);
+    }
+  };
+}
+
 // server/monitor/overview.mjs
 function date(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? "") || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) throw fail("INVALID_REQUEST", "业务日期无效");
@@ -18343,31 +18378,42 @@ async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal"
   const overview = { viewId, filterOptions, filters: { customer, status, risk, search }, scope: { asOf, knownAt, periodStart: displayStart, baselineMode, source: "imported", currency: "CNY", versionSet: orders.map((r) => ({ orderId: r.order.id, revisionId: r.revisionId, baselineId: r.baselineId, snapshotId: r.snapshotId })), note: "本地标准导入口径：CNY、生产等价收入、模拟报价不拆税。迟录和整套修订不纳入纯经营恶化判断。" }, coverage: { total: orders.length, known: orders.filter((r) => r.cumulative.actual.gross != null && asOf >= r.order.start).length, comparable: comparable.length, periodComparable: periodCompatible.length, dayComparable: orders.filter((r) => r.comparison.status === "comparable").length, incomplete: orders.filter((r) => r.quality.missing.length > 0).length, exclusions: orders.filter((r) => !r.comparable || r.comparison.status !== "comparable").map((r) => ({ orderId: r.order.id, reasons: [...r.comparison.reasons, ...r.quality.missing.map((m) => `${m.date ?? ""} ${m.detail}`)] })) }, summary: { actualGross: sum3(periodCompatible, (r) => r.period.actual), expectedGross: sum3(periodCompatible, (r) => r.period.expected), gap: sum3(periodCompatible, (r) => r.period.gap), deteriorated: orders.filter((r) => r.comparison.deteriorated).length }, trend: { includedCount: intersection.length, excludedCount: orders.length - intersection.length, points: trend }, distribution: buckets, attention: orders.filter((r) => r.comparison.deteriorated).slice(0, 5).map((r) => r.order.id), reminders: orders.filter((r) => r.loss || r.cumulativeDeviation || r.quality.missing.length).map((r) => ({ orderId: r.order.id, loss: r.loss, cumulativeDeviation: r.cumulativeDeviation, incomplete: r.quality.missing.length > 0 })), orders };
   return { overview, snapshots };
 }
-function createMonitorService({ store, repository, clock = Date.now, compute = evaluate, cache = null }) {
+function createMonitorService({ store, repository, clock = Date.now, compute = evaluate, cache = null, liveViewOptions = {} }) {
+  const liveViews = createLiveViews({ ...liveViewOptions, clock });
+  async function build(options) {
+    const explicitKnown = options.knownAt != null, knownAt = timestamp(options.knownAt ?? new Date(clock()).toISOString());
+    if (explicitKnown && Date.parse(knownAt) > clock()) throw fail("INVALID_REQUEST", "信息截止时间不能晚于服务端当前时间");
+    const versions = await store.listVersions();
+    const selected = /* @__PURE__ */ new Map();
+    for (const v of versions) if (Date.parse(v.createdAt) <= Date.parse(knownAt)) {
+      const old = selected.get(v.dataset.order.id);
+      selected.set(v.dataset.order.id, { ...v, revisionCount: (old?.revisionCount ?? 0) + 1 });
+    }
+    const entries = [...selected.values()], asOf = options.asOf ?? (entries.length ? entries.reduce((s, v) => v.dataset.order.end > s ? v.dataset.order.end : s, entries[0].dataset.order.end) : new Date(clock() + 8 * 36e5).toISOString().slice(0, 10));
+    const visibilityCutoff = explicitKnown ? knownAt : asOf + "T23:59:59+08:00";
+    const built = await buildOverview(entries, { ...options, asOf, knownAt, visibilityCutoff, compute, cache });
+    built.overview.coverage.unfilteredTotal = entries.length;
+    return built;
+  }
   return {
+    async browse(options = {}) {
+      const built = await build({ ...options, viewId: `live-${randomUUID4()}` });
+      liveViews.put(built);
+      return built.overview;
+    },
+    // Explicit archive operation for compatibility; ordinary HTTP reads must use browse().
     async create(options = {}) {
-      const explicitKnown = options.knownAt != null, knownAt = timestamp(options.knownAt ?? new Date(clock()).toISOString());
-      if (explicitKnown && Date.parse(knownAt) > clock()) throw fail("INVALID_REQUEST", "信息截止时间不能晚于服务端当前时间");
-      const versions = await store.listVersions();
-      const selected = /* @__PURE__ */ new Map();
-      for (const v of versions) if (Date.parse(v.createdAt) <= Date.parse(knownAt)) {
-        const old = selected.get(v.dataset.order.id);
-        selected.set(v.dataset.order.id, { ...v, revisionCount: (old?.revisionCount ?? 0) + 1 });
-      }
-      const entries = [...selected.values()], asOf = options.asOf ?? (entries.length ? entries.reduce((s, v) => v.dataset.order.end > s ? v.dataset.order.end : s, entries[0].dataset.order.end) : new Date(clock() + 8 * 36e5).toISOString().slice(0, 10));
-      const visibilityCutoff = explicitKnown ? knownAt : asOf + "T23:59:59+08:00";
-      const built = await buildOverview(entries, { ...options, asOf, knownAt, visibilityCutoff, compute, cache });
-      built.overview.coverage.unfilteredTotal = entries.length;
+      const built = await build(options);
       await repository.saveView({ overview: built.overview, snapshots: built.snapshots, recordedAt: new Date(clock()).toISOString() });
       return built.overview;
     },
     async get(viewId) {
-      return repository.getView(viewId);
+      return viewId.startsWith("live-") ? liveViews.get(viewId).overview : repository.getView(viewId);
     },
     async evidence(viewId, snapshotId) {
-      const v = await this.get(viewId);
+      const live = viewId.startsWith("live-") ? liveViews.get(viewId) : null, v = live?.overview ?? await this.get(viewId);
       if (!v.scope.versionSet.some((r) => r.snapshotId === snapshotId)) throw fail("SCOPE_MISMATCH", "快照不属于此视图", 409);
-      const snapshot = await repository.getSnapshot(snapshotId);
+      const snapshot = live ? live.snapshots.find((s) => s.snapshot_id === snapshotId) : await repository.getSnapshot(snapshotId);
       return { viewId, snapshotId, revisionId: snapshot.revision_id, baselineMode: snapshot.baseline_mode, asOf: snapshot.as_of, knownAt: snapshot.known_at, daily: snapshot.evaluation.daily, previous: snapshot.previous, evidence: snapshot.evidence };
     }
   };
@@ -19077,7 +19123,7 @@ function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManuf
         return true;
       }
       if (req.method === "GET" && route === "/monitor") {
-        send(res, 200, await monitor.create({ asOf: url.searchParams.get("asOf") || void 0, period: Number(url.searchParams.get("period") ?? 7), baselineMode: url.searchParams.get("baselineMode") ?? "ideal", knownAt: url.searchParams.get("knownAt") || void 0, customer: url.searchParams.get("customer") ?? "", status: url.searchParams.get("status") ?? "", risk: url.searchParams.get("risk") ?? "", search: url.searchParams.get("search") ?? "" }));
+        send(res, 200, await monitor.browse({ asOf: url.searchParams.get("asOf") || void 0, period: Number(url.searchParams.get("period") ?? 7), baselineMode: url.searchParams.get("baselineMode") ?? "ideal", knownAt: url.searchParams.get("knownAt") || void 0, customer: url.searchParams.get("customer") ?? "", status: url.searchParams.get("status") ?? "", risk: url.searchParams.get("risk") ?? "", search: url.searchParams.get("search") ?? "" }));
         return true;
       }
       if (req.method === "GET" && parts[0] === "monitor" && parts[1] === "views" && parts.length === 3) {

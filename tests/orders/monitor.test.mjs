@@ -19,6 +19,26 @@ export function dataset(id='ORDER-A',prices=[17.2,17.2],quantities=[100,100]){
  return d;
 }
 const options={asOf:'2026-10-12',period:2,knownAt:'2026-10-17T00:00:00Z'};
+test('live evidence stays frozen across revisions, expires without writes and keeps old archives readable',async t=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'b-monitor-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const store=createStore(dir),repository=createMonitorRepository(path.join(dir,'monitor-state'));await store.commit(dataset());
+ let now=Date.now(),writes=0;
+ const service=createMonitorService({store,repository:{...repository,async saveView(value){writes++;return repository.saveView(value);}},clock:()=>now,liveViewOptions:{maxEntries:2,ttlMs:1000}});
+ const a=await service.browse({asOf:options.asOf,period:2}),e=await service.evidence(a.viewId,a.orders[0].snapshotId);
+ const d=dataset();d.revision.id='REV-2';d.materials[0].price='19';await store.commit(d);now=Date.now();
+ const b=await service.browse({asOf:options.asOf,period:2});
+ assert.equal(b.orders[0].revisionId,'REV-2');assert.deepEqual(await service.evidence(a.viewId,a.orders[0].snapshotId),e);
+ a.summary.actualGross='999';assert.notEqual((await service.get(a.viewId)).summary.actualGross,'999');
+ await assert.rejects(service.evidence(b.viewId,a.orders[0].snapshotId),{code:'SCOPE_MISMATCH'});
+ await service.browse({asOf:options.asOf,period:1});
+ await assert.rejects(service.get(a.viewId),{status:410});assert.equal(writes,0);
+ now+=1000;await assert.rejects(service.get(b.viewId),{status:410});
+ const archived=await service.create({asOf:options.asOf,period:2});assert.equal(writes,1);
+ const restarted=createMonitorService({store,repository});
+ assert.deepEqual(await restarted.get(archived.viewId),archived);
+ assert.equal((await restarted.evidence(archived.viewId,archived.orders[0].snapshotId)).revisionId,'REV-2');
+ await assert.rejects(restarted.get(b.viewId),{status:410});
+});
 test('monitor uses identical comparable set for cards and a fixed intersection for trend',async()=>{
  const a=dataset(),b=dataset('B');b.baseline.params.material_pct=null;
  const {overview:o}=await buildOverview([{dataset:a},{dataset:b}],options);

@@ -6,6 +6,7 @@ import {toCalculationResult} from '../profit/contract-adapter.mjs';
 import {hash,fail} from '../orders/repository.mjs';
 import {recommendations} from './recommendations.mjs';
 import {classifyMonitorRisk} from '../profit/monitor-risk.mjs';
+import {createLiveViews} from './live-views.mjs';
 
 export function date(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value??'')||!Number.isFinite(Date.parse(value))||new Date(value).toISOString().slice(0,10)!==value)throw fail('INVALID_REQUEST','业务日期无效');return value;}
 export const shift=(day,n)=>new Date(Date.parse(day+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
@@ -68,9 +69,9 @@ export async function buildOverview(entries,{asOf,period=7,baselineMode='ideal',
  return {overview,snapshots};
 }
 
-export function createMonitorService({store,repository,clock=Date.now,compute=evaluate,cache=null}){
- return {
-  async create(options={}){
+export function createMonitorService({store,repository,clock=Date.now,compute=evaluate,cache=null,liveViewOptions={}}){
+ const liveViews=createLiveViews({...liveViewOptions,clock});
+ async function build(options){
    const explicitKnown=options.knownAt!=null,knownAt=timestamp(options.knownAt??new Date(clock()).toISOString());if(explicitKnown&&Date.parse(knownAt)>clock())throw fail('INVALID_REQUEST','信息截止时间不能晚于服务端当前时间');
    const versions=await store.listVersions();
    const selected=new Map();for(const v of versions)if(Date.parse(v.createdAt)<=Date.parse(knownAt)){const old=selected.get(v.dataset.order.id);selected.set(v.dataset.order.id,{...v,revisionCount:(old?.revisionCount??0)+1});}
@@ -80,10 +81,21 @@ export function createMonitorService({store,repository,clock=Date.now,compute=ev
    const visibilityCutoff=explicitKnown?knownAt:asOf+'T23:59:59+08:00';
    const built=await buildOverview(entries,{...options,asOf,knownAt,visibilityCutoff,compute,cache});
    built.overview.coverage.unfilteredTotal=entries.length;
+   return built;
+ }
+ return {
+  async browse(options={}){
+   const built=await build({...options,viewId:`live-${randomUUID()}`});
+   liveViews.put(built);
+   return built.overview;
+  },
+  // Explicit archive operation for compatibility; ordinary HTTP reads must use browse().
+  async create(options={}){
+   const built=await build(options);
    await repository.saveView({overview:built.overview,snapshots:built.snapshots,recordedAt:new Date(clock()).toISOString()});
    return built.overview;
   },
-  async get(viewId){return repository.getView(viewId);},
-  async evidence(viewId,snapshotId){const v=await this.get(viewId);if(!v.scope.versionSet.some(r=>r.snapshotId===snapshotId))throw fail('SCOPE_MISMATCH','快照不属于此视图',409);const snapshot=await repository.getSnapshot(snapshotId);return {viewId,snapshotId,revisionId:snapshot.revision_id,baselineMode:snapshot.baseline_mode,asOf:snapshot.as_of,knownAt:snapshot.known_at,daily:snapshot.evaluation.daily,previous:snapshot.previous,evidence:snapshot.evidence};}
+  async get(viewId){return viewId.startsWith('live-')?liveViews.get(viewId).overview:repository.getView(viewId);},
+  async evidence(viewId,snapshotId){const live=viewId.startsWith('live-')?liveViews.get(viewId):null,v=live?.overview??await this.get(viewId);if(!v.scope.versionSet.some(r=>r.snapshotId===snapshotId))throw fail('SCOPE_MISMATCH','快照不属于此视图',409);const snapshot=live?live.snapshots.find(s=>s.snapshot_id===snapshotId):await repository.getSnapshot(snapshotId);return {viewId,snapshotId,revisionId:snapshot.revision_id,baselineMode:snapshot.baseline_mode,asOf:snapshot.as_of,knownAt:snapshot.known_at,daily:snapshot.evaluation.daily,previous:snapshot.previous,evidence:snapshot.evidence};}
  };
 }
