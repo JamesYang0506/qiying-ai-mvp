@@ -17,8 +17,8 @@ export function animateMonitorCharts(root){
  const ring=root.querySelector('.bm-donut-ring');
  const segments=[...root.querySelectorAll('.bm-donut-segment')].filter(s=>Number(s.getAttribute('stroke-dasharray')?.split(' ')[0])>0);
  if(segments.length){
-  play(ring,[{transform:'rotate(-150deg) scale(.94)',opacity:.25},{transform:'rotate(0deg) scale(1)',opacity:1}],{duration:1200,easing:'cubic-bezier(.22,.7,.25,1)'});
-  for(const segment of segments)play(segment,[{strokeDasharray:'0 408.407'},{strokeDasharray:segment.getAttribute('stroke-dasharray')}],{duration:1200,easing:'cubic-bezier(.22,.7,.25,1)'});
+  play(ring,[{transform:'rotate(-150deg) scale(.94)',opacity:.25},{transform:'rotate(0deg) scale(1)',opacity:1}],{duration:1200,easing:'linear'});
+  for(const segment of segments)play(segment,[{strokeDasharray:'0 408.407'},{strokeDasharray:segment.getAttribute('stroke-dasharray')}],{duration:1200,easing:'linear'});
  }
  return ()=>animations.forEach(animation=>animation.cancel());
 }
@@ -29,10 +29,10 @@ export function animateAnalysisCharts(root){
  trendMotion(root,'.overview-charts',play);
  const arcs=[...root.querySelectorAll('.overview-charts .donut-arc')].filter(arc=>Number(arc.getAttribute('stroke-dasharray')?.split(' ')[0])>0);
  if(arcs.length){
-  play(root.querySelector('.overview-charts .donut'),[{transform:'scale(.94)',opacity:.25},{transform:'scale(1)',opacity:1}],{duration:1200,easing:'cubic-bezier(.22,.7,.25,1)'});
+  play(root.querySelector('.overview-charts .donut'),[{transform:'scale(.94)',opacity:.25},{transform:'scale(1)',opacity:1}],{duration:1200,easing:'linear'});
   for(const arc of arcs){
    const [length,rest]=arc.getAttribute('stroke-dasharray').split(' ').map(Number);
-   play(arc,[{strokeDasharray:`0 ${length+rest}`},{strokeDasharray:arc.getAttribute('stroke-dasharray')}],{duration:1200,easing:'cubic-bezier(.22,.7,.25,1)'});
+   play(arc,[{strokeDasharray:`0 ${length+rest}`},{strokeDasharray:arc.getAttribute('stroke-dasharray')}],{duration:1200,easing:'linear'});
   }
  }
  return ()=>animations.forEach(animation=>animation.cancel());
