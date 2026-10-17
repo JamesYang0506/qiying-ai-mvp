@@ -26,15 +26,16 @@ test('risk filter keeps only the three actionable severity levels',()=>{
  assert.deepEqual([...period.matchAll(/<option value="([^"]*)"/g)].map(m=>m[1]),['7','14','30']);
 });
 
-test('the distribution excludes orders the default list hides',()=>{
+test('the distribution shows only the four rated margin buckets for orders the default list shows',()=>{
  const row=(status,distribution)=>({order:{id:status+distribution},monitoringStatus:status,distribution});
  const orders=[row('生产中','medium'),row('生产中','medium'),row('生产中','unknown'),row('已完工','unknown'),row('未开工','not_started')];
- const data={orders,distribution:[{key:'medium',label:'10%–不足30%',count:2},{key:'unknown',label:'无法计算',count:2},{key:'not_started',label:'未开工',count:1}]};
+ const data={orders,distribution:[{key:'high',label:'≥30%',count:0},{key:'medium',label:'10%–不足30%',count:2},{key:'low',label:'0%–不足10%',count:0},{key:'negative',label:'<0%',count:0},{key:'unknown',label:'无法计算',count:2},{key:'not_started',label:'未开工',count:1}]};
  const defaults=visibleDistribution(data,{status:'',filter:'',search:''});
- assert.equal(defaults.total,3);
- assert.deepEqual(defaults.buckets.map(b=>[b.key,b.count,b.ratio]),[['medium',2,'0.666667'],['unknown',1,'0.333333'],['not_started',0,'0.000000']]);
- assert.equal(visibleDistribution(data,{status:'',filter:'',search:'SIM'}).buckets.find(b=>b.key==='unknown').count,1);
- assert.equal(visibleDistribution(data,{status:'已完工',filter:'',search:''}).buckets.find(b=>b.key==='unknown').count,2);
+ assert.equal(defaults.total,2);
+ assert.deepEqual(defaults.buckets.map(b=>[b.key,b.count,b.ratio]),[['high',0,'0.000000'],['medium',2,'1.000000'],['low',0,'0.000000'],['negative',0,'0.000000']]);
+ assert.ok(!defaults.buckets.some(b=>['unknown','not_started'].includes(b.key)));
+ assert.equal(visibleDistribution(data,{status:'',filter:'',search:'SIM'}).total,2);
+ assert.equal(visibleDistribution({...data,orders:[row('已完工','unknown')]},{status:'已完工',filter:'',search:''}).total,0);
 });
 test('search matches id, product and customer with spaces and multiple keywords',()=>{
  const row={order:{id:'SIM-M09',product:'EVA 薄利款',customer:'CUST-L1'}};

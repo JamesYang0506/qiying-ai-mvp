@@ -11,9 +11,11 @@ export function matchesSearch(row,search){
  return tokens.every(token=>hay.includes(token));
 }
 export function visibleDistribution(data,state){
- const focusInactive=['未开工','已完工'].includes(state.status)||state.filter==='not_started';
+ const rated=['high','medium','low','negative'],focusInactive=['未开工','已完工'].includes(state.status)||state.filter==='not_started';
  const rows=(data?.orders??[]).filter(row=>focusInactive||!['未开工','已完工'].includes(row.monitoringStatus));
- return {total:rows.length,buckets:(data?.distribution??[]).map(bucket=>{const count=rows.filter(row=>row.distribution===bucket.key).length;return {...bucket,count,ratio:rows.length?(count/rows.length).toFixed(6):null};})};
+ const buckets=(data?.distribution??[]).filter(bucket=>rated.includes(bucket.key)).map(bucket=>({...bucket,count:rows.filter(row=>row.distribution===bucket.key).length}));
+ const total=buckets.reduce((sum,bucket)=>sum+bucket.count,0);
+ return {total,buckets:buckets.map(bucket=>({...bucket,ratio:total?(bucket.count/total).toFixed(6):null}))};
 }
 export function filterMonitorRows(orders,state){
  const hide=hideInactive(state);
