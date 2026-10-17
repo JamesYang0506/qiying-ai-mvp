@@ -31,7 +31,7 @@ function number(value,unit,money=false){
  if(value==null||value===''||!Number.isFinite(Number(value)))return '待补齐';
  return `${Number(value).toLocaleString('zh-CN',{minimumFractionDigits:money?2:0,maximumFractionDigits:money?2:6})} ${unit}`;
 }
-function field(label,value,unit,money=false){return `<div class="bm-evidence-value"><span>${label}</span><strong>${esc(number(value,unit,money))}</strong></div>`;}
+function field(label,value,unit,money=false){return `<div class="bm-evidence-value" data-i18n-label><span>${label}</span><strong>${esc(number(value,unit,money))}</strong></div>`;}
 function sourceLabel(value){
  let source=value;
  if(typeof source==='string'){try{source=JSON.parse(source);}catch{return '来源位置待补齐';}}
@@ -39,13 +39,12 @@ function sourceLabel(value){
  const book=source.fileRole==='cost'?'成本表':source.fileRole==='daily'?'每日数据表':'导入表格';
  const sheet=text(source.sheet,''),cell=typeof source.cell==='string'&&/^\$?[A-Z]{1,3}\$?\d+$/i.test(source.cell)?source.cell.replaceAll('$',''):'';
  const row=cell?.match(/\d+$/)?.[0];
- return [book,sheet?`《${sheet}》`:'',row?`第 ${Number(row)} 行（${cell}）`:'来源位置待补齐'].filter(Boolean).join(' · ');
+ return [`<span data-i18n-label>${book}</span>`,sheet?`<span data-i18n-preserve>《${esc(sheet)}》</span>`:'',`<span data-i18n-label>${row?`第 ${Number(row)} 行（${cell}）`:'来源位置待补齐'}</span>`].filter(Boolean).join(' · ');
 }
 function description(type,r){
- if(type==='production')return `生产报工 · ${text(r.size,'码号未提供').replace(/#$/,'码')}`;
- if(type==='materials')return `材料领用 · ${text(r.materialId,'材料未提供')}`;
- if(type==='expenses')return `${text(r.category,'其他')}费用 · ${text(r.item,'费用项目未提供')}`;
- return `补产记录 · ${text(r.size,'码号未提供').replace(/#$/,'码')}`;
+ const label=type==='production'?'生产报工':type==='materials'?'材料领用':type==='expenses'?`${text(r.category,'其他')}费用`:'补产记录';
+ const item=type==='materials'?text(r.materialId,'材料未提供'):type==='expenses'?text(r.item,'费用项目未提供'):text(r.size,'码号未提供');
+ return `<span data-i18n-label>${esc(label)}</span> · <span data-i18n-preserve>${esc(item)}</span>`;
 }
 function values(type,r){
  if(type==='production')return field('加工量',r.processed,'双')+field('不良量',r.defects,'双');
@@ -58,5 +57,5 @@ function time(value){const date=new Date(value);return Number.isNaN(date.getTime
 export function renderMonitorEvidence(d){
  const all=['previous','daily'].flatMap(day=>['production','materials','expenses','supplements'].flatMap(type=>(d[day]?.rows?.[type]??[]).map(record=>({type,record}))));
  const missing=d.order?.quality?.missing??[];
- return `<div class="bm-overlay"><section class="panel bm-dialog bm-business-evidence" role="dialog" aria-modal="true" aria-label="订单核查依据" tabindex="-1"><div class="panel-head"><h2>订单核查依据</h2><button class="button" id="bm-close">关闭</button></div><div class="panel-body"><div class="bm-evidence-summary"><span>订单 <strong>${esc(text(d.order?.order?.id))}</strong></span><span>业务截至 <strong>${esc(text(d.asOf))}</strong></span><span>对照方式 <strong>${d.baselineMode==='budget'?'含损耗预算':'理想上界'}</strong></span></div><p class="bm-evidence-note">下列记录来自本次分析使用的已保存资料，包含当日与前一日数据，方便对照核查。资料获取时间：${esc(time(d.knownAt))}。</p>${missing.length?`<div class="bm-evidence-warning"><strong>待补齐资料</strong>${missing.map(m=>`<p>${esc(text(m.date,''))} ${esc(text(m.detail,'相关资料待补齐'))}</p>`).join('')}</div>`:''}<div class="table-wrap"><table><thead><tr><th>序号</th><th>业务日期</th><th>业务项目</th><th>数量与费用</th><th>信息来源</th></tr></thead><tbody>${all.map(({type,record:r},i)=>`<tr><td>${i+1}</td><td>${esc(text(r.date))}</td><td>${esc(description(type,r))}</td><td>${values(type,r)}</td><td>${esc(sourceLabel(r.source))}</td></tr>`).join('')}</tbody></table></div>${!all.length?'<p>该日暂无可见原始记录。</p>':''}<p class="bm-evidence-note">“待补齐”表示当前资料不足，不代表数量或金额为零。材料金额以订单分析的核算结果为准。</p></div></section></div>`;
+ return `<div class="bm-overlay"><section class="panel bm-dialog bm-business-evidence" role="dialog" aria-modal="true" aria-label="订单核查依据" tabindex="-1"><div class="panel-head"><h2>订单核查依据</h2><button class="button" id="bm-close">关闭</button></div><div class="panel-body"><div class="bm-evidence-summary"><span>订单 <strong>${esc(text(d.order?.order?.id))}</strong></span><span>业务截至 <strong>${esc(text(d.asOf))}</strong></span><span>对照方式 <strong>${d.baselineMode==='budget'?'含损耗预算':'理想上界'}</strong></span></div><p class="bm-evidence-note">下列记录来自本次分析使用的已保存资料，包含当日与前一日数据，方便对照核查。资料获取时间：${esc(time(d.knownAt))}。</p>${missing.length?`<div class="bm-evidence-warning"><strong>待补齐资料</strong>${missing.map(m=>`<p>${esc(text(m.date,''))} ${esc(text(m.detail,'相关资料待补齐'))}</p>`).join('')}</div>`:''}<div class="table-wrap"><table><thead><tr><th>序号</th><th>业务日期</th><th>业务项目</th><th>数量与费用</th><th>信息来源</th></tr></thead><tbody>${all.map(({type,record:r},i)=>`<tr><td>${i+1}</td><td>${esc(text(r.date))}</td><td>${description(type,r)}</td><td>${values(type,r)}</td><td>${sourceLabel(r.source)}</td></tr>`).join('')}</tbody></table></div>${!all.length?'<p>该日暂无可见原始记录。</p>':''}<p class="bm-evidence-note">“待补齐”表示当前资料不足，不代表数量或金额为零。材料金额以订单分析的核算结果为准。</p></div></section></div>`;
 }

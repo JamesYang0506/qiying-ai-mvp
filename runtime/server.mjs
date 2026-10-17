@@ -408,19 +408,19 @@ var require_utils = __commonJS({
       if (decode)
         return decode(data, hint);
     }
-    function basename(path7) {
-      if (typeof path7 !== "string")
+    function basename(path8) {
+      if (typeof path8 !== "string")
         return "";
-      for (let i2 = path7.length - 1; i2 >= 0; --i2) {
-        switch (path7.charCodeAt(i2)) {
+      for (let i2 = path8.length - 1; i2 >= 0; --i2) {
+        switch (path8.charCodeAt(i2)) {
           case 47:
           // '/'
           case 92:
-            path7 = path7.slice(i2 + 1);
-            return path7 === ".." || path7 === "." ? "" : path7;
+            path8 = path8.slice(i2 + 1);
+            return path8 === ".." || path8 === "." ? "" : path8;
         }
       }
-      return path7 === ".." || path7 === "." ? "" : path7;
+      return path8 === ".." || path8 === "." ? "" : path8;
     }
     var TOKEN = [
       0,
@@ -3765,13 +3765,230 @@ var require_lib = __commonJS({
   }
 });
 
+// server/http/auth.mjs
+import { randomBytes, randomInt, randomUUID, scrypt as rawScrypt, timingSafeEqual, createHash } from "node:crypto";
+import { promisify } from "node:util";
+import { mkdir, readFile, writeFile, rename, unlink } from "node:fs/promises";
+import path from "node:path";
+
+// server/http/uploads.mjs
+var import_busboy = __toESM(require_lib(), 1);
+function readUpload(req) {
+  return new Promise((resolve, reject) => {
+    let settled = false, total2 = 0;
+    const files = {};
+    let parser;
+    const fail2 = (message, status = 400) => {
+      if (settled) return;
+      settled = true;
+      req.unpipe(parser);
+      req.resume();
+      reject(Object.assign(new Error(message), { status }));
+    };
+    try {
+      parser = (0, import_busboy.default)({ headers: req.headers, limits: { files: 2, fields: 0, parts: 3, fileSize: 10 * 1024 * 1024 } });
+    } catch {
+      fail2("请选择两份.xlsx文件");
+      return;
+    }
+    req.on("data", (b) => {
+      total2 += b.length;
+      if (total2 > 25 * 1024 * 1024) fail2("上传请求超过25MiB", 413);
+    });
+    req.on("aborted", () => fail2("上传已中断"));
+    req.on("error", () => fail2("上传读取失败"));
+    parser.on("file", (name, stream, info) => {
+      if (!["costFile", "dailyFile"].includes(name) || files[name] || !info.filename.toLowerCase().endsWith(".xlsx")) {
+        stream.resume();
+        fail2("文件字段重复、无效或不是.xlsx");
+        return;
+      }
+      const chunks = [];
+      files[name] = { name: info.filename, buffer: null };
+      stream.on("data", (b) => {
+        if (!settled) chunks.push(b);
+      });
+      stream.on("limit", () => fail2("单个Excel文件超过10MiB", 413));
+      stream.on("error", () => fail2("文件上传失败"));
+      stream.on("end", () => {
+        if (!settled) files[name].buffer = Buffer.concat(chunks);
+      });
+    });
+    for (const ev of ["filesLimit", "fieldsLimit", "partsLimit"]) parser.on(ev, () => fail2("只允许上传成本和每日两份Excel"));
+    parser.on("error", () => fail2("上传格式损坏"));
+    parser.on("close", () => {
+      if (settled) return;
+      if (!files.costFile?.buffer || !files.dailyFile?.buffer) {
+        fail2("请同时选择成本Excel和每日Excel");
+        return;
+      }
+      settled = true;
+      resolve(files);
+    });
+    req.pipe(parser);
+  });
+}
+async function readJson(req) {
+  let total2 = 0;
+  const chunks = [];
+  for await (const b of req) {
+    total2 += b.length;
+    if (total2 > 65536) throw Object.assign(new Error("请求内容过大"), { status: 413 });
+    chunks.push(b);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  } catch {
+    throw Object.assign(new Error("JSON请求无效"), { status: 400 });
+  }
+}
+
+// server/http/auth.mjs
+var scrypt = promisify(rawScrypt);
+var hash = (s) => createHash("sha256").update(s).digest("hex");
+var failure = (code, status = 400) => Object.assign(new Error(code), { code, status });
+function createAuth({ directory, clock = Date.now, required = true }) {
+  const challenges = /* @__PURE__ */ new Map(), sessions = /* @__PURE__ */ new Map(), rates = /* @__PURE__ */ new Map();
+  let queue2 = Promise.resolve();
+  const file = path.join(directory, "accounts.json");
+  const send = (res, status, data, headers = {}) => {
+    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...headers });
+    res.end(JSON.stringify(data));
+  };
+  const users = async () => {
+    try {
+      const data = JSON.parse(await readFile(file, "utf8"));
+      if (!Array.isArray(data.users)) throw new Error("Invalid account store");
+      return data.users;
+    } catch (e) {
+      if (e.code === "ENOENT") return [];
+      throw e;
+    }
+  };
+  const limited = (req, kind, max3, window2) => {
+    const now = clock(), key = (req.socket.remoteAddress ?? "local") + ":" + kind;
+    for (const [k, r2] of rates) if (r2.until <= now) rates.delete(k);
+    const r = rates.get(key) ?? { count: 0, until: now + window2 };
+    r.count++;
+    rates.set(key, r);
+    if (r.count > max3) throw failure("RATE_LIMITED", 429);
+  };
+  function userFor(req) {
+    const id3 = (req.headers.cookie ?? "").split(";").map((x2) => x2.trim()).find((x2) => x2.startsWith("qiying_session="))?.slice(15);
+    if (!id3) return null;
+    const key = hash(id3), s = sessions.get(key);
+    if (!s) return null;
+    if (s.expires <= clock()) {
+      sessions.delete(key);
+      return null;
+    }
+    return s.user;
+  }
+  function session(res, user, remember) {
+    for (const [k, s] of sessions) if (s.expires <= clock()) sessions.delete(k);
+    if (sessions.size >= 1e3) sessions.delete(sessions.keys().next().value);
+    const token = randomBytes(32).toString("hex"), seconds = remember ? 7 * 86400 : 12 * 3600;
+    sessions.set(hash(token), { user, expires: clock() + seconds * 1e3 });
+    return `qiying_session=${token}; HttpOnly; SameSite=Strict; Path=/${remember ? "; Max-Age=" + seconds : ""}`;
+  }
+  function captcha(req) {
+    limited(req, "captcha", 90, 6e4);
+    for (const [k, c] of challenges) if (c.expires <= clock()) challenges.delete(k);
+    if (challenges.size >= 500) challenges.delete(challenges.keys().next().value);
+    const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ", code = Array.from({ length: 4 }, () => chars[randomInt(chars.length)]).join(""), id3 = randomUUID();
+    challenges.set(id3, { code, expires: clock() + 3e5, address: req.socket.remoteAddress });
+    const noise = Array.from({ length: 7 }, () => `<path d="M${randomInt(160)} ${randomInt(52)} Q${randomInt(160)} ${randomInt(52)} ${randomInt(160)} ${randomInt(52)}" stroke="hsl(${randomInt(190, 240)} 45% 75%)" stroke-width="1" fill="none"/>`).join("");
+    const text2 = [...code].map((c, i2) => `<text x="${18 + i2 * 35}" y="${randomInt(34, 41)}" transform="rotate(${randomInt(-18, 19)} ${25 + i2 * 35} 27)" font-family="Georgia,serif" font-size="30" font-weight="bold" fill="hsl(${randomInt(200, 240)} 65% ${randomInt(30, 50)}%)">${c}</text>`).join("");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="52" viewBox="0 0 160 52"><rect width="160" height="52" rx="9" fill="#edf3ff"/>${noise}${text2}</svg>`;
+    return { id: id3, image: "data:image/svg+xml;base64," + Buffer.from(svg).toString("base64"), expiresIn: 300 };
+  }
+  const verify = (body, req) => {
+    const c = challenges.get(body.captchaId);
+    challenges.delete(body.captchaId);
+    if (!c || c.expires <= clock() || c.address !== req.socket.remoteAddress || typeof body.captcha !== "string" || body.captcha.trim().toUpperCase() !== c.code) throw failure("INVALID_CAPTCHA");
+  };
+  const route = async (req, res, url) => {
+    if (!url.pathname.startsWith("/api/auth/")) return false;
+    try {
+      const host = req.headers.host ?? "";
+      if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw failure("FORBIDDEN", 403);
+      if (req.method === "GET" && url.pathname === "/api/auth/session") {
+        const user2 = userFor(req);
+        send(res, 200, { required, authenticated: !!user2, user: user2, version: "auth-v1", capabilities: ["account-login-v1", "monitor-scope-v2", "order-diagnosis-v3", "optimized-runtime-v1"] });
+        return true;
+      }
+      if (req.method === "GET" && url.pathname === "/api/auth/captcha") {
+        send(res, 200, captcha(req));
+        return true;
+      }
+      if (req.method !== "POST") throw failure("NOT_FOUND", 404);
+      if (req.headers.origin !== `http://${host}`) throw failure("FORBIDDEN", 403);
+      if (url.pathname === "/api/auth/logout") {
+        const token = (req.headers.cookie ?? "").split(";").map((x2) => x2.trim()).find((x2) => x2.startsWith("qiying_session="))?.slice(15);
+        if (token) sessions.delete(hash(token));
+        send(res, 200, { ok: true }, { "Set-Cookie": "qiying_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" });
+        return true;
+      }
+      if (!["/api/auth/login", "/api/auth/register"].includes(url.pathname)) throw failure("NOT_FOUND", 404);
+      limited(req, "credentials", 30, 6e5);
+      const body = await readJson(req);
+      if (!body || typeof body !== "object" || Array.isArray(body)) throw failure("INVALID_REQUEST");
+      verify(body, req);
+      const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "", password = body.password;
+      if (!/^[a-z0-9_@.+-]{3,64}$/.test(username)) throw failure("INVALID_ACCOUNT");
+      if (typeof password !== "string" || password.length < 8 || password.length > 128) throw failure("INVALID_PASSWORD");
+      if (url.pathname === "/api/auth/register") {
+        const job = queue2.then(async () => {
+          const all = await users();
+          if (all.some((u) => u.username === username)) throw failure("ACCOUNT_EXISTS", 409);
+          const salt = randomBytes(16).toString("hex"), key2 = await scrypt(password, salt, 64), user3 = { id: randomUUID(), username, salt, passwordHash: key2.toString("hex"), createdAt: new Date(clock()).toISOString() };
+          all.push(user3);
+          await mkdir(directory, { recursive: true });
+          const tmp = file + "." + randomUUID() + ".tmp";
+          try {
+            await writeFile(tmp, JSON.stringify({ version: 1, users: all }), { flag: "wx", mode: 384 });
+            await rename(tmp, file);
+          } catch (e) {
+            await unlink(tmp).catch(() => {
+            });
+            throw e;
+          }
+          return { id: user3.id, username };
+        });
+        queue2 = job.catch(() => {
+        });
+        const user2 = await job;
+        send(res, 201, { user: user2 });
+        return true;
+      }
+      const account = (await users()).find((u) => u.username === username), key = await scrypt(password, account?.salt ?? "qiying-unknown-user", 64), expected = account ? Buffer.from(account.passwordHash, "hex") : Buffer.alloc(64);
+      if (!account || expected.length !== key.length || !timingSafeEqual(key, expected)) throw failure("INVALID_CREDENTIALS", 401);
+      const user = { id: account.id, username: account.username };
+      send(res, 200, { user }, { "Set-Cookie": session(res, user, body.remember === true) });
+    } catch (e) {
+      req.resume();
+      const status = e.status ?? 500;
+      send(res, status, { error: { code: status >= 500 ? "AUTH_UNAVAILABLE" : e.code ?? "INVALID_REQUEST" } });
+    }
+    return true;
+  };
+  const authorize = (req, res, url) => {
+    if (!required || !url.pathname.startsWith("/api/")) return true;
+    if (userFor(req)) return true;
+    req.resume();
+    send(res, 401, { error: { code: "LOGIN_REQUIRED", message: "请先登录后访问项目数据" } });
+    return false;
+  };
+  return { route, authorize };
+}
+
 // server/http/app.mjs
 import http from "node:http";
-import { readFile as readFile4 } from "node:fs/promises";
-import path6 from "node:path";
+import { readFile as readFile5 } from "node:fs/promises";
+import path7 from "node:path";
 
 // server/http/routes.mjs
-import { randomUUID as randomUUID7, randomBytes } from "node:crypto";
+import { randomUUID as randomUUID8, randomBytes as randomBytes2 } from "node:crypto";
 
 // node_modules/fflate/esm/index.mjs
 import { createRequire } from "module";
@@ -6519,16 +6736,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path7 = this._matcher.path;
-    return path7.length > 0 ? path7[path7.length - 1].tag : void 0;
+    const path8 = this._matcher.path;
+    return path8.length > 0 ? path8[path8.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path7 = this._matcher.path;
-    return path7.length > 0 ? path7[path7.length - 1].namespace : void 0;
+    const path8 = this._matcher.path;
+    return path8.length > 0 ? path8[path8.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -6536,9 +6753,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path7 = this._matcher.path;
-    if (path7.length === 0) return void 0;
-    return path7[path7.length - 1].values?.[attrName];
+    const path8 = this._matcher.path;
+    if (path8.length === 0) return void 0;
+    return path8[path8.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -6546,9 +6763,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path7 = this._matcher.path;
-    if (path7.length === 0) return false;
-    const current = path7[path7.length - 1];
+    const path8 = this._matcher.path;
+    if (path8.length === 0) return false;
+    const current = path8[path8.length - 1];
     return current.values !== void 0 && attrName in current.values;
   }
   /**
@@ -6574,18 +6791,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path7 = this._matcher.path;
-    if (path7.length === 0) return -1;
-    return path7[path7.length - 1].position ?? 0;
+    const path8 = this._matcher.path;
+    if (path8.length === 0) return -1;
+    return path8[path8.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path7 = this._matcher.path;
-    if (path7.length === 0) return -1;
-    return path7[path7.length - 1].counter ?? 0;
+    const path8 = this._matcher.path;
+    if (path8.length === 0) return -1;
+    return path8[path8.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -8524,8 +8741,8 @@ var XMLValidator = {
 };
 
 // server/import/xlsx.mjs
-import { createHash } from "node:crypto";
-import path from "node:path";
+import { createHash as createHash2 } from "node:crypto";
+import path2 from "node:path";
 var arr = (x2) => x2 == null ? [] : Array.isArray(x2) ? x2 : [x2];
 var text = (x2) => x2 == null ? "" : typeof x2 === "object" ? String(x2["#text"] ?? "") : String(x2);
 function readXlsx(buffer, { limits = {} } = {}) {
@@ -8582,7 +8799,7 @@ function readXlsx(buffer, { limits = {} } = {}) {
   const sheets = arr(book?.sheets?.sheet).map((sh) => {
     const rel = relations[sh["@_id"]];
     if (!rel || rel["@_TargetMode"] === "External") throw new Error("Excel工作表关系无效");
-    const target = path.posix.normalize(rel["@_Target"].startsWith("/") ? rel["@_Target"].slice(1) : "xl/" + rel["@_Target"]);
+    const target = path2.posix.normalize(rel["@_Target"].startsWith("/") ? rel["@_Target"].slice(1) : "xl/" + rel["@_Target"]);
     if (!target.startsWith("xl/")) throw new Error("Excel工作表路径无效");
     const ws = xml(target).worksheet, cells = {};
     const rows = arr(ws?.sheetData?.row);
@@ -8619,13 +8836,13 @@ function readXlsx(buffer, { limits = {} } = {}) {
       if (kind === "text" && value) value = value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
       cells[ref] = { ref, value, kind };
     }
-    const relFile = path.posix.dirname(target) + "/_rels/" + path.posix.basename(target) + ".rels";
+    const relFile = path2.posix.dirname(target) + "/_rels/" + path2.posix.basename(target) + ".rels";
     let tables = [];
     if (entries.has(relFile)) {
       const rs = arr(xml(relFile).Relationships?.Relationship);
       for (const r of rs) if (/\/table$/.test(r["@_Type"] ?? "")) {
         if (r["@_TargetMode"] === "External") throw new Error("外部Excel表不支持");
-        const tp = path.posix.normalize(r["@_Target"].startsWith("/") ? r["@_Target"].slice(1) : path.posix.dirname(target) + "/" + r["@_Target"]);
+        const tp = path2.posix.normalize(r["@_Target"].startsWith("/") ? r["@_Target"].slice(1) : path2.posix.dirname(target) + "/" + r["@_Target"]);
         if (!tp.startsWith("xl/")) throw new Error("Excel表路径无效");
         const tb = xml(tp).table;
         tables.push({ name: tb["@_name"] ?? tb["@_displayName"], ref: tb["@_ref"] });
@@ -8634,7 +8851,7 @@ function readXlsx(buffer, { limits = {} } = {}) {
     return { name: sh["@_name"], cells, tables };
   });
   if (new Set(sheets.map((s) => s.name)).size !== sheets.length) throw new Error("Excel工作表名称重复");
-  return { epoch1904: ["1", "true"].includes(book?.workbookPr?.["@_date1904"]), hash: createHash("sha256").update(buffer).digest("hex"), sheets };
+  return { epoch1904: ["1", "true"].includes(book?.workbookPr?.["@_date1904"]), hash: createHash2("sha256").update(buffer).digest("hex"), sheets };
 }
 
 // node_modules/decimal.js/decimal.mjs
@@ -11730,9 +11947,9 @@ function createCalculationCache({ maxEntries = 64 } = {}) {
 }
 
 // server/storage/store.mjs
-import { mkdir, readdir, readFile, writeFile, rename, unlink, stat } from "node:fs/promises";
-import { createHash as createHash2, randomUUID } from "node:crypto";
-import path2 from "node:path";
+import { mkdir as mkdir2, readdir, readFile as readFile2, writeFile as writeFile2, rename as rename2, unlink as unlink2, stat } from "node:fs/promises";
+import { createHash as createHash3, randomUUID as randomUUID2 } from "node:crypto";
+import path3 from "node:path";
 function stable(v) {
   if (Array.isArray(v)) {
     const a = v.map(stable);
@@ -11741,14 +11958,14 @@ function stable(v) {
   if (v && typeof v === "object") return Object.fromEntries(Object.keys(v).filter((k) => !["source", "sourceFiles"].includes(k)).sort().map((k) => [k, stable(v[k])]));
   return v;
 }
-var digest = (v) => createHash2("sha256").update(JSON.stringify(stable(v))).digest("hex");
+var digest = (v) => createHash3("sha256").update(JSON.stringify(stable(v))).digest("hex");
 var conflict = (message) => Object.assign(new Error(message), { status: 409 });
-var fileName = (id3, revision) => createHash2("sha256").update(id3 + "\0" + revision).digest("hex") + ".json";
+var fileName = (id3, revision) => createHash3("sha256").update(id3 + "\0" + revision).digest("hex") + ".json";
 function createStore(directory) {
   let queue2 = Promise.resolve();
   const entries = /* @__PURE__ */ new Map();
   async function load(name) {
-    const file = path2.join(directory, name);
+    const file = path3.join(directory, name);
     let info;
     try {
       info = await stat(file);
@@ -11760,7 +11977,7 @@ function createStore(directory) {
     if (prior && prior.mtimeMs === info.mtimeMs && prior.size === info.size) return prior.record;
     let record;
     try {
-      record = JSON.parse(await readFile(file, "utf8"));
+      record = JSON.parse(await readFile2(file, "utf8"));
     } catch {
       throw new Error("本地导入数据损坏，请从备份恢复");
     }
@@ -11769,7 +11986,7 @@ function createStore(directory) {
     return record;
   }
   async function refresh() {
-    await mkdir(directory, { recursive: true });
+    await mkdir2(directory, { recursive: true });
     const names = (await readdir(directory)).filter((n) => /^[a-f0-9]{64}\.json$/.test(n)), seen = new Set(names), records = [];
     for (const name of names) {
       const record = await load(name);
@@ -11800,27 +12017,27 @@ function createStore(directory) {
   };
   const commit = (dataset) => {
     const job = queue2.then(async () => {
-      const all = await refresh(), hash2 = digest(dataset), baseHash = digest(dataset.baseline), same = all.find((v) => v.dataset.order.id === dataset.order.id && v.dataset.revision.id === dataset.revision.id);
+      const all = await refresh(), hash3 = digest(dataset), baseHash = digest(dataset.baseline), same = all.find((v) => v.dataset.order.id === dataset.order.id && v.dataset.revision.id === dataset.revision.id);
       if (same) {
-        if (same.hash !== hash2) throw conflict("同一修订号内容已改变，请使用新修订版本");
+        if (same.hash !== hash3) throw conflict("同一修订号内容已改变，请使用新修订版本");
         return { orderId: dataset.order.id, revisionId: dataset.revision.id, reused: true };
       }
       for (const v of all.filter((v2) => v2.dataset.order.id === dataset.order.id)) {
         if (v.dataset.order.lineId !== dataset.order.lineId) throw conflict("首版同订单只支持一个核算子项，请使用独立订单标识");
         if (v.dataset.baseline.id === dataset.baseline.id && (digest(v.dataset.baseline) !== baseHash || ["quantity", "price", "weight"].some((k) => v.dataset.order[k] !== dataset.order[k]))) throw conflict("冻结基线内容已改变，请使用新基线版本");
       }
-      const name = fileName(dataset.order.id, dataset.revision.id), target = path2.join(directory, name), tmp = path2.join(directory, name + "." + randomUUID() + ".tmp");
+      const name = fileName(dataset.order.id, dataset.revision.id), target = path3.join(directory, name), tmp = path3.join(directory, name + "." + randomUUID2() + ".tmp");
       const timestamp2 = Math.max(Date.now(), all.length ? Date.parse(all.at(-1).createdAt) + 1 : 0), createdAt = new Date(timestamp2).toISOString();
       try {
-        await writeFile(tmp, JSON.stringify({ hash: hash2, createdAt, dataset }), { flag: "wx" });
-        await rename(tmp, target);
+        await writeFile2(tmp, JSON.stringify({ hash: hash3, createdAt, dataset }), { flag: "wx" });
+        await rename2(tmp, target);
       } catch (e) {
-        await unlink(tmp).catch(() => {
+        await unlink2(tmp).catch(() => {
         });
         throw e;
       }
       const info = await stat(target);
-      entries.set(name, { mtimeMs: info.mtimeMs, size: info.size, record: { hash: hash2, createdAt, dataset } });
+      entries.set(name, { mtimeMs: info.mtimeMs, size: info.size, record: { hash: hash3, createdAt, dataset } });
       return { orderId: dataset.order.id, revisionId: dataset.revision.id, reused: false };
     });
     queue2 = job.catch(() => {
@@ -11830,86 +12047,14 @@ function createStore(directory) {
   return { listOrders, listRevisions, get, commit, listVersions: refresh };
 }
 
-// server/http/uploads.mjs
-var import_busboy = __toESM(require_lib(), 1);
-function readUpload(req) {
-  return new Promise((resolve, reject) => {
-    let settled = false, total2 = 0;
-    const files = {};
-    let parser;
-    const fail2 = (message, status = 400) => {
-      if (settled) return;
-      settled = true;
-      req.unpipe(parser);
-      req.resume();
-      reject(Object.assign(new Error(message), { status }));
-    };
-    try {
-      parser = (0, import_busboy.default)({ headers: req.headers, limits: { files: 2, fields: 0, parts: 3, fileSize: 10 * 1024 * 1024 } });
-    } catch {
-      fail2("请选择两份.xlsx文件");
-      return;
-    }
-    req.on("data", (b) => {
-      total2 += b.length;
-      if (total2 > 25 * 1024 * 1024) fail2("上传请求超过25MiB", 413);
-    });
-    req.on("aborted", () => fail2("上传已中断"));
-    req.on("error", () => fail2("上传读取失败"));
-    parser.on("file", (name, stream, info) => {
-      if (!["costFile", "dailyFile"].includes(name) || files[name] || !info.filename.toLowerCase().endsWith(".xlsx")) {
-        stream.resume();
-        fail2("文件字段重复、无效或不是.xlsx");
-        return;
-      }
-      const chunks = [];
-      files[name] = { name: info.filename, buffer: null };
-      stream.on("data", (b) => {
-        if (!settled) chunks.push(b);
-      });
-      stream.on("limit", () => fail2("单个Excel文件超过10MiB", 413));
-      stream.on("error", () => fail2("文件上传失败"));
-      stream.on("end", () => {
-        if (!settled) files[name].buffer = Buffer.concat(chunks);
-      });
-    });
-    for (const ev of ["filesLimit", "fieldsLimit", "partsLimit"]) parser.on(ev, () => fail2("只允许上传成本和每日两份Excel"));
-    parser.on("error", () => fail2("上传格式损坏"));
-    parser.on("close", () => {
-      if (settled) return;
-      if (!files.costFile?.buffer || !files.dailyFile?.buffer) {
-        fail2("请同时选择成本Excel和每日Excel");
-        return;
-      }
-      settled = true;
-      resolve(files);
-    });
-    req.pipe(parser);
-  });
-}
-async function readJson(req) {
-  let total2 = 0;
-  const chunks = [];
-  for await (const b of req) {
-    total2 += b.length;
-    if (total2 > 65536) throw Object.assign(new Error("请求内容过大"), { status: 413 });
-    chunks.push(b);
-  }
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
-  } catch {
-    throw Object.assign(new Error("JSON请求无效"), { status: 400 });
-  }
-}
-
 // server/http/routes.mjs
-import path5 from "node:path";
+import path6 from "node:path";
 
 // server/orders/repository.mjs
-import { mkdir as mkdir2, readFile as readFile2, open, rename as rename2, unlink as unlink2 } from "node:fs/promises";
-import path3 from "node:path";
-import { randomUUID as randomUUID2, createHash as createHash3 } from "node:crypto";
-var hash = (value) => createHash3("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+import { mkdir as mkdir3, readFile as readFile3, open, rename as rename3, unlink as unlink3 } from "node:fs/promises";
+import path4 from "node:path";
+import { randomUUID as randomUUID3, createHash as createHash4 } from "node:crypto";
+var hash2 = (value) => createHash4("sha256").update(JSON.stringify(canonical(value))).digest("hex");
 function canonical(v) {
   if (Array.isArray(v)) return v.map(canonical);
   if (v && typeof v === "object") return Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])]));
@@ -11919,10 +12064,10 @@ var fail = (code, message, status = 400, details = []) => Object.assign(new Erro
 var empty = () => ({ version: 1, orders: [], baselines: [], reports: [], pools: [], batches: [], jobs: [], snapshots: [], views: [], idempotency: {} });
 var queues = /* @__PURE__ */ new Map();
 function createRepository(directory) {
-  const file = path3.resolve(directory, "b-state.json");
+  const file = path4.resolve(directory, "b-state.json");
   const read = async () => {
     try {
-      const state = JSON.parse(await readFile2(file, "utf8"));
+      const state = JSON.parse(await readFile3(file, "utf8"));
       if (state.version !== 1) throw new Error("不支持的数据版本");
       return state;
     } catch (e) {
@@ -11934,8 +12079,8 @@ function createRepository(directory) {
     const job = (queues.get(file) ?? Promise.resolve()).then(async () => {
       const state = await read(), before = JSON.stringify(state), result = await fn(state), serialized = JSON.stringify(state);
       if (before === serialized) return structuredClone(result);
-      await mkdir2(directory, { recursive: true });
-      const temp = file + "." + randomUUID2() + ".tmp";
+      await mkdir3(directory, { recursive: true });
+      const temp = file + "." + randomUUID3() + ".tmp";
       let fd2;
       try {
         fd2 = await open(temp, "wx");
@@ -11943,10 +12088,10 @@ function createRepository(directory) {
         await fd2.sync();
         await fd2.close();
         fd2 = null;
-        await rename2(temp, file);
+        await rename3(temp, file);
       } catch (e) {
         await fd2?.close();
-        await unlink2(temp).catch(() => {
+        await unlink3(temp).catch(() => {
         });
         throw e;
       }
@@ -11964,7 +12109,7 @@ function createRepository(directory) {
 }
 function idempotent(state, key, operation, payload, action) {
   if (typeof key !== "string" || !key.length || key.length > 128) throw fail("INVALID_REQUEST", "需要 1–128 字符的 Idempotency-Key");
-  const fingerprint2 = hash({ operation, payload }), prior = Object.hasOwn(state.idempotency, key) ? state.idempotency[key] : null;
+  const fingerprint2 = hash2({ operation, payload }), prior = Object.hasOwn(state.idempotency, key) ? state.idempotency[key] : null;
   if (prior) {
     if (prior.fingerprint !== fingerprint2) throw fail("IDEMPOTENCY_CONFLICT", "同一幂等键的请求内容不同", 409);
     return structuredClone(prior.result);
@@ -11976,7 +12121,7 @@ function idempotent(state, key, operation, payload, action) {
 var latest = (rows, knownAt) => rows.filter((r) => !knownAt || Date.parse(r.recorded_at) <= Date.parse(knownAt)).at(-1);
 
 // server/orders/service.mjs
-import { randomUUID as randomUUID4 } from "node:crypto";
+import { randomUUID as randomUUID5 } from "node:crypto";
 
 // contracts/openapi.json
 var openapi_default = {
@@ -18023,7 +18168,7 @@ var openapi_default = {
 };
 
 // server/monitor/overview.mjs
-import { randomUUID as randomUUID3 } from "node:crypto";
+import { randomUUID as randomUUID4 } from "node:crypto";
 
 // server/profit/monitor-risk.mjs
 var MONITOR_RISK_VERSION = "RELATIVE-MARGIN-1";
@@ -18065,15 +18210,15 @@ function toCalculationResult(evaluation, { dataset, snapshotId, computedAt } = {
   const profitDelta = comparable ? c.delta : null;
   const marginDelta = comparable && c.actual.margin != null && c.expected.margin != null ? ratio2(new D(c.actual.margin).minus(c.expected.margin)) : null;
   const relativeDecline = comparable && c.expected.margin != null && new D(c.expected.margin).gt(0) ? ratio2(new D(c.expected.margin).minus(c.actual.margin).div(c.expected.margin)) : null;
-  const hash2 = digest(dataset), costVariances = [variance("material", c.expected.material, c.actual.material), variance("labor", c.expected.labor, c.actual.costs?.人工), variance("manufacturing", c.expected.manufacturing, c.actual.costs?.制造), variance("other_production", c.expected.otherProduction, c.actual.costs?.其他生产)];
+  const hash3 = digest(dataset), costVariances = [variance("material", c.expected.material, c.actual.material), variance("labor", c.expected.labor, c.actual.costs?.人工), variance("manufacturing", c.expected.manufacturing, c.actual.costs?.制造), variance("other_production", c.expected.otherProduction, c.actual.costs?.其他生产)];
   const issues = [...quality.missing.map((m) => ({ code: "IMPORT_MISSING", message: m.detail, field: m.field ?? "", severity: "blocking", source_refs: [] })), ...(evaluation.warnings ?? []).map((message) => ({ code: "IMPORT_WARNING", message, field: "", severity: "warning", source_refs: [] }))];
   const risk = classifyMonitorRisk({ actual: c.actual.gross, expected: c.expected.gross, revenue: c.revenue, baselineComplete: quality.completeness?.baseline.state === "complete" });
   const riskLevel = { "严重": "severe", "重点": "key", "注意": "attention", "正常": "normal", "优于预期": "better" }[risk.label] ?? "not_applicable";
   return {
-    snapshot_id: snapshotId ?? `local-${hash2.slice(0, 16)}-${evaluation.asOf}-${evaluation.baselineMode}`,
+    snapshot_id: snapshotId ?? `local-${hash3.slice(0, 16)}-${evaluation.asOf}-${evaluation.baselineMode}`,
     order_id: o.id,
     baseline_id: evaluation.baselineId ?? null,
-    input_hash: hash2,
+    input_hash: hash3,
     formula_version: FORMULA_VERSION,
     rule_version: RULE_VERSION,
     computed_at: computedAt ?? (/* @__PURE__ */ new Date()).toISOString(),
@@ -18154,13 +18299,13 @@ function compare(dataset, today, previous, asOf) {
   const change = new D(today.actual.gross).div(today.revenue).minus(new D(previous.actual.gross).div(previous.revenue)).times(100), now = new D(today.actual.productionCost).div(today.quantity), before = new D(previous.actual.productionCost).div(previous.quantity);
   return { status: "comparable", reasons: [], marginChangePp: change.toString(), unitCost: now.toFixed(6), previousUnitCost: before.toFixed(6), unitCostChange: now.minus(before).toFixed(6), deteriorated: change.lt(0) };
 }
-async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal", knownAt, viewId = randomUUID3(), compute = evaluate, cache = null, customer = "", status = "", risk = "", search = "" } = {}) {
+async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal", knownAt, viewId = randomUUID4(), compute = evaluate, cache = null, customer = "", status = "", risk = "", search = "" } = {}) {
   date(asOf);
   knownAt = timestamp(knownAt ?? (/* @__PURE__ */ new Date()).toISOString());
   if (!["ideal", "budget"].includes(baselineMode) || !Number.isInteger(period) || period < 1 || period > 90) throw fail("INVALID_REQUEST", "理论模式或趋势窗口无效（1–90 天）");
   const requestedStart = shift(asOf, 1 - period), firstStart = entries.map((e) => e.dataset.order.start).sort()[0], start = firstStart && firstStart <= asOf && firstStart > requestedStart ? firstStart : requestedStart, snapshots = [], orders = [];
   for (const entry of entries) {
-    const dataset = entry.dataset, visible = atKnown(dataset, knownAt), evaluation = compute(visible, { asOf, baselineMode }), snapshotId = randomUUID3();
+    const dataset = entry.dataset, visible = atKnown(dataset, knownAt), evaluation = compute(visible, { asOf, baselineMode }), snapshotId = randomUUID4();
     const previousDay = shift(asOf, -1), previousKnown = evaluation.daySummaries.some((d) => d.date === previousDay), previous = previousKnown ? createDailyEvaluator(visible, { baselineMode }).day(previousDay, previousDay).daily : null;
     const comparison = compare({ ...dataset, _revisionCount: entry.revisionCount }, evaluation.daily, previous, asOf);
     const contract = toCalculationResult(evaluation, { dataset, snapshotId, computedAt: (/* @__PURE__ */ new Date()).toISOString() });
@@ -18173,7 +18318,7 @@ async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal"
     const row = { order: dataset.order, revisionId: dataset.revision.id, baselineId: dataset.baseline.id, snapshotId, cumulative, daily: evaluation.daily, comparison, quality: evaluation.quality, comparable: eligible, distribution: asOf < dataset.order.start ? "not_started" : distributionKey(evaluation.daily), points, loss: cumulative.actual.gross != null && new D(cumulative.actual.gross).lt(0), cumulativeDeviation: eligible && new D(cumulative.gap).gt(0), recommendations: recommendations({ today: evaluation.daily, previous, comparison, orderId: dataset.order.id, revisionId: dataset.revision.id, baselineMode, asOf, snapshotId }) };
     row.evidence = [...evaluation.evidence.map((source, i2) => ({ evidenceId: `${snapshotId}:source-${i2}`, source })), ...row.recommendations.flatMap((r) => r.evidence)];
     Object.assign(row, { monitoringStatus, risk: riskInfo, marginDeviationPp });
-    snapshots.push({ snapshot_id: snapshotId, order_id: dataset.order.id, as_of: asOf, known_at: knownAt, revision_id: dataset.revision.id, baseline_mode: baselineMode, input_hash: hash(dataset), result: contract, evaluation, previous, inputs: dataset, recorded_at: (/* @__PURE__ */ new Date()).toISOString(), evidence: row.evidence });
+    snapshots.push({ snapshot_id: snapshotId, order_id: dataset.order.id, as_of: asOf, known_at: knownAt, revision_id: dataset.revision.id, baseline_mode: baselineMode, input_hash: hash2(dataset), result: contract, evaluation, previous, inputs: dataset, recorded_at: (/* @__PURE__ */ new Date()).toISOString(), evidence: row.evidence });
     orders.push(row);
   }
   const filterOptions = { customers: [...new Set(orders.map((r) => r.order.customer).filter(Boolean))].sort(), statuses: ["生产中", "已完工", "未开工", "待确认"], risks: ["严重", "重点", "注意", "数据不足", "缺少基线", "不可评级", "正常", "优于预期"] };
@@ -18285,7 +18430,7 @@ function validate2(name, value) {
 }
 
 // server/orders/service.mjs
-var id = () => randomUUID4();
+var id = () => randomUUID5();
 var errorDetail = (e) => ({ code: e.code ?? "CALCULATION_FAILED", message: e.message, details: (e.details ?? []).map((d) => ({ field: d.field ?? "", message: d.message ?? d.reason ?? "字段无效" })), retryable: true });
 var sameRevision = (current, expected) => {
   if ((current?.revision ?? 0) !== expected) throw fail("VERSION_CONFLICT", "资料已被修改，请刷新后重试", 409);
@@ -18303,7 +18448,7 @@ function reportRows(s, orderId, knownAt) {
 }
 var sources = (s) => ({ orders: s.orders, baselines: s.baselines, reports: s.reports, pools: s.pools });
 function fingerprint(s, ids, knownAt) {
-  return hash(ids.map((orderId) => ({ order: orderAt(s, orderId, knownAt), reports: reportRows(s, orderId, knownAt), baselines: s.baselines.filter((b) => b.order_id === orderId && Date.parse(b.recorded_at) <= Date.parse(knownAt)), pools: s.pools.filter((p) => Date.parse(p.recorded_at) <= Date.parse(knownAt) && p.definition.targets.some((t) => t.order_id === orderId)) })));
+  return hash2(ids.map((orderId) => ({ order: orderAt(s, orderId, knownAt), reports: reportRows(s, orderId, knownAt), baselines: s.baselines.filter((b) => b.order_id === orderId && Date.parse(b.recorded_at) <= Date.parse(knownAt)), pools: s.pools.filter((p) => Date.parse(p.recorded_at) <= Date.parse(knownAt) && p.definition.targets.some((t) => t.order_id === orderId)) })));
 }
 var jobPublic = (j) => ({ job_id: j.job_id, status: j.status, snapshot_ids: j.snapshot_ids, error: j.error });
 var batchPublic = (b) => ({ batch_id: b.batch_id, job_id: b.job_id, status: b.status, accepted_count: b.accepted_count, snapshot_ids: b.snapshot_ids, issues: b.issues });
@@ -18317,7 +18462,7 @@ function enqueue(s, orderIds, start, end, now, batchId = null) {
   return j;
 }
 function scopeEqual(a, b) {
-  return hash(a) === hash(b);
+  return hash2(a) === hash2(b);
 }
 var mergeInputs = (reports) => {
   const fields = ["revenue_lines", "materials", "labor", "manufacturing_allocations", "expenses"], input = { material_basis: "actual_net", material_scope_confirmed: reports.length > 0, management_enabled: reports[0]?.data.actual_input.management_enabled ?? false, coverage_confirmed: reports.length > 0, quality: "complete" };
@@ -18329,12 +18474,12 @@ var mergeInputs = (reports) => {
     input.material_scope_confirmed &&= a.material_scope_confirmed;
     input.coverage_confirmed &&= a.coverage_confirmed;
     if (a.quality !== "complete") input.quality = a.quality;
-    for (const f of fields) input[f].push(...a[f].map((x2) => ({ ...x2, line_id: hash([r.record_id, r.revision, x2.line_id]).slice(0, 32) })));
+    for (const f of fields) input[f].push(...a[f].map((x2) => ({ ...x2, line_id: hash2([r.record_id, r.revision, x2.line_id]).slice(0, 32) })));
   }
   const pools = /* @__PURE__ */ new Map();
   for (const allocation of input.manufacturing_allocations) {
     const prior = pools.get(allocation.pool_version_id);
-    if (prior && hash({ ...prior, line_id: "" }) !== hash({ ...allocation, line_id: "" })) throw fail("ALLOCATION_INVALID", "同费用池存在不一致的分摊记录", 422);
+    if (prior && hash2({ ...prior, line_id: "" }) !== hash2({ ...allocation, line_id: "" })) throw fail("ALLOCATION_INVALID", "同费用池存在不一致的分摊记录", 422);
     pools.set(allocation.pool_version_id, allocation);
   }
   input.manufacturing_allocations = [...pools.values()];
@@ -18409,7 +18554,7 @@ function createOrderService({ repository, clock = Date.now, calculateOrder, allo
       if (amount2 == null) throw fail("ALLOCATION_INVALID", "费用池缺少订单分摊结果", 422);
       actual.manufacturing_allocations.push({ line_id: p.pool_version_id, pool_version_id: p.pool_version_id, period_start: p.definition.period_start, period_end: p.definition.period_end, amount: amount2, quality: allocation.quality, source_refs: p.definition.source_refs });
     }
-    const input = { snapshot_id: snapshotId, order_id: orderId, baseline_id: baseline?.baseline_id ?? null, input_hash: hash({ order, baseline, reports, actual }), formula_version: formulaVersion, scope, expected_scope: expectedScope, expected, actual, risk_rule: riskRule };
+    const input = { snapshot_id: snapshotId, order_id: orderId, baseline_id: baseline?.baseline_id ?? null, input_hash: hash2({ order, baseline, reports, actual }), formula_version: formulaVersion, scope, expected_scope: expectedScope, expected, actual, risk_rule: riskRule };
     validate2("CalculationRequest", input);
     return input;
   }
@@ -18515,7 +18660,7 @@ function createOrderService({ repository, clock = Date.now, calculateOrder, allo
             if (bySource && JSON.stringify([bySource.data.order_id, bySource.data.business_date, bySource.data.report_key]) !== logicalKey) throw fail("SOURCE_CONFLICT", "来源主键已经用于另一份日报", 409);
             const content = (x2) => {
               const { expected_revision, ...rest } = x2;
-              return hash(rest);
+              return hash2(rest);
             };
             if (current && content(current.data) === content(r)) {
               proposed.push({ record: current, reused: true });
@@ -18625,7 +18770,7 @@ function createOrderService({ repository, clock = Date.now, calculateOrder, allo
           const snap = results.filter((x2) => x2.order_id === o.order_id && x2.as_of === data.as_of && x2.result.scope.basis === "cumulative").at(-1), current = fingerprint(s, [o.order_id], knownAt);
           const stale = snap && snap.input_order_fingerprint !== current;
           if (f.risk_level && snap?.result.comparison.risk.level !== f.risk_level) continue;
-          const groupId = snap ? groupKey(snap.result.scope) : hash({ currency: o.currency, unknown: true }).slice(0, 24);
+          const groupId = snap ? groupKey(snap.result.scope) : hash2({ currency: o.currency, unknown: true }).slice(0, 24);
           const risk = snap?.result.comparison.risk ?? { level: "not_applicable", rule_version: "B-1", reason: "核算尚未完成", loss: false };
           const dailyAt = (day) => s.snapshots.filter((x2) => x2.request && x2.order_id === o.order_id && x2.as_of === day && x2.result.scope.basis === "daily" && Date.parse(x2.known_at) <= Date.parse(knownAt) && x2.input_order_fingerprint === current).at(-1)?.result;
           const today = dailyAt(data.as_of), previous = dailyAt(shift(data.as_of, -1)), dailyComparable = today && previous && groupKey(today.scope) === groupKey(previous.scope) && [today, previous].every((r) => r.actual.gross_margin != null && r.actual.total_production_cost != null && r.actual.revenue != null && new D(r.actual.revenue).gt(0) && new D(r.scope.quantity).gt(0));
@@ -18673,7 +18818,7 @@ function createOrderService({ repository, clock = Date.now, calculateOrder, allo
 function viewRef(v) {
   return Object.fromEntries(["view_id", "as_of", "period_start", "known_at", "snapshot_refs", "pending_order_ids"].map((k) => [k, v[k]]));
 }
-var groupKey = (scope) => hash(Object.fromEntries(["currency", "tax_basis", "cost_scope_id", "revenue_basis", "quantity_basis", "settlement_state"].map((k) => [k, scope[k]]))).slice(0, 24);
+var groupKey = (scope) => hash2(Object.fromEntries(["currency", "tax_basis", "cost_scope_id", "revenue_basis", "quantity_basis", "settlement_state"].map((k) => [k, scope[k]]))).slice(0, 24);
 var total = (rows, fn) => rows.length ? money(rows.reduce((s, r) => s.plus(fn(r)), new D(0))) : null;
 function groupSummaries(v) {
   return [...new Set(v.items.map((i2) => i2.group_id))].map((groupId) => {
@@ -18692,7 +18837,7 @@ function cursorKnown(cursor) {
 function page(items, query, binding) {
   const size = Number(query.page_size ?? 50);
   if (!Number.isInteger(size) || size < 1 || size > 100) throw fail("INVALID_REQUEST", "page_size 必须为 1–100");
-  const signature = hash({ ...binding, size });
+  const signature = hash2({ ...binding, size });
   let offset = 0;
   if (query.cursor) {
     try {
@@ -18707,13 +18852,13 @@ function page(items, query, binding) {
 }
 
 // server/orders/routes.mjs
-import { randomUUID as randomUUID5 } from "node:crypto";
+import { randomUUID as randomUUID6 } from "node:crypto";
 function createOrderRoutes({ service, token }) {
   return async (req, res, url) => {
     if (!url.pathname.startsWith("/api/v1/")) return false;
     const send = (status, data, error) => {
       res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
-      res.end(JSON.stringify({ schema_version: "1.0", request_id: randomUUID5(), ...error ? { error } : { data } }));
+      res.end(JSON.stringify({ schema_version: "1.0", request_id: randomUUID6(), ...error ? { error } : { data } }));
     };
     try {
       const host = req.headers.host ?? "";
@@ -18759,9 +18904,9 @@ function createOrderRoutes({ service, token }) {
 }
 
 // server/monitor/storage.mjs
-import { mkdir as mkdir3, readFile as readFile3, open as open2, rename as rename3, unlink as unlink3 } from "node:fs/promises";
-import path4 from "node:path";
-import { randomUUID as randomUUID6 } from "node:crypto";
+import { mkdir as mkdir4, readFile as readFile4, open as open2, rename as rename4, unlink as unlink4 } from "node:fs/promises";
+import path5 from "node:path";
+import { randomUUID as randomUUID7 } from "node:crypto";
 var idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 var digestPattern = /^[a-f0-9]{64}$/;
 var missing = (code, message, status = 404) => fail(code, message, status);
@@ -18770,7 +18915,7 @@ var id2 = (value, label = "ID") => {
   if (typeof value !== "string" || !idPattern.test(value)) throw missing("INVALID_REQUEST", `${label}无效`, 400);
   return value;
 };
-var queue = (directory) => path4.resolve(directory);
+var queue = (directory) => path5.resolve(directory);
 var settle = (key) => queues2.get(key) ?? Promise.resolve();
 function enqueue2(directory, job) {
   const key = queue(directory), prior = settle(key), next = prior.then(job, job);
@@ -18780,15 +18925,15 @@ function enqueue2(directory, job) {
 }
 async function readJson2(file, code, message, status = 404) {
   try {
-    return JSON.parse(await readFile3(file, "utf8"));
+    return JSON.parse(await readFile4(file, "utf8"));
   } catch (e) {
     if (e.code === "ENOENT") throw missing(code, message, status);
     throw missing("STORAGE_INVALID", "监测历史文件损坏，请从备份恢复", 503);
   }
 }
 async function atomicWrite(file, text2) {
-  await mkdir3(path4.dirname(file), { recursive: true });
-  const temp = file + "." + randomUUID6() + ".tmp";
+  await mkdir4(path5.dirname(file), { recursive: true });
+  const temp = file + "." + randomUUID7() + ".tmp";
   let handle;
   try {
     handle = await open2(temp, "wx");
@@ -18796,17 +18941,17 @@ async function atomicWrite(file, text2) {
     await handle.sync();
     await handle.close();
     handle = null;
-    await rename3(temp, file);
+    await rename4(temp, file);
   } catch (e) {
     await handle?.close();
-    await unlink3(temp).catch(() => {
+    await unlink4(temp).catch(() => {
     });
     throw e;
   }
 }
 async function exists(file) {
   try {
-    await readFile3(file);
+    await readFile4(file);
     return true;
   } catch (e) {
     if (e.code === "ENOENT") return false;
@@ -18820,7 +18965,7 @@ var identity = (value) => {
 async function immutable(file, value, label, code) {
   let existing;
   try {
-    existing = JSON.parse(await readFile3(file, "utf8"));
+    existing = JSON.parse(await readFile4(file, "utf8"));
   } catch (e) {
     if (e.code === "ENOENT") {
       await atomicWrite(file, JSON.stringify(value));
@@ -18828,22 +18973,22 @@ async function immutable(file, value, label, code) {
     }
     throw missing("STORAGE_INVALID", "监测历史文件损坏，请从备份恢复", 503);
   }
-  if (hash(identity(existing)) !== hash(identity(value))) throw missing(code, `${label}已存在且内容不可变`, 409);
+  if (hash2(identity(existing)) !== hash2(identity(value))) throw missing(code, `${label}已存在且内容不可变`, 409);
 }
 function createMonitorRepository(directory) {
-  const root = path4.resolve(directory), views = path4.join(root, "views"), snapshots = path4.join(root, "snapshots"), inputs = path4.join(root, "inputs");
-  const viewFile = (viewId) => path4.join(views, id2(viewId, "视图 ID") + ".json");
-  const snapshotFile = (snapshotId) => path4.join(snapshots, id2(snapshotId, "快照 ID") + ".json");
+  const root = path5.resolve(directory), views = path5.join(root, "views"), snapshots = path5.join(root, "snapshots"), inputs = path5.join(root, "inputs");
+  const viewFile = (viewId) => path5.join(views, id2(viewId, "视图 ID") + ".json");
+  const snapshotFile = (snapshotId) => path5.join(snapshots, id2(snapshotId, "快照 ID") + ".json");
   const inputFile = (inputHash) => {
     if (!digestPattern.test(inputHash ?? "")) throw missing("INVALID_REQUEST", "输入摘要无效", 400);
-    return path4.join(inputs, inputHash + ".json");
+    return path5.join(inputs, inputHash + ".json");
   };
   async function saveInput(inputHash, dataset) {
-    if (hash(dataset) !== inputHash) throw missing("STORAGE_INVALID", "快照输入摘要与内容不一致", 503);
+    if (hash2(dataset) !== inputHash) throw missing("STORAGE_INVALID", "快照输入摘要与内容不一致", 503);
     const file = inputFile(inputHash), record = { hash: inputHash, dataset };
     try {
-      const existing = JSON.parse(await readFile3(file, "utf8"));
-      if (hash(existing.dataset) !== inputHash) throw missing("STORAGE_INVALID", "共享输入文件损坏", 503);
+      const existing = JSON.parse(await readFile4(file, "utf8"));
+      if (hash2(existing.dataset) !== inputHash) throw missing("STORAGE_INVALID", "共享输入文件损坏", 503);
       return;
     } catch (e) {
       if (e.code !== "ENOENT") throw e;
@@ -18859,7 +19004,7 @@ function createMonitorRepository(directory) {
         const snapshotId = id2(snapshot?.snapshot_id, "快照 ID");
         if (!snapshot.input_hash) throw missing("INVALID_REQUEST", `快照 ${snapshotId} 缺少输入摘要`, 400);
         if (snapshot.inputs) {
-          const inputHash = hash(snapshot.inputs);
+          const inputHash = hash2(snapshot.inputs);
           if (inputHash !== snapshot.input_hash) throw missing("STORAGE_INVALID", "快照输入摘要与内容不一致", 503);
           await saveInput(inputHash, snapshot.inputs);
           const { inputs: ignored, ...record2 } = snapshot;
@@ -18888,7 +19033,7 @@ function createMonitorRepository(directory) {
     const record = await readJson2(snapshotFile(snapshotId), "SNAPSHOT_NOT_FOUND", "未找到固定监测快照");
     if (!record.inputRef) throw missing("STORAGE_INVALID", "快照缺少共享输入引用", 503);
     const input = await readJson2(inputFile(record.inputRef), "STORAGE_INVALID", "快照输入文件不存在", 503);
-    if (!input?.dataset || hash(input.dataset) !== record.inputRef) throw missing("STORAGE_INVALID", "快照输入文件损坏", 503);
+    if (!input?.dataset || hash2(input.dataset) !== record.inputRef) throw missing("STORAGE_INVALID", "快照输入文件损坏", 503);
     const { inputRef, ...snapshot } = record;
     return { ...snapshot, inputs: input.dataset };
   }
@@ -18904,9 +19049,9 @@ function previewStats(ds) {
   return { production: { count: ds.production.length, processed, defects, good }, supplements: { count: ds.supplements.length, quantity: decTotal(ds.supplements, "quantity") }, materials: { count: ds.materials.length, net: decTotal(ds.materials, "net"), priceMin: prices.length ? prices.reduce((a, b) => new D(b).lt(a) ? b : a) : null, priceMax: prices.length ? prices.reduce((a, b) => new D(b).gt(a) ? b : a) : null }, expenses: { count: ds.expenses.length, amount: decTotal(ds.expenses, "amount"), byCategory: Object.fromEntries(CATEGORIES.map((c) => [c, decTotal(ds.expenses.filter((r) => r.category === c), "amount")]).filter(([, v]) => v !== null)) } };
 }
 function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManufacturing, monitorCompute }) {
-  const store = createStore(dataDir), token = randomBytes(24).toString("hex"), previews = /* @__PURE__ */ new Map();
+  const store = createStore(dataDir), token = randomBytes2(24).toString("hex"), previews = /* @__PURE__ */ new Map();
   let busy = false;
-  const repository = createRepository(path5.join(dataDir, "b-module")), monitorRepository = createMonitorRepository(path5.join(dataDir, "monitor-state")), calculationCache = createCalculationCache({ maxEntries: 64 });
+  const repository = createRepository(path6.join(dataDir, "b-module")), monitorRepository = createMonitorRepository(path6.join(dataDir, "monitor-state")), calculationCache = createCalculationCache({ maxEntries: 64 });
   const service = createOrderService({ repository, clock, calculateOrder, allocateManufacturing });
   const formal = createOrderRoutes({ service, token }), monitor = createMonitorService({ store, repository: monitorRepository, clock, compute: monitorCompute, cache: calculationCache });
   service.drain().catch(() => {
@@ -18956,9 +19101,9 @@ function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManuf
             const a = evaluate(result.dataset, { asOf: result.dataset.order.end });
             for (const m of a.quality.missing) result.issues.push({ severity: "missing", code: "SCOPE_INCOMPLETE", fileRole: "daily", sheet: m.field === "material" ? "每日材料" : m.field === "production" ? "每日生产" : "每日费用", cell: null, field: m.field, recordId: null, message: `${m.date} ${m.detail}`, hint: FIX_HINTS.SCOPE_INCOMPLETE });
           }
-          const previewId = randomUUID7(), hash2 = digest(result.dataset);
-          previews.set(previewId, { at: clock(), result, digest: hash2 });
-          send(res, 200, { previewId, digest: hash2, summary: result.summary, issues: result.issues, previewStats: previewStats(result.dataset), canCommit: !result.issues.some((i2) => i2.severity === "error"), requiresIncomplete: result.issues.some((i2) => i2.severity === "missing"), preview: Object.fromEntries(["production", "materials", "expenses", "supplements"].map((k) => [k, result.dataset[k].slice(0, 200)])) });
+          const previewId = randomUUID8(), hash3 = digest(result.dataset);
+          previews.set(previewId, { at: clock(), result, digest: hash3 });
+          send(res, 200, { previewId, digest: hash3, summary: result.summary, issues: result.issues, previewStats: previewStats(result.dataset), canCommit: !result.issues.some((i2) => i2.severity === "error"), requiresIncomplete: result.issues.some((i2) => i2.severity === "missing"), preview: Object.fromEntries(["production", "materials", "expenses", "supplements"].map((k) => [k, result.dataset[k].slice(0, 200)])) });
         } finally {
           busy = false;
         }
@@ -19016,25 +19161,28 @@ function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManuf
 }
 
 // server/http/app.mjs
-function createApp({ root, dataDir = path6.join(root, "data", "imports"), clock = Date.now, calculateOrder, allocateManufacturing, monitorCompute }) {
-  const dist = path6.join(root, "dist"), api = createRoutes({ dataDir, clock, calculateOrder, allocateManufacturing, monitorCompute }), types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json" };
+function createApp({ root, dataDir = path7.join(root, "data", "imports"), clock = Date.now, calculateOrder, allocateManufacturing, monitorCompute, authRequired = true }) {
+  const auth = createAuth({ directory: path7.join(dataDir, "auth"), clock, required: authRequired });
+  const dist = path7.join(root, "dist"), api = createRoutes({ dataDir, clock, calculateOrder, allocateManufacturing, monitorCompute }), types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".json": "application/json" };
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, "http://127.0.0.1");
+      if (await auth.route(req, res, url)) return;
+      if (!auth.authorize(req, res, url)) return;
       if (await api(req, res, url)) return;
       if (!["GET", "HEAD"].includes(req.method)) {
         res.writeHead(405);
         res.end();
         return;
       }
-      const name = decodeURIComponent(url.pathname) === "/" ? "/index.html" : decodeURIComponent(url.pathname), file = path6.resolve(dist, "." + name), relative = path6.relative(dist, file);
-      if (relative.startsWith("..") || path6.isAbsolute(relative)) {
+      const name = decodeURIComponent(url.pathname) === "/" ? "/index.html" : decodeURIComponent(url.pathname), file = path7.resolve(dist, "." + name), relative = path7.relative(dist, file);
+      if (relative.startsWith("..") || path7.isAbsolute(relative)) {
         res.writeHead(403);
         res.end("Forbidden");
         return;
       }
-      const content = await readFile4(file);
-      res.writeHead(200, { "Content-Type": types[path6.extname(file)] || "application/octet-stream", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+      const content = await readFile5(file);
+      res.writeHead(200, { "Content-Type": types[path7.extname(file)] || "application/octet-stream", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
       res.end(req.method === "HEAD" ? void 0 : content);
     } catch (e) {
       res.writeHead(e.code === "ENOENT" || e.code === "EISDIR" ? 404 : 400, { "Content-Type": "text/plain; charset=utf-8" });

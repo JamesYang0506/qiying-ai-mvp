@@ -107,7 +107,7 @@ export async function main(argv=process.argv.slice(2)){
   const history=await historyStats(bFile,options.skipHistory);
   let calls=0;
   const monitorCompute=(dataset,opts)=>{calls++;return evaluate(dataset,opts);};
-  app=createApp({root,dataDir:temp,monitorCompute});
+  app=createApp({root,dataDir:temp,monitorCompute,authRequired:false});
   await new Promise((resolve,reject)=>{app.once('error',reject);app.listen(0,'127.0.0.1',resolve);});
   const base=`http://127.0.0.1:${app.address().port}/api/import-v1`;
   const get=async pathname=>{const t0=performance.now();const response=await fetch(base+pathname);const text=await response.text();const ms=performance.now()-t0;let body;try{body=JSON.parse(text);}catch{throw new Error(`接口返回非 JSON：${pathname}`);}if(!response.ok)throw new Error(`${pathname} ${response.status}: ${body.error?.message??text.slice(0,200)}`);return {ms,body,bytes:Buffer.byteLength(text)};};
