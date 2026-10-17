@@ -22,14 +22,14 @@ let port=requestedPort;
 let url=`http://127.0.0.1:${port}/`;
 async function isWebsiteReady(){
   try{
-    const response=await fetch(url,{signal:AbortSignal.timeout(700)});
+    const response=await fetch(url,{signal:AbortSignal.timeout(3000)});
     const html=await response.text();
     if(!response.ok||!html.includes('企盈智擎')||!html.includes('src="app.js"'))return false;
-    const script=await fetch(new URL('app.js',url),{signal:AbortSignal.timeout(700)});
+    const script=await fetch(new URL('app.js',url),{signal:AbortSignal.timeout(3000)});
     if(!script.ok||!(script.headers.get('content-type')||'').includes('javascript'))return false;
-    const session=await fetch(new URL('api/import-v1/session',url),{signal:AbortSignal.timeout(700)});
+    const session=await fetch(new URL('api/import-v1/session',url),{signal:AbortSignal.timeout(3000)});
     const info=await session.json();
-    return session.ok&&info.version==='import-v1'&&info.capabilities?.includes('monitor-scope-v3');
+    return session.ok&&info.version==='import-v1'&&info.capabilities?.includes('monitor-scope-v2')&&info.capabilities?.includes('order-diagnosis-v3');
   }catch{return false;}
 }
 function openBrowser(){
@@ -51,7 +51,7 @@ async function portInUse(){
 try{
   await access(path.join(root,'serve.mjs'));
   await access(path.join(root,'runtime','server.mjs'));
-  for(const asset of ['index.html','app.js','styles.css','charts.js','ui.js','import-api.js','import-page.js','imported-workspace.js','daily-data.js','daily-data.css','route-context.js','ai-workspace.js','monitor-workspace.js','monitor-dashboard.js','monitor-table.js','monitor.css','monitor-dashboard.css','monitor-filters.css'])await access(path.join(root,'dist',asset));
+  for(const asset of ['index.html','app.js','styles.css','charts.js','ui.js','import-api.js','import-page.js','imported-workspace.js','daily-data.js','daily-data.css','import-analysis.css','monitor-workspace.js','monitor-dashboard.js','monitor-table.js','monitor.css','monitor-dashboard.css','monitor-filters.css'])await access(path.join(root,'dist',asset));
   if(!explicitPort){
     for(let offset=0;offset<20;offset++){
       port=requestedPort+offset;

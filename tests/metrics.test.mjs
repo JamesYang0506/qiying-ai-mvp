@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {analyzeOrder,summarizeOrders,filterOrders,seriesFor} from '../dist/metrics.js';
-import {demoOrders} from '../dist/data.js';
+import {analyzeOrder,summarizeOrders,filterOrders,seriesFor} from './fixtures/demo-metrics.mjs';
+import {demoOrders} from './fixtures/demo-data.mjs';
 const order=(id='A',extra={})=>({id,customer:'测试客户',product:'中底',status:'生产中',quantity:100,price:100,planRate:.2,planShares:{材料:.5,人工:.2,能耗:.1},daily:[{date:'2026-10-15',quantity:100,costs:{材料:5500,人工:2180,能耗:1000},defects:3}],...extra});
 test('20% to 13.2% equals -6.8pp and 34% relative decline, severe',()=>{const a=analyzeOrder(order(),'2026-10-16');assert.ok(Math.abs(a.rate-.132)<1e-10);assert.ok(Math.abs(a.deviation+.068)<1e-10);assert.ok(Math.abs(a.decline-.34)<1e-10);assert.equal(a.risk,'严重');assert.equal(a.profit,1320);});
 test('missing cost is unknown and excluded from comparable totals',()=>{const x=order('B',{daily:[{date:'2026-10-15',quantity:10,costs:{材料:null,人工:100,能耗:30},defects:0}]});assert.equal(analyzeOrder(x).profit,null);assert.equal(analyzeOrder(x).risk,'数据不足');const s=summarizeOrders([order(),x]);assert.equal(s.excluded,1);assert.equal(s.delta,-680);});

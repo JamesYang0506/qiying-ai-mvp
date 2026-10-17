@@ -173,7 +173,7 @@
 @media(prefers-reduced-motion:reduce){.bm-bucket{transition:none}}
 
 /* Keep long amounts visible and compact the reference layout on phones. */
-.bm-kpi-number{min-width:0;overflow-wrap:normal;white-space:nowrap;word-break:normal}
+.bm-kpi-number{min-width:0;overflow-wrap:anywhere;white-space:normal}
 .bm-kpi .stat-value em{flex:none}
 .monitor-dashboard #monitor-workspace .bm-kpi-long .stat-value{font-size:21px}
 .bm-bucket>span>small{text-align:left;min-width:0}
@@ -185,4 +185,3 @@
  .monitor-dashboard #monitor-workspace .bm-kpi-long .stat-value{font-size:18px}
  #monitor-workspace .bm-kpi .stat-foot{font-size:9px}
 }
-.bm-kpi-content{container-type:inline-size;flex:1}.monitor-dashboard #monitor-workspace .bm-kpi .bm-kpi-number{font-size:clamp(14px,12cqi,25px)}.bm-orders-table td:last-child .link{display:inline-block;margin-right:8px}

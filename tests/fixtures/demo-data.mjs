@@ -1,4 +1,4 @@
-import {END,categories} from './metrics.js';
+import {END,categories} from './demo-metrics.mjs';
 export const DATA_VERSION='demo-20261016-v1';
 export const customers=['恒远运动','星途实业','森迈科技','远行制造'];
 const products=['轻量运动鞋中底','户外鞋大底','休闲鞋鞋帮','功能鞋垫','竞速鞋中底','缓震鞋中底'];

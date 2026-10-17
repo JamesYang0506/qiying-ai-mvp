@@ -1,7 +1,8 @@
 import {D,money} from './decimal.mjs';
 import {digest} from '../storage/store.mjs';
+import {classifyMonitorRisk} from './monitor-risk.mjs';
 export const FORMULA_VERSION='IMPORT-FORMULA-0.2';
-export const RULE_VERSION='IMPORT-RULES-0.2';
+export const RULE_VERSION='IMPORT-RULES-0.3';
 const ratio=x=>x==null?null:new D(x).toFixed(6);
 const mapQuality=state=>({complete:'complete',provisional:'estimated',not_started:'incomplete',incomplete:'incomplete',operating_incomplete:'incomplete'}[state]??'incomplete');
 const unitProfit=(gross,quantity)=>gross===null||quantity===null||Number(quantity)<=0?null:new D(gross).div(quantity).toFixed(6);
@@ -15,6 +16,8 @@ export function toCalculationResult(evaluation,{dataset,snapshotId,computedAt}={
  const relativeDecline=comparable&&c.expected.margin!=null&&new D(c.expected.margin).gt(0)?ratio(new D(c.expected.margin).minus(c.actual.margin).div(c.expected.margin)):null;
  const hash=digest(dataset),costVariances=[variance('material',c.expected.material,c.actual.material),variance('labor',c.expected.labor,c.actual.costs?.人工),variance('manufacturing',c.expected.manufacturing,c.actual.costs?.制造),variance('other_production',c.expected.otherProduction,c.actual.costs?.其他生产)];
  const issues=[...quality.missing.map(m=>({code:'IMPORT_MISSING',message:m.detail,field:m.field??'',severity:'blocking',source_refs:[]})),...(evaluation.warnings??[]).map(message=>({code:'IMPORT_WARNING',message,field:'',severity:'warning',source_refs:[]}))];
+ const risk=classifyMonitorRisk({actual:c.actual.gross,expected:c.expected.gross,revenue:c.revenue,baselineComplete:quality.completeness?.baseline.state==='complete'});
+ const riskLevel={'严重':'severe','重点':'key','注意':'attention','正常':'normal','优于预期':'better'}[risk.label]??'not_applicable';
  return {
   snapshot_id:snapshotId??`local-${hash.slice(0,16)}-${evaluation.asOf}-${evaluation.baselineMode}`,
   order_id:o.id,
@@ -26,7 +29,7 @@ export function toCalculationResult(evaluation,{dataset,snapshotId,computedAt}={
   scope:{basis:'cumulative',period_start:o.start,period_end:evaluation.asOf,quantity_basis:'completed_good',quantity:c.quantity==null?null:String(c.quantity),quantity_unit:'双',currency:'CNY',tax_basis:'ignored',cost_scope_id:evaluation.baselineId??'IMPORT-0.2',revenue_basis:'production_equivalent',settlement_state:'open'},
   expected:metrics(c,'expected',mapped),
   actual:metrics(c,'actual',mapped),
-  comparison:{comparable,quality:mapped,reasons:quality.missing.slice(0,10).map(m=>m.detail).concat(comparable?[]:['实际或同进度理论毛利缺失，暂不可比']),profit_delta:profitDelta,revenue_delta:comparable?'0.00':null,margin_delta:marginDelta,relative_decline:relativeDecline,risk:{level:'not_applicable',rule_version:RULE_VERSION,reason:'导入适配层未接入风险分级；差距与质量状态以导入核算结果为准',loss:c.actual.gross!==null&&new D(c.actual.gross).lt(0)},cost_variances:costVariances},
+  comparison:{comparable,quality:mapped,reasons:quality.missing.slice(0,10).map(m=>m.detail).concat(comparable?[]:['实际或同进度理论毛利缺失，暂不可比']),profit_delta:profitDelta,revenue_delta:comparable?'0.00':null,margin_delta:marginDelta,relative_decline:relativeDecline,risk:{level:riskLevel,rule_version:risk.ruleVersion,reason:risk.reason,loss:c.actual.gross!==null&&new D(c.actual.gross).lt(0)},cost_variances:costVariances},
   issues,
   evidence:[]
  };

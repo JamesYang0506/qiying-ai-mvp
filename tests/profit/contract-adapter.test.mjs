@@ -8,7 +8,7 @@ test('maps the import evaluation to contract fields without recomputing profit',
  assert.equal(r.actual.gross_profit,analysis.cumulative.actual.gross);assert.equal(r.expected.gross_profit,analysis.cumulative.expected.gross);
  assert.equal(r.actual.management_profit,analysis.cumulative.actual.operating);assert.equal(r.actual.forecast_profit,null);assert.equal(r.actual.final_profit,null);
  assert.equal(r.comparison.profit_delta,analysis.cumulative.delta);assert.equal(cents(r.comparison.profit_delta),-cents(analysis.cumulative.gap));
- assert.equal(r.comparison.risk.level,'not_applicable');assert.equal(r.comparison.comparable,true);assert.equal(r.comparison.revenue_delta,'0.00');
+ assert.equal(r.comparison.risk.level,'better');assert.equal(r.comparison.risk.rule_version,'RELATIVE-MARGIN-1');assert.equal(r.comparison.comparable,true);assert.equal(r.comparison.revenue_delta,'0.00');
  assert.equal(cents(r.actual.total_production_cost),cents(analysis.cumulative.revenue)-cents(r.actual.gross_profit));
  assert.equal(r.comparison.cost_variances.reduce((s,v)=>s+cents(v.delta),0),-cents(r.comparison.profit_delta));
 });

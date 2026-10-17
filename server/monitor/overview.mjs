@@ -12,7 +12,9 @@ export function timestamp(v){if(typeof v!=='string'||!/(Z|[+-]\d{2}:\d{2})$/.tes
 const sum=(rows,fn)=>rows.length?money(rows.reduce((s,r)=>s.plus(fn(r)),new D(0))):null;
 export const distributionKey=day=>{const margin=day?.actual.gross!=null&&day?.revenue!=null&&new D(day.revenue).gt(0)?new D(day.actual.gross).div(day.revenue):day?.actual.margin;return margin==null?'unknown':new D(margin).gte('.3')?'high':new D(margin).gte('.1')?'medium':new D(margin).gte(0)?'low':'negative';};
 
-// Keep original record timestamps; A receives an explicit frozen information cutoff.
+// Freeze information visibility before invoking A. A still exclusively owns profit formulas.
+// Records not yet known remain unavailable; known late records become usable for their business day.
+function atKnown(dataset,knownAt){const d=structuredClone(dataset);for(const key of ['production','materials','expenses','supplements'])for(const r of d[key])r.availableAt=r.availableAt&&Date.parse(r.availableAt)<=Date.parse(knownAt)?r.date+'T00:00:00+08:00':'9999-12-31T23:59:59+08:00';return d;}
 function compare(dataset,today,previous,asOf){
  const reasons=[];
  if(!today||!previous)reasons.push('缺少当日或昨日明确报工');
@@ -32,20 +34,20 @@ export async function buildOverview(entries,{asOf,period=7,baselineMode='ideal',
  const requestedStart=shift(asOf,1-period),firstStart=entries.map(e=>e.dataset.order.start).sort()[0],start=firstStart&&firstStart<=asOf&&firstStart>requestedStart?firstStart:requestedStart,snapshots=[],orders=[];
 
  for(const entry of entries){
-  const dataset=entry.dataset,visible=dataset,evaluation=compute(visible,{asOf,baselineMode,knownAt}),snapshotId=randomUUID();
-  const previous=evaluation.days?.find(d=>d.date===shift(asOf,-1))??compute(visible,{asOf:shift(asOf,-1),baselineMode,knownAt}).daily;
+  const dataset=entry.dataset,visible=atKnown(dataset,knownAt),evaluation=compute(visible,{asOf,baselineMode}),snapshotId=randomUUID();
+  const previous=evaluation.days?.find(d=>d.date===shift(asOf,-1))??compute(visible,{asOf:shift(asOf,-1),baselineMode}).daily;
   const comparison=compare({...dataset,_revisionCount:entry.revisionCount},evaluation.daily,previous,asOf);
   const contract=toCalculationResult(evaluation,{dataset,snapshotId,computedAt:new Date().toISOString()});
   const cumulative=evaluation.cumulative,eligible=asOf>=dataset.order.start&&cumulative.actual.gross!=null&&cumulative.expected.gross!=null;
   const monitoringStatus=asOf<dataset.order.start?'未开工':cumulative.quantity==null?'待确认':dataset.order.quantity!=null&&new D(cumulative.quantity).gte(dataset.order.quantity)?'已完工':'生产中';
   const riskInfo=classifyMonitorRisk({actual:cumulative.actual.gross,expected:cumulative.expected.gross,revenue:cumulative.revenue,baselineComplete:evaluation.quality.completeness?.baseline.state==='complete'});
   const marginDeviationPp=eligible&&cumulative.revenue!=null&&new D(cumulative.revenue).gt(0)?new D(cumulative.actual.gross).minus(cumulative.expected.gross).div(cumulative.revenue).times(100).toString():null;
-  const points=[];for(let d=start;d<=asOf;d=shift(d,1)){const a=d===asOf?evaluation:compute(visible,{asOf:d,baselineMode,knownAt});points.push({date:d,actual:a.cumulative.actual.gross,expected:a.cumulative.expected.gross,comparable:a.cumulative.actual.gross!=null&&a.cumulative.expected.gross!=null&&d>=dataset.order.start});}
+  const points=[];for(let d=start;d<=asOf;d=shift(d,1)){const a=d===asOf?evaluation:compute(visible,{asOf:d,baselineMode});points.push({date:d,actual:a.cumulative.actual.gross,expected:a.cumulative.expected.gross,comparable:a.cumulative.actual.gross!=null&&a.cumulative.expected.gross!=null&&d>=dataset.order.start});}
   const row={order:dataset.order,revisionId:dataset.revision.id,baselineId:dataset.baseline.id,snapshotId,cumulative,daily:evaluation.daily,comparison,quality:evaluation.quality,comparable:eligible,distribution:asOf<dataset.order.start?'not_started':distributionKey(evaluation.daily),points,loss:cumulative.actual.gross!=null&&new D(cumulative.actual.gross).lt(0),cumulativeDeviation:eligible&&new D(cumulative.gap).gt(0),recommendations:recommendations({today:evaluation.daily,previous,comparison,orderId:dataset.order.id,revisionId:dataset.revision.id,baselineMode,asOf,snapshotId})};
   row.evidence=[...evaluation.evidence.map((source,i)=>({evidenceId:`${snapshotId}:source-${i}`,source})),...row.recommendations.flatMap(r=>r.evidence)];
   Object.assign(row,{monitoringStatus,risk:riskInfo,marginDeviationPp});
   // Persist the actual immutable daily inputs too; evidence never reads latest mutable records.
-  snapshots.push({snapshot_id:snapshotId,order_id:dataset.order.id,as_of:asOf,known_at:knownAt,revision_id:dataset.revision.id,baseline_mode:baselineMode,input_hash:hash(dataset),result:contract,evaluation:{daily:evaluation.daily},previous,recorded_at:new Date().toISOString(),evidence:row.evidence});orders.push(row);
+  snapshots.push({snapshot_id:snapshotId,order_id:dataset.order.id,as_of:asOf,known_at:knownAt,revision_id:dataset.revision.id,baseline_mode:baselineMode,input_hash:hash(dataset),result:contract,evaluation,previous,inputs:dataset,recorded_at:new Date().toISOString(),evidence:row.evidence});orders.push(row);
  }
  const filterOptions={customers:[...new Set(orders.map(r=>r.order.customer).filter(Boolean))].sort(),statuses:['生产中','已完工','未开工','待确认'],risks:['严重','重点','注意','数据不足','缺少基线','不可评级','正常','优于预期']};
  if(status&&!filterOptions.statuses.includes(status)||risk&&!filterOptions.risks.includes(risk)||search.length>200)throw fail('INVALID_REQUEST','筛选条件无效');
@@ -58,7 +60,7 @@ export async function buildOverview(entries,{asOf,period=7,baselineMode='ideal',
  const trend=Array.from({length:filteredPointCount},(_,i)=>{const day=shift(displayStart,i),rows=intersection.map(r=>r.points[i]);return {date:day,actual:sum(rows,r=>r.actual),expected:sum(rows,r=>r.expected),includedCount:rows.length,excludedCount:orders.length-rows.length};});
  const buckets=[['high','≥30%'],['medium','10%–不足30%'],['low','0%–不足10%'],['negative','<0%'],['unknown','无法计算'],['not_started','未开工']].map(([key,label])=>({key,label,count:orders.filter(r=>r.distribution===key).length,ratio:orders.length?new D(orders.filter(r=>r.distribution===key).length).div(orders.length).toFixed(6):null}));
  const overview={viewId,filterOptions,filters:{customer,status,risk,search},scope:{asOf,knownAt,periodStart:displayStart,baselineMode,source:'imported',currency:'CNY',versionSet:orders.map(r=>({orderId:r.order.id,revisionId:r.revisionId,baselineId:r.baselineId,snapshotId:r.snapshotId})),note:'本地标准导入口径：CNY、生产等价收入、模拟报价不拆税。迟录和整套修订不纳入纯经营恶化判断。'},coverage:{total:orders.length,known:orders.filter(r=>r.cumulative.actual.gross!=null&&asOf>=r.order.start).length,comparable:comparable.length,dayComparable:orders.filter(r=>r.comparison.status==='comparable').length,incomplete:orders.filter(r=>r.quality.missing.length>0).length,exclusions:orders.filter(r=>!r.comparable||r.comparison.status!=='comparable').map(r=>({orderId:r.order.id,reasons:[...r.comparison.reasons,...r.quality.missing.map(m=>`${m.date??''} ${m.detail}`)]}))},summary:{actualGross:sum(comparable,r=>r.cumulative.actual.gross),expectedGross:sum(comparable,r=>r.cumulative.expected.gross),gap:sum(comparable,r=>r.cumulative.gap),deteriorated:orders.filter(r=>r.comparison.deteriorated).length},trend:{includedCount:intersection.length,excludedCount:orders.length-intersection.length,points:trend},distribution:buckets,attention:orders.filter(r=>r.comparison.deteriorated).slice(0,5).map(r=>r.order.id),reminders:orders.filter(r=>r.loss||r.cumulativeDeviation||r.quality.missing.length).map(r=>({orderId:r.order.id,loss:r.loss,cumulativeDeviation:r.cumulativeDeviation,incomplete:r.quality.missing.length>0})),orders};
- return {overview,snapshots:snapshots.filter(s=>orders.some(r=>r.snapshotId===s.snapshot_id))};
+ return {overview,snapshots};
 }
 
 export function createMonitorService({store,repository,clock=Date.now}){
@@ -68,15 +70,12 @@ export function createMonitorService({store,repository,clock=Date.now}){
    const versions=await store.listVersions();
    const selected=new Map();for(const v of versions)if(Date.parse(v.createdAt)<=Date.parse(knownAt)){const old=selected.get(v.dataset.order.id);selected.set(v.dataset.order.id,{...v,revisionCount:(old?.revisionCount??0)+1});}
    const entries=[...selected.values()],asOf=options.asOf??(entries.length?entries.reduce((s,v)=>v.dataset.order.end>s?v.dataset.order.end:s,entries[0].dataset.order.end):new Date(clock()+8*3600000).toISOString().slice(0,10));
-   const cacheKey=hash({options:{...options,asOf,knownAt:options.knownAt??null},versions:entries.map(v=>[v.hash,v.createdAt,v.revisionCount]),visible:entries.map(v=>['production','materials','expenses','supplements'].map(k=>v.dataset[k].map(r=>!!r.availableAt&&Date.parse(r.availableAt)<=Date.parse(knownAt))))});
-   if(repository.findCached){const cached=await repository.findCached(cacheKey);if(cached)return cached;}
-   else{const cached=(await repository.read()).views.find(v=>v.cacheKey===cacheKey&&v.kind==='import-monitor');if(cached)return cached.overview;}
    const built=await buildOverview(entries,{...options,asOf,knownAt});
    built.overview.coverage.unfilteredTotal=entries.length;
-   if(repository.save)await repository.save(built.overview,built.snapshots,cacheKey);else await repository.transact(s=>{s.snapshots.push(...built.snapshots);s.views.push({view_id:built.overview.viewId,kind:'import-monitor',cacheKey,overview:built.overview,recorded_at:new Date(clock()).toISOString()});});
+   await repository.transact(s=>{s.snapshots.push(...built.snapshots);s.views.push({view_id:built.overview.viewId,kind:'import-monitor',overview:built.overview,recorded_at:new Date(clock()).toISOString()});});
    return built.overview;
   },
-  async get(viewId){if(repository.getView){const v=await repository.getView(viewId);if(!v)throw fail('VIEW_NOT_FOUND','未找到固定监测视图',404);return v;}const s=await repository.read(),v=s.views.find(v=>v.view_id===viewId&&v.kind==='import-monitor');if(!v)throw fail('VIEW_NOT_FOUND','未找到固定监测视图',404);return v.overview;},
-  async evidence(viewId,snapshotId){const v=await this.get(viewId);if(!v.scope.versionSet.some(r=>r.snapshotId===snapshotId))throw fail('SCOPE_MISMATCH','快照不属于此视图',409);const snapshot=repository.getSnapshot?await repository.getSnapshot(viewId,snapshotId):(await repository.read()).snapshots.find(x=>x.snapshot_id===snapshotId);if(!snapshot)throw fail('SNAPSHOT_NOT_FOUND','快照不存在',404);return {viewId,snapshotId,revisionId:snapshot.revision_id,baselineMode:snapshot.baseline_mode,asOf:snapshot.as_of,knownAt:snapshot.known_at,daily:snapshot.evaluation.daily,previous:snapshot.previous,evidence:snapshot.evidence};}
+  async get(viewId){const s=await repository.read(),v=s.views.find(v=>v.view_id===viewId&&v.kind==='import-monitor');if(!v)throw fail('VIEW_NOT_FOUND','未找到固定监测视图',404);return v.overview;},
+  async evidence(viewId,snapshotId){const v=await this.get(viewId);if(!v.scope.versionSet.some(r=>r.snapshotId===snapshotId))throw fail('SCOPE_MISMATCH','快照不属于此视图',409);const s=await repository.read(),snapshot=s.snapshots.find(x=>x.snapshot_id===snapshotId);return {viewId,snapshotId,revisionId:snapshot.revision_id,baselineMode:snapshot.baseline_mode,asOf:snapshot.as_of,knownAt:snapshot.known_at,daily:snapshot.evaluation.daily,previous:snapshot.previous,evidence:snapshot.evidence};}
  };
 }
