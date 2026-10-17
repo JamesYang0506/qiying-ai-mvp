@@ -18323,7 +18323,8 @@ async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal"
   }
   const filterOptions = { customers: [...new Set(orders.map((r) => r.order.customer).filter(Boolean))].sort(), statuses: ["生产中", "已完工", "未开工", "待确认"], risks: ["严重", "重点", "注意", "数据不足", "缺少基线", "不可评级", "正常", "优于预期"] };
   if (status && !filterOptions.statuses.includes(status) || risk && !filterOptions.risks.includes(risk) || search.length > 200) throw fail("INVALID_REQUEST", "筛选条件无效");
-  orders.splice(0, orders.length, ...orders.filter((r) => (!customer || r.order.customer === customer) && (!status || r.monitoringStatus === status) && (!risk || r.risk.label === risk) && (!search || [r.order.id, r.order.product, r.order.customer].join(" ").toLowerCase().includes(search.toLowerCase()))));
+  const searchTokens = String(search ?? "").trim().replace(/\s+/g, " ").toLowerCase().split(" ").filter(Boolean);
+  orders.splice(0, orders.length, ...orders.filter((r) => (!customer || r.order.customer === customer) && (!status || r.monitoringStatus === status) && (!risk || r.risk.label === risk) && (!searchTokens.length || searchTokens.every((token) => [r.order.id, r.order.product, r.order.customer].join(" ").toLowerCase().includes(token)))));
   const firstFiltered = orders.map((r) => r.order.start).sort()[0], displayStart = firstFiltered && firstFiltered <= asOf && firstFiltered > start ? firstFiltered : start;
   for (const row of orders) row.points = row.points.filter((p) => p.date >= displayStart);
   const filteredPointCount = Math.round((Date.parse(asOf) - Date.parse(displayStart)) / 864e5) + 1;

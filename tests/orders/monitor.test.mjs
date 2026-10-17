@@ -74,5 +74,7 @@ test('scope filters keep cards, trends, distribution and attention on the same f
  const all=await buildOverview([{dataset:a},{dataset:b}],options);assert.equal(all.overview.orders.find(r=>r.order.id==='B').risk.label,'严重');
  const filtered=await buildOverview([{dataset:a},{dataset:b}],{...options,customer:'星途实业',status:'生产中',risk:'严重',search:'B'}),o=filtered.overview;
  assert.deepEqual(o.orders.map(r=>r.order.id),['B']);assert.equal(o.coverage.total,1);assert.equal(o.distribution.reduce((s,b)=>s+b.count,0),1);assert.equal(o.summary.actualGross,o.orders[0].cumulative.actual.gross);assert.deepEqual(o.filterOptions.customers,['恒远运动','星途实业']);
+ const spaced=await buildOverview([{dataset:a},{dataset:b}],{...options,search:' 恒远   a '}),so=spaced.overview;assert.deepEqual(so.orders.map(r=>r.order.id),['A']);
+ const blank=await buildOverview([{dataset:a},{dataset:b}],{...options,search:'   '});assert.equal(blank.overview.coverage.total,2);
  const noMatches=await buildOverview([{dataset:a}],{...options,customer:'不存在'});assert.equal(noMatches.overview.coverage.total,0);assert.equal(noMatches.overview.summary.actualGross,null);
 });

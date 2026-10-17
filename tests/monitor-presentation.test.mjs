@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {formatMarginChange,formatMarginDeviation,formatRecommendationText,renderMonitorEvidence} from '../dist/monitor-evidence.js';
-import {filterMonitorRows,hideNotStarted} from '../dist/monitor-workspace.js';
+import {filterMonitorRows,hideNotStarted,matchesSearch} from '../dist/monitor-workspace.js';
 import {renderScopeFilters} from '../dist/monitor-table.js';
 
 const source={fileRole:'daily',sheet:'每日生产',cell:'A6',recordId:'RAW-PROD-ID',fileHash:'secret-hash'};
@@ -22,6 +22,14 @@ test('risk filter keeps only the three actionable severity levels',()=>{
  const select=html.match(/<select[^>]*id="bm-risk"[^>]*>([\s\S]*?)<\/select>/)?.[1]??'';
  assert.deepEqual([...select.matchAll(/<option value="([^"]*)"/g)].map(m=>m[1]),['','严重','重点','注意']);
  for(const hidden of ['数据不足','缺少基线','不可评级','正常','优于预期'])assert.ok(!select.includes(hidden),hidden);
+});
+
+test('search matches id, product and customer with spaces and multiple keywords',()=>{
+ const row={order:{id:'SIM-M09',product:'EVA 薄利款',customer:'CUST-L1'}};
+ assert.equal(matchesSearch(row,' SIM-M09 '),true);
+ assert.equal(matchesSearch(row,'薄利  cust-l1'),true);
+ assert.equal(matchesSearch(row,'SIM-M09 CUST-H1'),false);
+ assert.equal(matchesSearch(row,'   '),true);
 });
 
 test('not-started orders stay out of the order table unless explicitly requested',()=>{

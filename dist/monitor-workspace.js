@@ -2,10 +2,18 @@ import {renderMonitorDashboard} from './monitor-dashboard.js';
 import {renderMonitorEvidence} from './monitor-evidence.js';
 const saved={asOf:'',mode:'ideal',period:16,customer:'',status:'',risk:'',search:'',filter:'',sort:'risk',selected:null,page:1,view:null};
 export function hideNotStarted(state){return !state.search&&state.status!=='未开工'&&state.filter!=='not_started';}
+const normalizeSearch=value=>String(value??'').trim().replace(/\s+/g,' ').toLowerCase();
+export function matchesSearch(row,search){
+ const tokens=normalizeSearch(search).split(' ').filter(Boolean);
+ if(!tokens.length)return true;
+ const hay=normalizeSearch([row.order.id,row.order.product,row.order.customer].join(' '));
+ return tokens.every(token=>hay.includes(token));
+}
 export function filterMonitorRows(orders,state){
  const hide=hideNotStarted(state);
  return (orders??[]).filter(row=>{
   if(hide&&row.monitoringStatus==='未开工')return false;
+  if(!matchesSearch(row,state.search))return false;
   if(!state.filter)return true;
   if(state.filter==='deteriorated')return row.comparison.deteriorated;
   if(state.filter==='incomplete')return row.quality.missing.length>0;
@@ -30,7 +38,11 @@ export function mountMonitor(root,{client=fetch}={}){
   root.querySelector('#bm-period').onchange=e=>{saved.period=Number(e.target.value);load();};
   for(const [id,key] of [['bm-customer','customer'],['bm-status','status'],['bm-risk','risk']])root.querySelector('#'+id).onchange=e=>{saved[key]=e.target.value;saved.page=1;load();};
   root.querySelector('#bm-reset').onclick=()=>{clearTimeout(searchTimer);Object.assign(saved,{customer:'',status:'',risk:'',search:'',period:16,filter:'',sort:'risk',page:1});load();};
-  const search=root.querySelector('#bm-search');search.oninput=e=>{sequence++;saved.search=e.target.value;saved.page=1;clearTimeout(searchTimer);searchTimer=setTimeout(load,250);};
+  const search=root.querySelector('#bm-search');let composing=false;
+ search.oncompositionstart=()=>{composing=true;};
+ search.oncompositionend=e=>{composing=false;search.oninput(e);};
+ search.oninput=e=>{if(composing)return;sequence++;saved.search=e.target.value;saved.page=1;clearTimeout(searchTimer);searchTimer=setTimeout(load,250);};
+ search.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();clearTimeout(searchTimer);load();}else if(e.key==='Escape'&&search.value){e.preventDefault();search.value='';saved.search='';saved.page=1;clearTimeout(searchTimer);load();}};
   root.querySelector('#bm-sort')?.addEventListener('change',e=>{saved.sort=e.target.value;saved.page=1;render();});
   root.querySelector('#bm-clear-list')?.addEventListener('click',()=>{saved.filter='';saved.page=1;render();});
   root.querySelectorAll('[data-bm-page]').forEach(button=>button.onclick=()=>{saved.page=Number(button.dataset.bmPage);render();});
