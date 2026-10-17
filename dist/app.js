@@ -47,10 +47,10 @@ window.addEventListener('hashchange',()=>{parseRoute();render();window.scrollTo(
 let mountedPageCleanup=null;
 function shell(content){
  const custom=['import','imported'].includes(state.route);
- let html=baseShell(content).replace('<a href="#ai" class=',`<a href="#import" class="${state.route==='import'?'active':''}" title="数据导入">${icon('file')}<span>数据导入</span></a><a href="#imported" class="${state.route==='imported'?'active':''}" title="已导入订单">${icon('chart')}<span>已导入订单</span></a><a href="#ai" class=`);
+ let html=baseShell(content).replace('<a href="#ai" class=',`<a href="#import" class="${state.route==='import'?'active':''}" title="数据导入">${icon('file')}<span>数据导入</span></a><a href="#imported" class="${state.route==='imported'?'active':''}" title="订单分析">${icon('chart')}<span>订单分析</span></a><a href="#ai" class=`);
  if(custom){
-  html=html.replace(/<div class="top-actions">[\s\S]*?<\/div><\/header>/, '<div class="top-actions"><a class="button" href="#monitor">内置演示</a><a class="button" href="#imported">已导入订单</a><a class="button primary" href="#import">导入 Excel</a></div></header>');
- }else html=html.replace('<div class="top-actions">','<div class="top-actions"><a class="button" href="#imported">已导入订单</a><a class="button" href="#import">导入 Excel</a>');
+  html=html.replace(/<div class="top-actions">[\s\S]*?<\/div><\/header>/, '<div class="top-actions"><a class="button" href="#monitor">内置演示</a><a class="button" href="#imported">订单分析</a><a class="button primary" href="#import">导入 Excel</a></div></header>');
+ }else html=html.replace('<div class="top-actions">','<div class="top-actions"><a class="button" href="#imported">订单分析</a><a class="button" href="#import">导入 Excel</a>');
  return html;
 }
 function render(){

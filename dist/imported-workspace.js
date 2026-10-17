@@ -28,7 +28,7 @@ export function renderImportedDiagnosis(a){
  const sevNote=sev?`<p class="verdict-rule">偏差分级 ${esc(sev.ruleVersion)}：相对同进度理论毛利率下降 0–10% 为可接受误差，10–20% 需关注，20–30% 重点注意，超过 30% 为大型偏差。</p>`:'';
  const signed=v=>v==null?'待补齐':(Number(v)>0?'+¥':Number(v)<0?'−¥':'¥')+fmt(Math.abs(Number(v)));
  const share=c=>c.shareOfIncrease==null?'':`占增支 ${(Number(c.shareOfIncrease)*100).toFixed(1)}%`;
- const cause=c=>`<article class="cause ${c.effect==='increase'?'bad':c.effect==='offset'?'ok':'pending'}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${c.effect==='increase'?(share(c)||'增支项'):c.effect==='offset'?'抵消差距':c.effect==='neutral'?'无净影响':'待补齐'}</em><p>${esc(c.fact)}</p></article>`;
+ const cause=c=>`<article class="cause ${c.effect==='increase'?'bad':c.effect==='offset'?'ok':'pending'}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${c.effect==='increase'?(share(c)||'增支项'):c.effect==='offset'?'抵消差距':c.effect==='neutral'?'无净影响':'待补齐'}</em><p>${esc(c.fact)}</p>${c.kind==='production'&&c.amount!=null?`<button class="link cause-link" data-variance="${esc(c.key)}">查看逐日来源</button>`:''}</article>`;
  const causeGrid=list=>`<div class="cause-grid">${list.map(cause).join('')}</div>`;
  const incNote=d.increasesTotal!=null?`增支合计 ¥${fmt(d.increasesTotal)}`:`已知增支合计 ¥${fmt(d.knownIncreasesTotal)}，归因不完整`;
  const offNote=d.offsetsTotal!=null?`抵消合计 ${signed(d.offsetsTotal)}`:`已知抵消合计 ${signed(d.knownOffsetsTotal)}，归因不完整`;
@@ -54,7 +54,7 @@ export function renderImportedDiagnosis(a){
 }
 const pct=x=>x==null?'—':(Number(x)*100).toFixed(1)+'%';
 const stateText={complete:'资料完整',provisional:'含暂估资料',incomplete:'生产或成本待补齐',operating_incomplete:'经营费用待补齐',not_started:'尚未开工'};
-const table=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(row=>`<tr>${row.map(v=>`<td>${esc(v??'待补齐')}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}">当日没有可见记录。</td></tr>`}</tbody></table></div>`;
+const table=(headers,rows,empty='当日没有可见记录。')=>`<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(row=>`<tr>${row.map(v=>`<td>${v&&typeof v==='object'&&'html'in v?v.html:esc(v??'待补齐')}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}">${esc(empty)}</td></tr>`}</tbody></table></div>`;
 const option=(v,label,selected)=>`<option value="${esc(v)}" ${v===selected?'selected':''}>${esc(label)}</option>`;
 const card=(title,value,note,key,tone='')=>`<button class="stat-card clickable ${tone?'tone-'+tone:''}" data-drill="${key}"><span class="stat-top"><span>${title}</span><span class="drill-hint">查看依据</span></span><span class="stat-value">${value}</span><span class="stat-foot">${note}</span></button>`;
 const kvRows=rows=>rows.map(([k,v])=>`<div><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('');
@@ -72,14 +72,40 @@ const varianceDefs={
  rounding:{formula:'总差距 − 其余各项合计，用于保证归因精确闭合',source:'逐日舍入后的差值，不是业务成本。'}
 };
 export function mountImported(root,{orderId,client=importClient}={}){
- let alive=true,seq=0,orders=[],selected=null,revision='',revisions=[],date='',mode='ideal',analysis=null,points=[],portfolio=null,tab='production',view='overview',drill=null;
+ let alive=true,seq=0,orders=[],selected=null,revision='',revisions=[],date='',mode='ideal',analysis=null,points=[],portfolio=null,tab='production',view='overview',drill=null,varianceLimit=30,focus=null,drillNote='',returnState=null;
  const status=()=>root.querySelector('#imported-status');
+ const fileRoleLabel={cost:'成本文件',daily:'每日文件'};
+ const sourceCell=r=>{const s=r?.source;if(!s)return '待补齐';return {html:`<details class="source-detail"><summary>查看来源</summary><span>${esc(fileRoleLabel[s.fileRole]??s.fileRole??'')} · ${esc(s.sheet??'')} · ${esc(s.cell??'')}</span>${r.availableAt?`<span>可见 ${esc(r.availableAt)}</span>`:''}</details>`};};
+ const relatedProduction=r=>r.parentId?{html:`<button class="link" data-focus-production="${esc(r.parentId)}">${esc(r.parentId)}</button>`}:'待补齐';
+ const focusLabel=f=>!f?'':f.tab==='materials'?'材料记录':f.tab==='production'?(f.recordId?`生产记录 ${f.recordId}`:'生产记录'):f.tab==='expenses'?`费用记录${f.category?' · '+f.category:''}${f.itemIncludes?' · '+f.itemIncludes:''}${f.excludeItemIncludes?'（不含'+f.excludeItemIncludes+'）':''}`:'原始记录';
+ const drillTarget=key=>{
+  if(key==='materialPrice'||key==='materialUsage')return {tab:'materials',focus:{tab:'materials'}};
+  if(key==='labor')return {tab:'expenses',focus:{tab:'expenses',category:'人工'}};
+  if(key==='energy')return {tab:'expenses',focus:{tab:'expenses',category:'制造',itemIncludes:'能源'}};
+  if(key==='otherManufacturing')return {tab:'expenses',focus:{tab:'expenses',category:'制造',excludeItemIncludes:'能源'}};
+  if(key==='otherProduction')return {tab:'expenses',focus:{tab:'expenses',category:'其他生产'}};
+  if(key==='budgetAdjustment')return {tab:'production',focus:null,note:'预算允许损耗来自成本模型基线，不是逐日生产或费用记录。'};
+  if(key==='rounding')return {tab:'production',focus:null,note:'舍入调整仅用于金额闭合，没有逐日原始记录。'};
+  return {tab:'production',focus:null};
+ };
  const renderDetails=()=>{
   const rows=analysis?.daily?.rows??{production:[],materials:[],expenses:[],supplements:[]};
-  if(tab==='production')return table(['日期','码号','加工量','不良量','合格量'],rows.production.map(r=>[r.date,r.size,r.processed,r.defects,r.processed===null||r.defects===null?null:Number(r.processed)-Number(r.defects)]));
-  if(tab==='materials')return table(['材料编号','净耗kg','单价元/kg','资料状态'],rows.materials.map(r=>[r.materialId,r.net,r.price,r.status]));
-  if(tab==='expenses')return table(['类别','项目','实际金额元','资料状态'],rows.expenses.map(r=>[r.category,r.item,fmt(r.amount),r.status]));
-  return table(['码号','补产数量'],rows.supplements.map(r=>[r.size,r.quantity]));
+  if(tab==='production'){
+   const list=focus?.tab==='production'&&focus.recordId?rows.production.filter(r=>r.id===focus.recordId):rows.production;
+   return table(['日期','记录ID','码号','加工量','不良量','合格量','资料状态','来源'],list.map(r=>[r.date,r.id,r.size,r.processed,r.defects,r.processed===null||r.defects===null?null:Number(r.processed)-Number(r.defects),r.status,sourceCell(r)]),focus?.tab==='production'?`当前定位${focus.recordId?`记录 ${focus.recordId}`:''}下没有生产记录。`:'当日没有可见生产记录。');
+  }
+  if(tab==='materials')return table(['材料编号','净耗kg','单价元/kg','资料状态','记录ID','来源'],rows.materials.map(r=>[r.materialId,r.net,r.price,r.status,r.id,sourceCell(r)]),'当日没有可见材料记录。');
+  if(tab==='expenses'){
+   const list=rows.expenses.filter(r=>{
+    if(!focus||focus.tab!=='expenses')return true;
+    if(focus.category&&r.category!==focus.category)return false;
+    if(focus.itemIncludes&&!String(r.item??'').includes(focus.itemIncludes))return false;
+    if(focus.excludeItemIncludes&&String(r.item??'').includes(focus.excludeItemIncludes))return false;
+    return true;
+   });
+   return table(['类别','项目','实际金额元','资料状态','记录ID','来源'],list.map(r=>[r.category,r.item,fmt(r.amount),r.status,r.id,sourceCell(r)]),focus?.tab==='expenses'?'当前定位下没有费用记录。':'当日没有可见费用记录。');
+  }
+  return table(['码号','补产数量','补单记录ID','关联生产','计入规则','原因','来源'],rows.supplements.map(r=>[r.size,r.quantity,r.id,relatedProduction(r),r.inclusion,r.reason,sourceCell(r)]),'当日没有补单记录。');
  };
  const donutItems=a=>{const ac=a.cumulative.actual;return [{name:'材料',value:num(ac.material),display:'¥'+fmt(ac.material),color:COLORS.material},...['人工','制造','其他生产','管理','销售','财务'].map(k=>({name:k,value:num(ac.costs?.[k]),display:'¥'+fmt(ac.costs?.[k]),color:COLORS[k]}))];};
  const cardRows=(a,key)=>{
@@ -94,8 +120,8 @@ export function mountImported(root,{orderId,client=importClient}={}){
   if(drill.startsWith('variance:')){
    const key=drill.slice(9),def=varianceDefs[key];if(!def)return '';
    const all=a.daySummaries??[],days=all.map(d=>({date:d.date,quantity:d.quantity,value:d.components?.[key]})).filter(d=>d.value!==null&&Number(d.value)!==0);
-   const pending=all.filter(d=>d.components?.[key]===null).length;
-   return `<section class="panel drill-panel"><div class="panel-head"><h2>${esc(labels[key]??key)} · 明细</h2><button class="button" data-drill-close>收起</button></div><div class="panel-body"><p class="drill-formula">计算依据：${esc(def.formula)}</p><p class="footnote">合计 ${fmt(a.bridge.components[key])} 元。</p></div>${days.length?`<div class="table-wrap"><table><thead><tr><th>日期</th><th>合格量双</th><th>当日影响元</th><th>操作</th></tr></thead><tbody>${days.slice().reverse().slice(0,30).map(d=>`<tr><td>${esc(d.date)}</td><td>${d.quantity??'待补齐'}</td><td>${(Number(d.value)>0?'+':'')+fmt(d.value)}</td><td><button class="link" data-drill-day="${esc(d.date)}">查看当天记录</button></td></tr>`).join('')}</tbody></table></div><div class="panel-footer">${days.length>30?'仅列出最近 30 个有影响的日期。':'共 '+days.length+' 个有影响的日期。'}${pending?`另有 ${pending} 天资料待补齐，未计入。`:''}</div>`:`<div class="panel-body"><p class="note">截至所选日期没有产生该项影响。${pending?`另有 ${pending} 天资料待补齐。`:''}</p></div>`}</section>`;
+   const pending=all.filter(d=>d.components?.[key]===null).length,shown=days.slice().reverse().slice(0,varianceLimit),more=days.length>shown.length;
+   return `<section class="panel drill-panel"><div class="panel-head"><h2>${esc(labels[key]??key)} · 明细</h2><button class="button" data-drill-close>收起</button></div><div class="panel-body"><p class="drill-formula">计算依据：${esc(def.formula)}</p><p class="footnote">来源：${esc(def.source)} · 合计 ${fmt(a.bridge.components[key])} 元。</p></div>${days.length?`<div class="table-wrap"><table><thead><tr><th>日期</th><th>合格量双</th><th>当日影响元</th><th>操作</th></tr></thead><tbody>${shown.map(d=>`<tr><td>${esc(d.date)}</td><td>${d.quantity??'待补齐'}</td><td>${(Number(d.value)>0?'+':'')+fmt(d.value)}</td><td><button class="link" data-drill-day="${esc(d.date)}" data-drill-key="${esc(key)}">查看当天记录</button></td></tr>`).join('')}</tbody></table></div><div class="panel-footer">${more?`已显示最近 ${shown.length} / 共 ${days.length} 个有影响的日期。<button class="button" data-drill-more>加载更多</button>`:`共 ${days.length} 个有影响的日期。`}${pending?`另有 ${pending} 天资料待补齐，未计入。`:''}</div>`:`<div class="panel-body"><p class="note">截至所选日期没有产生该项影响。${pending?`另有 ${pending} 天资料待补齐。`:''}</p></div>`}</section>`;
   }
   const defs={
    theoretical:{title:'整单理论目标计算依据',formula:'理论收入 = 合同数量 × 核算报价；理论生产毛利 = 理论收入 − 材料 − 人工 − 生产管理 − 能源 − 其他生产。固定目标，不随当天实际变化。',src:'来源：成本 Excel · 订单信息 / CostParameters / OriginalRecipe。'},
@@ -116,22 +142,29 @@ export function mountImported(root,{orderId,client=importClient}={}){
  const detailHtml=a=>{
   const c=a.cumulative;
   const bars=Object.entries(a.bridge.components).filter(([k,v])=>k!=='rounding'&&(k!=='budgetAdjustment'||mode==='budget')&&v!==null&&Math.abs(Number(v))>=0.5).map(([k,v])=>({key:k,name:labels[k],delta:Number(v)}));
-  return `<section class="panel imported-summary"><div class="panel-head"><h2>生产进度与经营利润</h2><span>${esc(a.baselineId)}</span></div><div class="panel-body kv-grid"><div>累计合格量<strong>${c.quantity??'待补齐'} / ${esc(a.order.quantity)} 双</strong></div><div>完成进度<strong>${pct(c.progress)}</strong></div><div>剩余需求 / 超产<strong>${c.remaining??'—'} / ${c.overproduction??'—'} 双</strong></div><div>累计经营利润<strong>${fmt(c.actual.operating)} 元</strong></div><div>预计完工利润<strong>${a.profitScope?.forecastProfit==null?'待建立':fmt(a.profitScope.forecastProfit)+' 元'}</strong></div><div>已结算最终利润<strong>${a.profitScope?.finalProfit==null?'未结算':fmt(a.profitScope.finalProfit)+' 元'}</strong></div><div>当日生产毛利<strong>${fmt(a.daily?.actual.gross)} 元</strong></div><div>当日合格量<strong>${a.daily?.quantity??'待补齐'} 双</strong></div></div><div class="panel-body note">收入口径：${esc(a.order.incomeBasis)} · 税务口径：${esc(a.order.taxBasis)}。最终利润以结算为准。</div></section>${a.quality.missing.length?`<section class="panel imported-summary"><div class="panel-head"><h2>待补齐资料</h2></div>${table(['日期','项目','提示'],a.quality.missing.slice(0,100).map(x=>[x.date,x.field,x.detail]))}</section>`:''}<section class="panel imported-summary"><div class="panel-head"><h2>利润差距来源</h2><span class="muted">点击查看明细</span></div><div class="panel-body">${renderImportedVariance(bars)}</div></section>${drill?.startsWith('variance:')?drillPanel(a):''}<section class="panel imported-summary"><div class="panel-head"><h2>${esc(date)} 原始记录</h2><div class="table-tools">${[['production','生产'],['supplements','补单'],['materials','材料'],['expenses','费用']].map(([k,t])=>`<button class="button ${tab===k?'primary':''}" data-import-tab="${k}">${t}</button>`).join('')}</div></div>${renderDetails()}<div class="panel-footer">可切换日期逐日核查。</div></section>${portfolio?`<section class="panel imported-summary"><div class="panel-head"><h2>同日已导入订单</h2><span class="muted">可比 ${portfolio.totals.comparable} 笔 · 排除 ${portfolio.totals.excluded} 笔</span></div><div class="panel-body">已知实际毛利 ${fmt(portfolio.totals.actualGross)} 元 · 可比范围少赚 ${fmt(portfolio.totals.gap)} 元</div>${table(['订单','累计合格双','累计实际毛利元','同进度差距元','资料状态'],portfolio.orders.map(r=>[r.order.id,r.cumulative.quantity,fmt(r.cumulative.actual.gross),fmt(r.cumulative.gap),stateText[r.quality.state]]))}</section>`:''}`;
+  const back=returnState?`<div class="detail-return"><button class="button" data-return-drill>← 返回上一层</button><span>恢复 ${esc(returnState.date)} 的查看位置</span></div>`:'';
+  const focusNote=focus?`<div class="detail-focus">当前定位：${esc(focusLabel(focus))}<button class="link" data-focus-clear>清除定位</button></div>`:'';
+  const note=drillNote?`<p class="note warning">${esc(drillNote)}</p>`:'';
+  return `${back}<section class="panel imported-summary"><div class="panel-head"><h2>生产进度与经营利润</h2><span>${esc(a.baselineId)}</span></div><div class="panel-body kv-grid"><div>累计合格量<strong>${c.quantity??'待补齐'} / ${esc(a.order.quantity)} 双</strong></div><div>完成进度<strong>${pct(c.progress)}</strong></div><div>剩余需求 / 超产<strong>${c.remaining??'—'} / ${c.overproduction??'—'} 双</strong></div><div>累计经营利润<strong>${fmt(c.actual.operating)} 元</strong></div><div>预计完工利润<strong>${a.profitScope?.forecastProfit==null?'待建立':fmt(a.profitScope.forecastProfit)+' 元'}</strong></div><div>已结算最终利润<strong>${a.profitScope?.finalProfit==null?'未结算':fmt(a.profitScope.finalProfit)+' 元'}</strong></div><div>当日生产毛利<strong>${fmt(a.daily?.actual.gross)} 元</strong></div><div>当日合格量<strong>${a.daily?.quantity??'待补齐'} 双</strong></div></div><div class="panel-body note">收入口径：${esc(a.order.incomeBasis)} · 税务口径：${esc(a.order.taxBasis)}。最终利润以结算为准。</div></section>${a.quality.missing.length?`<section class="panel imported-summary"><div class="panel-head"><h2>待补齐资料</h2></div>${table(['日期','项目','提示'],a.quality.missing.slice(0,100).map(x=>[x.date,x.field,x.detail]))}</section>`:''}<section class="panel imported-summary"><div class="panel-head"><h2>利润差距来源</h2><span class="muted">点击查看明细</span></div><div class="panel-body">${renderImportedVariance(bars)}</div></section>${drill?.startsWith('variance:')?drillPanel(a):''}<section class="panel imported-summary"><div class="panel-head"><h2>${esc(date)} 原始记录</h2><div class="table-tools">${[['production','生产'],['supplements','补单'],['materials','材料'],['expenses','费用']].map(([k,t])=>`<button class="button ${tab===k?'primary':''}" data-import-tab="${k}">${t}</button>`).join('')}</div></div>${focusNote}${note}${renderDetails()}<div class="panel-footer">${esc(a.revisionId??'')} · ${esc(a.baselineId??'')} · 可切换日期逐日核查。</div></section>${portfolio?`<section class="panel imported-summary"><div class="panel-head"><h2>同日可比订单</h2><span class="muted">可比 ${portfolio.totals.comparable} 笔 · 排除 ${portfolio.totals.excluded} 笔</span></div><div class="panel-body">已知实际毛利 ${fmt(portfolio.totals.actualGross)} 元 · 可比范围少赚 ${fmt(portfolio.totals.gap)} 元</div>${table(['订单','累计合格双','累计实际毛利元','同进度差距元','资料状态'],portfolio.orders.map(r=>[r.order.id,r.cumulative.quantity,fmt(r.cumulative.actual.gross),fmt(r.cumulative.gap),stateText[r.quality.state]]))}</section>`:''}`;
  };
  function render(){
   if(!alive||!analysis)return;const a=analysis;
   root.innerHTML=`<section class="panel imported-controls"><label>订单<select id="imported-order" class="control">${orders.map(o=>option(o.id,`${o.id} · ${o.product}`,selected.id)).join('')}</select></label>${revisions.length>1?`<label>资料版本<select id="imported-revision" class="control">${revisions.map(r=>option(r.revisionId,r.revisionId,revision)).join('')}</select></label>`:''}<label>对照基线<select id="imported-mode" class="control">${option('ideal','无额外损耗理想上界',mode)}${option('budget','含损耗预算的预期利润',mode)}</select></label><div class="imported-date"><button class="button" id="imported-prev" ${date<=a.order.start?'disabled':''}>上一天</button><input class="control" id="imported-date" type="date" aria-label="模拟截至日期" min="${esc(a.order.start)}" max="${esc((a.visibilityEnd??a.order.end))}" value="${esc(date)}"><button class="button" id="imported-next" ${date>=(a.visibilityEnd??a.order.end)?'disabled':''}>下一天</button></div><span class="demo-pill">${a.order.isDemo?'模拟案例':'导入资料'}</span><span class="imported-state ${['complete','provisional'].includes(a.quality.state)?'':'warn'}">${esc(stateText[a.quality.state])}</span><span id="imported-status" role="status"></span></section><div class="imported-tabs" role="tablist">${[['overview','利润概览'],['diagnosis','差距归因'],['detail','明细数据']].map(([k,t])=>`<button role="tab" aria-selected="${view===k}" class="imported-tab ${view===k?'active':''}" data-view="${k}">${t}</button>`).join('')}</div>${view==='diagnosis'?renderImportedDiagnosis(a):view==='overview'?overviewHtml(a):detailHtml(a)}<div class="chart-tip" id="imported-chart-tip" hidden></div>`;
-  root.querySelector('#imported-date').addEventListener('change',e=>{if(!e.target.value||e.target.value<a.order.start||e.target.value>(a.visibilityEnd??a.order.end)){render();return;}date=e.target.value;load();});
-  root.querySelector('#imported-prev').onclick=()=>{date=offset(date,-1);load();};root.querySelector('#imported-next').onclick=()=>{date=offset(date,1);load();};
-  root.querySelector('#imported-mode').onchange=e=>{mode=e.target.value;drill=null;load();};const revSel=root.querySelector('#imported-revision');if(revSel)revSel.onchange=e=>{revision=e.target.value;drill=null;load();};
+  root.querySelector('#imported-date').addEventListener('change',e=>{if(!e.target.value||e.target.value<a.order.start||e.target.value>(a.visibilityEnd??a.order.end)){render();return;}date=e.target.value;returnState=null;focus=null;drillNote='';load();});
+  root.querySelector('#imported-prev').onclick=()=>{date=offset(date,-1);returnState=null;focus=null;drillNote='';load();};root.querySelector('#imported-next').onclick=()=>{date=offset(date,1);returnState=null;focus=null;drillNote='';load();};
+  root.querySelector('#imported-mode').onchange=e=>{mode=e.target.value;drill=null;varianceLimit=30;returnState=null;focus=null;drillNote='';load();};const revSel=root.querySelector('#imported-revision');if(revSel)revSel.onchange=e=>{revision=e.target.value;drill=null;varianceLimit=30;returnState=null;focus=null;drillNote='';load();};
   root.querySelector('#imported-order').onchange=e=>{location.hash='#imported/'+encodeURIComponent(e.target.value);};
-  root.querySelectorAll('[data-view]').forEach(btn=>btn.onclick=()=>{view=btn.dataset.view;drill=null;render();});
-  root.querySelectorAll('[data-import-tab]').forEach(btn=>btn.onclick=()=>{tab=btn.dataset.importTab;render();});
+  root.querySelectorAll('[data-view]').forEach(btn=>btn.onclick=()=>{view=btn.dataset.view;drill=null;varianceLimit=30;returnState=null;focus=null;drillNote='';render();});
+  root.querySelectorAll('[data-import-tab]').forEach(btn=>btn.onclick=()=>{tab=btn.dataset.importTab;focus=null;drillNote='';render();});
   root.querySelectorAll('[data-drill]').forEach(btn=>btn.onclick=()=>{drill=btn.dataset.drill;render();});
-  root.querySelectorAll('[data-drill-close]').forEach(btn=>btn.onclick=()=>{drill=null;render();});
-  root.querySelectorAll('[data-variance]').forEach(btn=>{if(btn.dataset.variance)btn.onclick=()=>{drill='variance:'+btn.dataset.variance;render();};});
-  root.querySelectorAll('[data-drill-day]').forEach(btn=>btn.onclick=()=>{date=btn.dataset.drillDay;drill=null;view='detail';load();});
-  root.querySelectorAll('[data-import-day]').forEach(el=>{const run=()=>{date=el.dataset.importDay;load();};el.onclick=run;el.onkeydown=e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();run();}};});
+  root.querySelectorAll('[data-drill-close]').forEach(btn=>btn.onclick=()=>{drill=null;varianceLimit=30;render();});
+  root.querySelectorAll('[data-variance]').forEach(btn=>{if(btn.dataset.variance)btn.onclick=()=>{varianceLimit=30;returnState=null;focus=null;drillNote='';view='detail';drill='variance:'+btn.dataset.variance;render();};});
+  root.querySelectorAll('[data-drill-more]').forEach(btn=>btn.onclick=()=>{varianceLimit+=30;render();});
+  root.querySelectorAll('[data-drill-day]').forEach(btn=>btn.onclick=()=>{const target=drillTarget(btn.dataset.drillKey);returnState={view,drill,tab,focus,date};date=btn.dataset.drillDay;drill=null;view='detail';tab=target.tab;focus=target.focus??null;drillNote=target.note??'';load();});
+  root.querySelectorAll('[data-return-drill]').forEach(btn=>btn.onclick=()=>{if(!returnState)return;view=returnState.view;drill=returnState.drill;tab=returnState.tab;focus=returnState.focus??null;date=returnState.date;returnState=null;drillNote='';load();});
+  root.querySelectorAll('[data-focus-clear]').forEach(btn=>btn.onclick=()=>{focus=null;drillNote='';render();});
+  root.querySelectorAll('[data-focus-production]').forEach(btn=>btn.onclick=()=>{tab='production';focus={tab:'production',recordId:btn.dataset.focusProduction};drillNote='';render();});
+  root.querySelectorAll('[data-import-day]').forEach(el=>{const run=()=>{date=el.dataset.importDay;returnState=null;focus=null;drillNote='';load();};el.onclick=run;el.onkeydown=e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();run();}};});
  }
  async function load(){
   const request=++seq;if(status())status().textContent='正在核算…';
