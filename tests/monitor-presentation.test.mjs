@@ -18,10 +18,12 @@ test('margin changes use percentage points with honest small-value precision',()
 });
 
 test('risk filter keeps only the three actionable severity levels',()=>{
- const html=renderScopeFilters(null,{asOf:'2026-10-01',mode:'ideal',customer:'',status:'',risk:'',period:16},false);
+ const html=renderScopeFilters(null,{asOf:'2026-10-01',mode:'ideal',customer:'',status:'',risk:'',period:7},false);
  const select=html.match(/<select[^>]*id="bm-risk"[^>]*>([\s\S]*?)<\/select>/)?.[1]??'';
  assert.deepEqual([...select.matchAll(/<option value="([^"]*)"/g)].map(m=>m[1]),['','严重','重点','注意']);
  for(const hidden of ['数据不足','缺少基线','不可评级','正常','优于预期'])assert.ok(!select.includes(hidden),hidden);
+ const period=html.match(/<select[^>]*id="bm-period"[^>]*>([\s\S]*?)<\/select>/)?.[1]??'';
+ assert.deepEqual([...period.matchAll(/<option value="([^"]*)"/g)].map(m=>m[1]),['7','14','30']);
 });
 
 test('search matches id, product and customer with spaces and multiple keywords',()=>{

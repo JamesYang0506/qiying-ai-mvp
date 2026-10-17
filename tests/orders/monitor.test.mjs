@@ -7,8 +7,9 @@ import {normalizePair} from '../../server/import/normalize.mjs';
 import {buildOverview,createMonitorService,distributionKey} from '../../server/monitor/overview.mjs';
 import {createStore} from '../../server/storage/store.mjs';
 import {createMonitorRepository} from '../../server/monitor/storage.mjs';
-import {D} from '../../server/profit/decimal.mjs';
+import {D,money} from '../../server/profit/decimal.mjs';
 import {evaluate} from '../../server/profit/evaluate.mjs';
+import {calculateSeries} from '../../server/profit/series.mjs';
 
 export function dataset(id='ORDER-A',prices=[17.2,17.2],quantities=[100,100]){
  const d=normalizePair(...pair()).dataset;d.order.id=id;d.order.start='2026-10-11';d.order.end='2026-10-12';
@@ -24,6 +25,17 @@ test('monitor uses identical comparable set for cards and a fixed intersection f
  assert.equal(o.coverage.total,2);assert.equal(o.coverage.known,2);assert.equal(o.coverage.comparable,1);
  assert.equal(new D(o.summary.expectedGross).minus(o.summary.actualGross).toFixed(2),o.summary.gap);
  assert.equal(o.trend.includedCount,1);assert.equal(o.distribution.reduce((s,b)=>s+b.count,0),2);
+});
+test('cards total only the selected trend window rather than all history',async()=>{
+ const d=dataset();d.order.end='2026-10-13';
+ for(const key of ['production','materials','expenses'])d[key].push(...d[key].filter(r=>r.date==='2026-10-12').map(r=>({...r,id:r.id+'-13',date:'2026-10-13',availableAt:'2026-10-13T18:00:00+08:00'})));
+ const full=await buildOverview([{dataset:d}],{...options,asOf:'2026-10-13',period:3});
+ const window=await buildOverview([{dataset:d}],{...options,asOf:'2026-10-13',period:2});
+ const points=calculateSeries(d,{start:'2026-10-11',end:'2026-10-13'});
+ assert.equal(window.overview.summary.actualGross,money(new D(points[2].actual).minus(points[0].actual)));
+ assert.equal(window.overview.coverage.periodComparable,1);
+ assert.notEqual(window.overview.summary.actualGross,window.overview.orders[0].cumulative.actual.gross);
+ assert.equal(full.overview.summary.actualGross,full.overview.orders[0].cumulative.actual.gross);
 });
 test('growing cumulative gap or total costs alone does not mean daily deterioration',async()=>{
  const {overview:o}=await buildOverview([{dataset:dataset('A',[17.2,17.2],[100,200])}],options);

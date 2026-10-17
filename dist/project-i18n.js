@@ -636,7 +636,7 @@ Object.assign(dictionary,{
  '下列记录来自本次分析使用的已保存资料，包含当日与前一日数据，方便对照核查。资料获取时间：':'These saved records were used for this analysis and cover the business day and previous day. Data retrieved at:',
  '“待补齐”表示当前资料不足，不代表数量或金额为零。材料金额以订单分析的核算结果为准。':'Pending means data is incomplete, not zero. Material costs follow the order analysis calculations.',
  '按当日毛利率较昨日的下降幅度排序。变化单位为“百分点”：20.00% 降至 19.95%，即下降 0.05 个百分点。':'Ranked by the decline in daily gross margin vs yesterday. A change from 20.00% to 19.95% is a decrease of 0.05 percentage points.',
- '全页按同一批已保存资料计算':'All sections use the same saved data',
+ '全页按同一批已保存资料计算':'All sections use the same saved data','所选区间':'Selected range',
  '与昨日持平':'Unchanged vs yesterday','与预期持平':'In line with expectations','不可比较':'Not comparable','已含当日加工量与净耗，不重复计入':'Included in daily processed output and net usage; not counted twice'
 });
 export function translateText(text,locale='en',fragmentsAllowed=true){

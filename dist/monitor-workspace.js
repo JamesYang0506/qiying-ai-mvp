@@ -1,7 +1,7 @@
 import {animateMonitorCharts} from './monitor-chart-motion.js';
 import {renderMonitorDashboard} from './monitor-dashboard.js';
 import {renderMonitorEvidence} from './monitor-evidence.js';
-const saved={asOf:'',mode:'ideal',period:16,customer:'',status:'',risk:'',search:'',filter:'',sort:'risk',selected:null,page:1,view:null};
+const saved={asOf:'',mode:'ideal',period:7,customer:'',status:'',risk:'',search:'',filter:'',sort:'risk',selected:null,page:1,view:null};
 export function hideInactive(state){return !state.search&&!['未开工','已完工'].includes(state.status)&&state.filter!=='not_started';}
 const normalizeSearch=value=>String(value??'').trim().replace(/\s+/g,' ').toLowerCase();
 export function matchesSearch(row,search){
@@ -41,7 +41,7 @@ export function mountMonitor(root,{client=fetch}={}){
   root.querySelector('#bm-mode').onchange=e=>{saved.mode=e.target.value;load();};
   root.querySelector('#bm-period').onchange=e=>{saved.period=Number(e.target.value);load();};
   for(const [id,key] of [['bm-customer','customer'],['bm-status','status'],['bm-risk','risk']])root.querySelector('#'+id).onchange=e=>{saved[key]=e.target.value;saved.page=1;load();};
-  root.querySelector('#bm-reset').onclick=()=>{clearTimeout(searchTimer);Object.assign(saved,{customer:'',status:'',risk:'',search:'',period:16,filter:'',sort:'risk',page:1});load();};
+  root.querySelector('#bm-reset').onclick=()=>{clearTimeout(searchTimer);Object.assign(saved,{customer:'',status:'',risk:'',search:'',period:7,filter:'',sort:'risk',page:1});load();};
   const search=root.querySelector('#bm-search');let composing=false;
  search.oncompositionstart=()=>{composing=true;};
  search.oncompositionend=e=>{composing=false;search.oninput(e);};
