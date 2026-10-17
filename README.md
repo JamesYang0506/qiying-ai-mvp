@@ -72,6 +72,8 @@ python contracts/validate_examples.py
 
 ## 三人开发入口
 
+CC接手请先阅读[开发交接](docs/handoff/01_CC开发交接.md)和[后续开发大纲](docs/handoff/02_后续开发大纲.md)，其中说明本地新版分支、已实现接口、案例核验及推荐执行顺序。
+
 先共同阅读[团队开发与整合说明](docs/modules/00_团队开发与整合说明.md)和[公共数据约定](docs/modules/01_公共数据与版本约定.md)。
 
 | 模块 | 开发说明 | 责任 |
