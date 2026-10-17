@@ -51,7 +51,7 @@ async function portInUse(){
 try{
   await access(path.join(root,'serve.mjs'));
   await access(path.join(root,'runtime','server.mjs'));
-  for(const asset of ['index.html','app.js','styles.css','charts.js','ui.js','import-api.js','import-page.js','imported-workspace.js','daily-data.js','daily-data.css','import-analysis.css','monitor-workspace.js','monitor-dashboard.js','monitor-table.js','monitor.css','monitor-dashboard.css','monitor-filters.css','monitor-evidence.js','auth-page.js','auth.css','project-i18n.js','project-i18n.css','assets/qiying-logo.jpg'])await access(path.join(root,'dist',asset));
+  for(const asset of ['index.html','app.js','styles.css','charts.js','ui.js','import-api.js','import-page.js','imported-workspace.js','daily-data.js','daily-data.css','import-analysis.css','monitor-workspace.js','monitor-dashboard.js','monitor-table.js','monitor.css','monitor-dashboard.css','monitor-filters.css','monitor-evidence.js','monitor-chart-motion.js','auth-page.js','auth.css','project-i18n.js','project-i18n.css','assets/qiying-logo.jpg'])await access(path.join(root,'dist',asset));
   if(!explicitPort){
     for(let offset=0;offset<20;offset++){
       port=requestedPort+offset;
