@@ -58,3 +58,48 @@ button.variance-row:focus-visible{outline:2px solid #2868ed;outline-offset:1px}
 @media(max-width:700px){.imported-tabs{overflow-x:auto}.imported-tab{padding:9px 12px;font-size:11px}.overview-charts .chart-wrap{padding:16px 8px 0}.overview-charts .trend-svg{height:240px}.overview-charts .panel-body{padding:16px 15px}.overview-charts .donut-grid{grid-template-columns:140px minmax(0,1fr);gap:12px}.overview-charts .donut{max-width:140px}.donut-legend li{font-size:10px}.drill-kv{padding:16px 15px 0}.drill-panel .panel-head{padding:16px 15px 0}.drill-formula{margin:14px 15px 0}.drill-panel .footnote,.drill-panel .note{margin:10px 15px 16px}.drill-panel .panel-footer{padding:12px 15px}.stat-card.clickable .drill-hint{display:none}}
 .chart-tip{position:fixed;z-index:200;pointer-events:none;background:#1d2c42;color:#fff;border-radius:7px;padding:8px 11px;font-size:11px;line-height:1.7;white-space:pre-line;box-shadow:0 6px 20px #0d1b2e40;max-width:240px;font-variant-numeric:tabular-nums}
 .chart-tip[hidden]{display:none}
+.imported-stats .stat-card{border-top-width:3px}
+.imported-stats .tone-target{border-top-color:#5b8def}
+.imported-stats .tone-target .stat-value{color:#2868ed}
+.imported-stats .tone-actual{border-top-color:#5fbfa5}
+.imported-stats .tone-actual .stat-value{color:#199b7e}
+.imported-stats .tone-benchmark{border-top-color:#aab8ca}
+.imported-stats .tone-benchmark .stat-value{color:#5b6b82}
+.imported-stats .tone-loss{border-color:#f0c3c7;border-top-color:#dd5965;background:#fff7f8}
+.imported-stats .tone-loss .stat-value{color:#dd5965}
+.imported-stats .tone-loss .stat-top{color:#b34a54}
+.imported-stats .tone-gain{border-top-color:#5fbfa5}
+.imported-stats .tone-gain .stat-value{color:#199b7e}
+.diagnosis-verdict{display:flex;gap:16px;align-items:flex-start;margin-top:20px;padding:22px;border-radius:10px;border:1px solid #f2d4d7;background:#fff7f8}
+.diagnosis-verdict.ok{border-color:#cfe9df;background:#f1faf6}
+.verdict-mark{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#dd5965;color:#fff;font-weight:700;font-size:18px;flex:none}
+.diagnosis-verdict.ok .verdict-mark{background:#199b7e}
+.diagnosis-verdict h2{font-size:19px;margin-bottom:7px}
+.diagnosis-verdict p{font-size:12px;color:#718197;line-height:1.8}
+.cause-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:16px}
+.cause{background:#fff;border:1px solid var(--line);border-radius:9px;padding:18px;box-shadow:0 3px 10px #24426902}
+.cause span{font-size:11px;color:#718197}
+.cause strong{display:block;font-size:20px;margin:10px 0 4px;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+.cause.bad strong{color:#dd5965}
+.cause em{font-style:normal;font-size:10px;color:#9aa6b7}
+.cause p{font-size:11px;line-height:1.7;color:#8491a5;margin-top:10px}
+.diagnosis-limits{margin-top:16px}
+.limit-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.limit{border:1px solid var(--line);border-radius:8px;padding:16px}
+.limit.bad{border-color:#f0c3c7;background:#fff7f8}
+.limit.ok{border-color:#cfe9df;background:#f7fcf9}
+.limit>span{font-size:11px;color:#718197}
+.limit strong{display:block;font-size:22px;margin:9px 0 5px;font-variant-numeric:tabular-nums}
+.limit strong em{font-style:normal;font-size:11px;color:#9aa6b7;font-weight:400}
+.limit.bad strong{color:#dd5965}
+.limit.ok strong{color:#199b7e}
+.limit p{font-size:11px;color:#8491a5}
+.limit-alert{margin-top:16px;padding:14px 16px;border-radius:8px;border:1px solid #e6edf8;background:#f8fafd}
+.limit-alert.ok{border-color:#cfe9df;background:#f1faf6}
+.limit-alert.bad{border-color:#f0c3c7;background:#fff1f2}
+.limit-alert h3{font-size:13px;margin-bottom:6px;color:#718197}
+.limit-alert.ok h3{color:#199b7e}
+.limit-alert.bad h3{color:#d34f5a}
+.limit-alert p{font-size:11px;line-height:1.8;color:#718197}
+@media(max-width:1200px){.cause-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.cause-grid{grid-template-columns:1fr}.limit-grid{grid-template-columns:1fr}.diagnosis-verdict{padding:16px}.diagnosis-verdict h2{font-size:17px}.imported-stats .stat-card{border-top-width:3px}}
