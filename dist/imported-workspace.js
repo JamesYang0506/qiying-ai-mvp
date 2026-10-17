@@ -1,4 +1,4 @@
-import {esc} from './ui.js';import {renderTrend,renderCostDonut} from './charts.js';import {importClient} from './import-api.js';
+import {esc} from './ui.js';import {renderTrend,renderCostDonut} from './charts.js';import {animateAnalysisCharts} from './monitor-chart-motion.js';import {importClient} from './import-api.js';
 const fmt=x=>x==null?'待补齐':new Intl.NumberFormat('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(x));
 const num=x=>x==null?null:Number(x);
 export function renderImportedVariance(items){const max=Math.max(1,...items.map(x=>Math.abs(x.delta??0)));return `<div class="variance-bars">${items.map(x=>`<button class="variance-row" data-variance="${esc(x.key??'')}" ${x.key?'':'tabindex="-1"'}>${x.key?'<span class="variance-name">':'<span>'}${esc(x.name)}</span><div class="bar-track"><div class="bar-fill ${x.delta>0?'red':'green'}" style="width:${Math.abs(x.delta??0)/max*100}%"></div></div><strong class="${x.delta>0?'negative':x.delta<0?'positive':''}">${x.delta===null?'待补齐':(x.delta>0?'+':x.delta<0?'−':'')+'¥'+fmt(Math.abs(x.delta))}</strong></button>`).join('')}</div>`;}
@@ -96,7 +96,7 @@ export function createOrderLoader(client){
  };
 }
 export function mountImported(root,{orderId,client=importClient,initialView='overview',initialDate='',initialRevision='',initialMode='ideal'}={}){
- let alive=true,orders=[],selected=null,revision='',revisions=[],date='',mode=['ideal','budget'].includes(initialMode)?initialMode:'ideal',analysis=null,points=[],portfolio=null,tab='production',view=['overview','diagnosis','detail'].includes(initialView)?initialView:'overview',drill=null,varianceLimit=30,focus=null,drillNote='',returnState=null,loadError='',failedScope=null;
+ let alive=true,orders=[],selected=null,revision='',revisions=[],date='',mode=['ideal','budget'].includes(initialMode)?initialMode:'ideal',analysis=null,points=[],portfolio=null,tab='production',view=['overview','diagnosis','detail'].includes(initialView)?initialView:'overview',drill=null,varianceLimit=30,focus=null,drillNote='',returnState=null,loadError='',failedScope=null,animateNext=false,stopCharts=()=>{};
  const status=()=>root.querySelector('#imported-status');
  const fileRoleLabel={cost:'成本文件',daily:'每日文件'};
  const sourceCell=r=>{const s=r?.source;if(!s)return '待补齐';return {html:`<details class="source-detail"><summary>查看来源</summary><span>${esc(fileRoleLabel[s.fileRole]??s.fileRole??'')} · ${esc(s.sheet??'')} · ${esc(s.cell??'')}</span>${r.availableAt?`<span>可见 ${esc(r.availableAt)}</span>`:''}</details>`};};
@@ -171,6 +171,7 @@ export function mountImported(root,{orderId,client=importClient,initialView='ove
  };
  function render(){
   if(!alive||!analysis)return;const a=analysis;
+  stopCharts();stopCharts=()=>{};
   root.innerHTML=`<section class="panel imported-controls"><label>订单<select id="imported-order" class="control">${orders.map(o=>option(o.id,`${o.id} · ${o.product}`,selected.id)).join('')}</select></label>${revisions.length>1?`<label>资料版本<select id="imported-revision" class="control">${revisions.map(r=>option(r.revisionId,r.revisionId,revision)).join('')}</select></label>`:''}<label>对照基线<select id="imported-mode" class="control">${option('ideal','无额外损耗理想上界',mode)}${option('budget','含损耗预算的预期利润',mode)}</select></label><div class="imported-date"><button class="button" id="imported-prev" ${date<=a.order.start?'disabled':''}>上一天</button><input class="control" id="imported-date" type="date" aria-label="模拟截至日期" min="${esc(a.order.start)}" max="${esc((a.visibilityEnd??a.order.end))}" value="${esc(date)}"><button class="button" id="imported-next" ${date>=(a.visibilityEnd??a.order.end)?'disabled':''}>下一天</button></div><span id="imported-status" role="status"></span></section><div class="imported-tabs" role="tablist">${[['overview','利润概览'],['diagnosis','差距归因'],['detail','明细数据']].map(([k,t])=>`<button role="tab" aria-selected="${view===k}" class="imported-tab ${view===k?'active':''}" data-view="${k}">${t}</button>`).join('')}</div>${loadError?`<div class="load-error" role="alert"><div><strong>数据载入失败</strong><span>${esc(loadError)}。当前仍显示上一次成功结果。</span></div><button class="button" data-retry>重试</button></div>`:''}${view==='diagnosis'?renderImportedDiagnosis(a):view==='overview'?overviewHtml(a):detailHtml(a)}<div class="chart-tip" id="imported-chart-tip" hidden></div>`;
   root.querySelector('#imported-date').addEventListener('change',e=>{if(!e.target.value||e.target.value<a.order.start||e.target.value>(a.visibilityEnd??a.order.end)){render();return;}date=e.target.value;returnState=null;focus=null;drillNote='';load();});
   root.querySelector('#imported-prev').onclick=()=>{date=offset(date,-1);returnState=null;focus=null;drillNote='';load();};root.querySelector('#imported-next').onclick=()=>{date=offset(date,1);returnState=null;focus=null;drillNote='';load();};
@@ -188,6 +189,7 @@ export function mountImported(root,{orderId,client=importClient,initialView='ove
   root.querySelectorAll('[data-focus-production]').forEach(btn=>btn.onclick=()=>{tab='production';focus={tab:'production',recordId:btn.dataset.focusProduction};drillNote='';render();});
   root.querySelectorAll('[data-retry]').forEach(btn=>btn.onclick=()=>{if(failedScope){({date,revision,mode}=failedScope);}loadError='';load();});
   root.querySelectorAll('[data-import-day]').forEach(el=>{const run=()=>{date=el.dataset.importDay;returnState=null;focus=null;drillNote='';load();};el.onclick=run;el.onkeydown=e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();run();}};});
+  if(animateNext&&root.querySelector('.overview-charts .trend-svg')){animateNext=false;stopCharts=animateAnalysisCharts(root);}
  }
  const loader=createOrderLoader(client);
  async function ensurePortfolio(){
@@ -197,7 +199,7 @@ export function mountImported(root,{orderId,client=importClient,initialView='ove
   catch(e){if(alive&&request===loader.seq&&e.name!=='AbortError'){loadError=e.message;render();}}
  }
  async function load(){
-  const requestedScope={date,revision,mode};if(status())status().textContent='正在核算…';
+  const requestedScope={date,revision,mode};if(status())status().textContent='正在核算…';animateNext=true;
   try{
    await loader.load({orderId:selected.id,date,revision,mode,withPortfolio:view==='detail'},{
     onAnalysis:value=>{
@@ -207,9 +209,9 @@ export function mountImported(root,{orderId,client=importClient,initialView='ove
     },
     onTrend:value=>{if(alive){points=value;render();}},
     onPortfolio:value=>{if(alive){portfolio=value;render();}},
-    onError:e=>{if(alive){loadError=e.message;render();}}
+    onError:e=>{if(alive){animateNext=false;loadError=e.message;render();}}
    });
-  }catch(e){if(alive){if(analysis){failedScope=requestedScope;date=analysis.asOf;revision=analysis.revisionId;mode=analysis.baselineMode;loadError=e.message;render();}else root.innerHTML=`<section class="panel import-intro"><h2>数据载入失败</h2><p>${esc(e.message)}</p><a class="button" href="#import">返回导入</a></section>`;}}
+  }catch(e){animateNext=false;if(alive){if(analysis){failedScope=requestedScope;date=analysis.asOf;revision=analysis.revisionId;mode=analysis.baselineMode;loadError=e.message;render();}else root.innerHTML=`<section class="panel import-intro"><h2>数据载入失败</h2><p>${esc(e.message)}</p><a class="button" href="#import">返回导入</a></section>`;}}
  }
 
  root.innerHTML='<div class="loading">正在读取本地订单版本…</div>';
@@ -219,5 +221,5 @@ export function mountImported(root,{orderId,client=importClient,initialView='ove
  const chartTip=e=>{const el=e.target.closest?.('[data-tip]');if(el)showTip(el,e.clientX,e.clientY);else hideTip();};
  const focusTip=e=>{const el=e.target.closest?.('[data-tip]');if(!el)return;const r=el.getBoundingClientRect();showTip(el,r.left+r.width/2,r.top);};
  root.addEventListener('pointermove',chartTip);root.addEventListener('pointerdown',chartTip);root.addEventListener('pointerleave',hideTip);root.addEventListener('focusin',focusTip);root.addEventListener('focusout',e=>{if(!e.relatedTarget?.closest?.('[data-tip]'))hideTip();});
- return ()=>{alive=false;loader.abort();};
+ return ()=>{alive=false;stopCharts();loader.abort();};
 }
