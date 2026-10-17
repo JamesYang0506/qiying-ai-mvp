@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {formatMarginChange,formatMarginDeviation,formatRecommendationText,renderMonitorEvidence} from '../dist/monitor-evidence.js';
-import {filterMonitorRows,hideInactive,matchesSearch} from '../dist/monitor-workspace.js';
+import {filterMonitorRows,hideInactive,matchesSearch,visibleDistribution} from '../dist/monitor-workspace.js';
 import {renderScopeFilters} from '../dist/monitor-table.js';
 
 const source={fileRole:'daily',sheet:'每日生产',cell:'A6',recordId:'RAW-PROD-ID',fileHash:'secret-hash'};
@@ -26,6 +26,16 @@ test('risk filter keeps only the three actionable severity levels',()=>{
  assert.deepEqual([...period.matchAll(/<option value="([^"]*)"/g)].map(m=>m[1]),['7','14','30']);
 });
 
+test('the distribution excludes orders the default list hides',()=>{
+ const row=(status,distribution)=>({order:{id:status+distribution},monitoringStatus:status,distribution});
+ const orders=[row('生产中','medium'),row('生产中','medium'),row('生产中','unknown'),row('已完工','unknown'),row('未开工','not_started')];
+ const data={orders,distribution:[{key:'medium',label:'10%–不足30%',count:2},{key:'unknown',label:'无法计算',count:2},{key:'not_started',label:'未开工',count:1}]};
+ const defaults=visibleDistribution(data,{status:'',filter:'',search:''});
+ assert.equal(defaults.total,3);
+ assert.deepEqual(defaults.buckets.map(b=>[b.key,b.count,b.ratio]),[['medium',2,'0.666667'],['unknown',1,'0.333333'],['not_started',0,'0.000000']]);
+ assert.equal(visibleDistribution(data,{status:'',filter:'',search:'SIM'}).buckets.find(b=>b.key==='unknown').count,1);
+ assert.equal(visibleDistribution(data,{status:'已完工',filter:'',search:''}).buckets.find(b=>b.key==='unknown').count,2);
+});
 test('search matches id, product and customer with spaces and multiple keywords',()=>{
  const row={order:{id:'SIM-M09',product:'EVA 薄利款',customer:'CUST-L1'}};
  assert.equal(matchesSearch(row,' SIM-M09 '),true);

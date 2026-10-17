@@ -10,6 +10,11 @@ export function matchesSearch(row,search){
  const hay=normalizeSearch([row.order.id,row.order.product,row.order.customer].join(' '));
  return tokens.every(token=>hay.includes(token));
 }
+export function visibleDistribution(data,state){
+ const focusInactive=['未开工','已完工'].includes(state.status)||state.filter==='not_started';
+ const rows=(data?.orders??[]).filter(row=>focusInactive||!['未开工','已完工'].includes(row.monitoringStatus));
+ return {total:rows.length,buckets:(data?.distribution??[]).map(bucket=>{const count=rows.filter(row=>row.distribution===bucket.key).length;return {...bucket,count,ratio:rows.length?(count/rows.length).toFixed(6):null};})};
+}
 export function filterMonitorRows(orders,state){
  const hide=hideInactive(state);
  return (orders??[]).filter(row=>{
@@ -31,7 +36,8 @@ export function mountMonitor(root,{client=fetch}={}){
   const d=data,orders=d?.orders??[],rows=filterMonitorRows(orders,saved),hide=hideInactive(saved),hiddenNotStarted=hide?orders.filter(r=>r.monitoringStatus==='未开工').length:0,hiddenCompleted=hide?orders.filter(r=>r.monitoringStatus==='已完工').length:0;
   rows.sort((a,b)=>(saved.sort==='risk'?(a.risk?.priority??5)-(b.risk?.priority??5):saved.sort==='deviation'?(a.marginDeviationPp==null?b.marginDeviationPp==null?0:1:b.marginDeviationPp==null?-1:Number(a.marginDeviationPp)-Number(b.marginDeviationPp)):saved.sort==='yesterday'?(a.comparison.marginChangePp==null?b.comparison.marginChangePp==null?0:1:b.comparison.marginChangePp==null?-1:Number(a.comparison.marginChangePp)-Number(b.comparison.marginChangePp)):0)||a.order.id.localeCompare(b.order.id));
   const pages=Math.max(1,Math.ceil(rows.length/6));saved.page=Math.min(saved.page,pages);const page=rows.slice((saved.page-1)*6,saved.page*6),selected=d?.orders.find(r=>r.order.id===saved.selected)??d?.orders.find(r=>d.attention.includes(r.order.id));
-  root.innerHTML=renderMonitorDashboard({data:d,rows,page,pages,selected,state:saved,loading,error,detailMarkup:detail?renderMonitorEvidence(detail):'',hiddenNotStarted,hiddenCompleted});
+  const dist=visibleDistribution(d,saved);
+  root.innerHTML=renderMonitorDashboard({data:d,rows,page,pages,selected,state:saved,loading,error,detailMarkup:detail?renderMonitorEvidence(detail):'',hiddenNotStarted,hiddenCompleted,distribution:dist.buckets,distributionTotal:dist.total});
   if(animateCharts)stopCharts=animateMonitorCharts(root);
   root.querySelector('#bm-refresh').onclick=()=>load();
   root.querySelector('#bm-see-all')?.addEventListener('click',()=>{saved.filter='deteriorated';saved.page=1;render();root.querySelector('.bm-orders').scrollIntoView({behavior:'smooth',block:'start'});});
