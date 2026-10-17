@@ -22,5 +22,8 @@ test('new monitor evidence and precise margin changes have English labels withou
  assert.ok(translateText('15.965 元/千克').includes('15.965 CNY/kg'));
  assert.equal(translateText('材料编号-2026','en',false),'材料编号-2026');
  assert.equal(translateText('未开工 6 笔已隐藏，查看'),'6 not-started orders hidden, view');
+ assert.equal(translateText('已完工 4 笔已隐藏，查看'),'4 completed orders hidden, view');
  assert.equal(translateText('未开工 6 笔已隐藏，点击上方“未开工”查看。'),'6 not-started orders hidden; select "Not started" above to view.');
+ assert.equal(translateText('已完工 4 笔已隐藏，点击上方“已完工”查看。'),'4 completed orders hidden; select "Completed" above to view.');
+ assert.equal(translateText('未开工 6 笔、已完工 4 笔已隐藏，点击上方状态筛选查看。'),'6 not-started and 4 completed orders hidden; use the status filter above to view.');
 });

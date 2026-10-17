@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {formatMarginChange,formatMarginDeviation,formatRecommendationText,renderMonitorEvidence} from '../dist/monitor-evidence.js';
-import {filterMonitorRows,hideNotStarted,matchesSearch} from '../dist/monitor-workspace.js';
+import {filterMonitorRows,hideInactive,matchesSearch} from '../dist/monitor-workspace.js';
 import {renderScopeFilters} from '../dist/monitor-table.js';
 
 const source={fileRole:'daily',sheet:'每日生产',cell:'A6',recordId:'RAW-PROD-ID',fileHash:'secret-hash'};
@@ -32,18 +32,20 @@ test('search matches id, product and customer with spaces and multiple keywords'
  assert.equal(matchesSearch(row,'   '),true);
 });
 
-test('not-started orders stay out of the order table unless explicitly requested',()=>{
+test('the order table shows only in-progress orders unless inactive statuses are requested',()=>{
  const rows=[
   {order:{id:'ACTIVE'},monitoringStatus:'生产中',distribution:'medium',comparison:{deteriorated:false,marginChangePp:'-0.1'},quality:{missing:[]}},
-  {order:{id:'FUTURE'},monitoringStatus:'未开工',distribution:'not_started',comparison:{deteriorated:false,marginChangePp:null},quality:{missing:[]}}
+  {order:{id:'FUTURE'},monitoringStatus:'未开工',distribution:'not_started',comparison:{deteriorated:false,marginChangePp:null},quality:{missing:[]}},
+  {order:{id:'DONE'},monitoringStatus:'已完工',distribution:'unknown',comparison:{deteriorated:false,marginChangePp:null},quality:{missing:[]}}
  ];
  const ids=list=>list.map(r=>r.order.id),state={status:'',filter:'',search:''};
- assert.equal(hideNotStarted(state),true);
+ assert.equal(hideInactive(state),true);
  assert.deepEqual(ids(filterMonitorRows(rows,state)),['ACTIVE']);
  assert.deepEqual(ids(filterMonitorRows([rows[1]],{...state,status:'未开工'})),['FUTURE']);
+ assert.deepEqual(ids(filterMonitorRows([rows[2]],{...state,status:'已完工'})),['DONE']);
  assert.deepEqual(ids(filterMonitorRows(rows,{...state,filter:'not_started'})),['FUTURE']);
  assert.deepEqual(ids(filterMonitorRows([...rows,{...rows[0],order:{id:'MISSING'},quality:{missing:['baseline']}}],{...state,filter:'incomplete'})),['MISSING']);
- assert.deepEqual(ids(filterMonitorRows([rows[1]],{...state,search:'FUTURE'})),['FUTURE']);
+ assert.deepEqual(ids(filterMonitorRows(rows,{...state,search:'DONE'})),['DONE']);
 });
 
 test('evidence shows business labels, table positions and units rather than raw records',()=>{
