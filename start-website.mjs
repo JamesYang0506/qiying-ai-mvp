@@ -33,6 +33,8 @@ async function isWebsiteReady(){
   }catch{return false;}
 }
 function openBrowser(){
+  console.log('网站 IP：127.0.0.1');
+  console.log(`网站端口：${port}`);
   console.log(`网站地址：${url}`);
   if(noBrowser||process.platform!=='win32')return;
   const opener=spawn(path.join(process.env.SystemRoot||'C:\\Windows','System32','rundll32.exe'),['url.dll,FileProtocolHandler',url],{stdio:'ignore',windowsHide:true});

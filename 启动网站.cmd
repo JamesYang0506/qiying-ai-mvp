@@ -1,6 +1,7 @@
 @echo off
 setlocal
 chcp 65001 >nul
+title Qiying Website - IP and Port
 cd /d "%~dp0"
 set "NODE_EXE=node.exe"
 where node.exe >nul 2>nul
@@ -18,6 +19,8 @@ set "RESULT=%ERRORLEVEL%"
 if not "%RESULT%"=="0" (
   echo.
   echo Website startup failed. See the message above.
-  pause
 )
+echo.
+echo Press any key to close this window...
+pause >nul
 exit /b %RESULT%
