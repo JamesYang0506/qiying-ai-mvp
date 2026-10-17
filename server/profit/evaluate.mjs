@@ -4,10 +4,11 @@ import {buildDiagnosis,buildReferenceThresholds} from './diagnosis.mjs';
 import {addDays} from '../import/validation.mjs';
 import {CATEGORIES} from '../model.mjs';
 const amountSum=xs=>money(sum(xs));
-export function evaluate(dataset,{asOf,baselineMode='ideal'}={}){
+export function evaluate(dataset,{asOf,baselineMode='ideal',knownAt}={}){
  const {order:o,baseline:b}=dataset;if(!/^\d{4}-\d{2}-\d{2}$/.test(asOf??'')||Number.isNaN(Date.parse(asOf))||new Date(asOf).toISOString().slice(0,10)!==asOf)throw new Error('请选择有效日期');
  if(!['ideal','budget'].includes(baselineMode))throw new Error('理论基线模式无效');
- const base=prepareBaseline(dataset),missing=[],cutoff=asOf+'T23:59:59+08:00';const cutoffMs=Date.parse(cutoff);
+ if(knownAt!==undefined&&(typeof knownAt!=='string'||!/(Z|[+-]\d{2}:\d{2})$/.test(knownAt)||!Number.isFinite(Date.parse(knownAt))))throw new Error('信息截止时间无效');
+ const base=prepareBaseline(dataset),missing=[],cutoff=knownAt??(asOf+'T23:59:59+08:00');const cutoffMs=Date.parse(cutoff);
  const visible=r=>r.availableAt&&Date.parse(r.availableAt)<=cutoffMs;
  const miss=(date,field,detail)=>{if(missing.length<1000)missing.push({date,field,detail});};
  for(const k of ['quantity','price','weight','opening'])if(o[k]==null)miss(null,'order',`订单${k}待补齐`);
@@ -73,7 +74,7 @@ export function evaluate(dataset,{asOf,baselineMode='ideal'}={}){
  };
  const profitScope={grossProfit:cumulative.actual.gross,managementProfit:cumulative.actual.operating,forecastProfit:null,finalProfit:null,settlement:{state:'open',reason:'导入首版不包含正式结算资料；最终利润待结算后提供'}};
  const daySummaries=days.map(d=>({date:d.date,quantity:d.quantity,revenue:d.revenue,actual:{material:d.actual.material,costs:d.actual.costs,gross:d.actual.gross,operating:d.actual.operating},expected:{gross:d.expected.gross,revenue:d.expected.revenue},gap:d.gap,components:d.components}));
- const result={visibilityEnd,theoreticalRounding,order:o,revisionId:dataset.revision.id,baselineId:b.id,baselineMode,asOf,daily:days.find(d=>d.date===asOf)??null,daySummaries,cumulative,theoreticalTotal:base.theoretical(o.quantity,baselineMode),bridge:{total:cumulative.gap,components},profitScope,quality:{state,missing,completeness,isDemo:o.isDemo},evidence:days.flatMap(d=>[...d.rows.production,...d.rows.materials,...d.rows.expenses].map(r=>r.source)),warnings:visibleSupplements.length?[`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter(r=>r.date<=asOf&&visible(r)).reduce((s,r)=>s+Number(r.defects??0),0)-visibleSupplements.reduce((s,r)=>s+Number(r.quantity??0),0)}双`]:[]};
+ const result={knownAt:knownAt??null,visibilityEnd,theoreticalRounding,order:o,revisionId:dataset.revision.id,baselineId:b.id,baselineMode,asOf,daily:days.find(d=>d.date===asOf)??null,daySummaries,cumulative,theoreticalTotal:base.theoretical(o.quantity,baselineMode),bridge:{total:cumulative.gap,components},profitScope,quality:{state,missing,completeness,isDemo:o.isDemo},evidence:days.flatMap(d=>[...d.rows.production,...d.rows.materials,...d.rows.expenses].map(r=>r.source)),warnings:visibleSupplements.length?[`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter(r=>r.date<=asOf&&visible(r)).reduce((s,r)=>s+Number(r.defects??0),0)-visibleSupplements.reduce((s,r)=>s+Number(r.quantity??0),0)}双`]:[]};
  result.referenceThresholds=buildReferenceThresholds({order:o,cumulative,theoreticalBudget:base.theoretical(o.quantity,'budget'),baselineId:b.id,asOf});
  result.diagnosis=buildDiagnosis(result);
  return result;

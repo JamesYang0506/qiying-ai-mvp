@@ -70,8 +70,8 @@ const varianceDefs={
  budgetAdjustment:{formula:'预算模式下理论损耗预算取相反数；理想模式为 0',source:'成本计算中的生产损耗与不良损耗预算。'},
  rounding:{formula:'总差距 − 其余各项合计，用于保证归因精确闭合',source:'逐日舍入后的差值，不是业务成本。'}
 };
-export function mountImported(root,{orderId,client=importClient}={}){
- let alive=true,seq=0,orders=[],selected=null,revision='',revisions=[],date='',mode='ideal',analysis=null,points=[],portfolio=null,tab='production',view='overview',drill=null,varianceLimit=30,focus=null,drillNote='',returnState=null,loadError='';
+export function mountImported(root,{orderId,client=importClient,initialView='overview',initialDate='',initialRevision='',initialMode='ideal',initialKnownAt='',onScopeChange=()=>{}}={}){
+ let alive=true,seq=0,orders=[],selected=null,revision='',revisions=[],date='',mode=['ideal','budget'].includes(initialMode)?initialMode:'ideal',analysis=null,points=[],portfolio=null,tab='production',view=['overview','diagnosis','detail'].includes(initialView)?initialView:'overview',drill=null,varianceLimit=30,focus=null,drillNote='',returnState=null,loadError='';
  const status=()=>root.querySelector('#imported-status');
  const fileRoleLabel={cost:'成本文件',daily:'每日文件'};
  const sourceCell=r=>{const s=r?.source;if(!s)return '待补齐';return {html:`<details class="source-detail"><summary>查看来源</summary><span>${esc(fileRoleLabel[s.fileRole]??s.fileRole??'')} · ${esc(s.sheet??'')} · ${esc(s.cell??'')}</span>${r.availableAt?`<span>可见 ${esc(r.availableAt)}</span>`:''}</details>`};};
@@ -166,14 +166,14 @@ export function mountImported(root,{orderId,client=importClient}={}){
  }
  async function load(){
   const request=++seq;if(status())status().textContent='正在核算…';
-  try{const a=await client.getAnalysis(selected.id,{asOf:date,revision,baselineMode:mode});if(!alive||request!==seq)return;
+  try{const a=await client.getAnalysis(selected.id,{asOf:date,revision,baselineMode:mode,knownAt:initialKnownAt||undefined});if(!alive||request!==seq)return;
    if(date<a.order.start||date>(a.visibilityEnd??a.order.end)){date=date<a.order.start?a.order.start:(a.visibilityEnd??a.order.end);return load();}
-   const [t,p]=await Promise.all([client.getTrend(selected.id,{start:a.order.start,end:date,revision,baselineMode:mode}),client.getPortfolio({asOf:date,baselineMode:mode})]);if(!alive||request!==seq)return;
-   analysis=a;points=t.points;portfolio=p;loadError='';render();
+   const [t,p]=await Promise.all([client.getTrend(selected.id,{start:a.order.start,end:date,revision,baselineMode:mode,knownAt:initialKnownAt||undefined}),client.getPortfolio({asOf:date,baselineMode:mode,knownAt:initialKnownAt||undefined})]);if(!alive||request!==seq)return;
+   analysis=a;points=t.points;portfolio=p;loadError='';render();onScopeChange({orderId:selected.id,asOf:date,revision,baselineMode:mode,knownAt:initialKnownAt});
   }catch(e){if(alive&&request===seq){if(analysis){loadError=e.message;render();}else root.innerHTML=`<section class="panel import-intro"><h2>数据载入失败</h2><p>${esc(e.message)}</p><a class="button" href="#import">返回导入</a></section>`;}}
  }
  root.innerHTML='<div class="loading">正在读取本地订单版本…</div>';
- (async()=>{try{orders=(await client.getImportedOrders()).orders;if(!alive)return;if(!orders.length){root.innerHTML='<section class="panel import-intro"><h2>还没有导入订单</h2><p>选择一份标准成本表和配套每日表，开始逐日查看利润。</p><a class="button primary" href="#import">导入 Excel</a></section>';return;}selected=orders.find(o=>o.id===orderId)||orders[0];revision=selected.revisionId;date=selected.start;revisions=(await client.getRevisions(selected.id)).revisions;await load();}catch(e){if(alive)root.innerHTML=`<section class="panel import-intro"><h2>本地服务不可用</h2><p>${esc(e.message)}</p><p>请关闭旧的服务窗口，再双击“启动网站.cmd”。</p></section>`;}})();
+ (async()=>{try{orders=(await client.getImportedOrders()).orders;if(!alive)return;if(!orders.length){root.innerHTML='<section class="panel import-intro"><h2>还没有导入订单</h2><p>选择一份标准成本表和配套每日表，开始逐日查看利润。</p><a class="button primary" href="#import">导入 Excel</a></section>';return;}selected=orders.find(o=>o.id===orderId)||orders[0];revisions=(await client.getRevisions(selected.id)).revisions;if(!alive)return;revision=revisions.some(r=>r.revisionId===initialRevision)?initialRevision:selected.revisionId;date=initialDate||selected.start;await load();}catch(e){if(alive)root.innerHTML=`<section class="panel import-intro"><h2>本地服务不可用</h2><p>${esc(e.message)}</p><p>请关闭旧的服务窗口，再双击“启动网站.cmd”。</p></section>`;}})();
  const hideTip=()=>{const tip=root.querySelector('#imported-chart-tip');if(tip)tip.hidden=true;};
  const showTip=(el,x,y)=>{const tip=root.querySelector('#imported-chart-tip');if(!tip)return;tip.textContent=el.dataset.tip;tip.hidden=false;const r=tip.getBoundingClientRect(),pad=10;let left=x+14,top=y+14;if(left+r.width>innerWidth-pad)left=Math.max(pad,x-r.width-14);if(top+r.height>innerHeight-pad)top=Math.max(pad,y-r.height-14);tip.style.left=left+'px';tip.style.top=top+'px';};
  const chartTip=e=>{const el=e.target.closest?.('[data-tip]');if(el)showTip(el,e.clientX,e.clientY);else hideTip();};

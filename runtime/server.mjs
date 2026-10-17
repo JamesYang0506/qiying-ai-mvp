@@ -408,19 +408,19 @@ var require_utils = __commonJS({
       if (decode)
         return decode(data, hint);
     }
-    function basename(path4) {
-      if (typeof path4 !== "string")
+    function basename(path6) {
+      if (typeof path6 !== "string")
         return "";
-      for (let i2 = path4.length - 1; i2 >= 0; --i2) {
-        switch (path4.charCodeAt(i2)) {
+      for (let i2 = path6.length - 1; i2 >= 0; --i2) {
+        switch (path6.charCodeAt(i2)) {
           case 47:
           // '/'
           case 92:
-            path4 = path4.slice(i2 + 1);
-            return path4 === ".." || path4 === "." ? "" : path4;
+            path6 = path6.slice(i2 + 1);
+            return path6 === ".." || path6 === "." ? "" : path6;
         }
       }
-      return path4 === ".." || path4 === "." ? "" : path4;
+      return path6 === ".." || path6 === "." ? "" : path6;
     }
     var TOKEN = [
       0,
@@ -3767,11 +3767,3119 @@ var require_lib = __commonJS({
 
 // server/http/app.mjs
 import http from "node:http";
-import { readFile as readFile2 } from "node:fs/promises";
-import path3 from "node:path";
+import { readFile as readFile3 } from "node:fs/promises";
+import path5 from "node:path";
 
 // server/http/routes.mjs
-import { randomUUID as randomUUID2, randomBytes } from "node:crypto";
+import path4 from "node:path";
+
+// server/monitor/storage.mjs
+import { mkdir, readFile, writeFile, rename, unlink } from "node:fs/promises";
+import path from "node:path";
+import { randomUUID as randomUUID2 } from "node:crypto";
+
+// server/orders/repository.mjs
+import { randomUUID, createHash } from "node:crypto";
+var hash = (value) => createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+function canonical(v) {
+  if (Array.isArray(v)) return v.map(canonical);
+  if (v && typeof v === "object") return Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])]));
+  return v;
+}
+var fail = (code, message, status = 400, details = []) => Object.assign(new Error(message), { code, status, details });
+
+// server/monitor/storage.mjs
+function createMonitorRepository(directory) {
+  const read = async (name) => {
+    try {
+      return JSON.parse(await readFile(path.join(directory, name), "utf8"));
+    } catch (e) {
+      if (e.code === "ENOENT") return null;
+      throw fail("STORAGE_INVALID", "监测视图无法读取，请保留文件并检查备份", 503);
+    }
+  };
+  const viewName = (id) => {
+    if (!/^[a-f0-9-]{36}$/.test(id ?? "")) throw fail("VIEW_NOT_FOUND", "视图不存在", 404);
+    return "view-" + id + ".json";
+  };
+  const publish = async (name, value) => {
+    await mkdir(directory, { recursive: true });
+    const target = path.join(directory, name), tmp = target + "." + randomUUID2() + ".tmp";
+    try {
+      await writeFile(tmp, JSON.stringify(value), { flag: "wx" });
+      await rename(tmp, target);
+    } catch (e) {
+      await unlink(tmp).catch(() => {
+      });
+      throw e;
+    }
+  };
+  return {
+    async findCached(key) {
+      const index = await read("cache-" + key + ".json");
+      return index ? (await read(viewName(index.viewId)))?.overview ?? null : null;
+    },
+    async save(overview, snapshots, key) {
+      await publish(viewName(overview.viewId), { overview, snapshots });
+      await publish("cache-" + key + ".json", { viewId: overview.viewId });
+    },
+    async getView(id) {
+      return (await read(viewName(id)))?.overview ?? null;
+    },
+    async getSnapshot(viewId, id) {
+      return (await read(viewName(viewId)))?.snapshots.find((s) => s.snapshot_id === id) ?? null;
+    }
+  };
+}
+
+// server/monitor/overview.mjs
+import { randomUUID as randomUUID4 } from "node:crypto";
+
+// node_modules/decimal.js/decimal.mjs
+/*!
+ *  decimal.js v10.6.0
+ *  An arbitrary-precision Decimal type for JavaScript.
+ *  https://github.com/MikeMcl/decimal.js
+ *  Copyright (c) 2025 Michael Mclaughlin <M8ch88l@gmail.com>
+ *  MIT Licence
+ */
+var EXP_LIMIT = 9e15;
+var MAX_DIGITS = 1e9;
+var NUMERALS = "0123456789abcdef";
+var LN10 = "2.3025850929940456840179914546843642076011014886287729760333279009675726096773524802359972050895982983419677840422862486334095254650828067566662873690987816894829072083255546808437998948262331985283935053089653777326288461633662222876982198867465436674744042432743651550489343149393914796194044002221051017141748003688084012647080685567743216228355220114804663715659121373450747856947683463616792101806445070648000277502684916746550586856935673420670581136429224554405758925724208241314695689016758940256776311356919292033376587141660230105703089634572075440370847469940168269282808481184289314848524948644871927809676271275775397027668605952496716674183485704422507197965004714951050492214776567636938662976979522110718264549734772662425709429322582798502585509785265383207606726317164309505995087807523710333101197857547331541421808427543863591778117054309827482385045648019095610299291824318237525357709750539565187697510374970888692180205189339507238539205144634197265287286965110862571492198849978748873771345686209167058";
+var PI = "3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679821480865132823066470938446095505822317253594081284811174502841027019385211055596446229489549303819644288109756659334461284756482337867831652712019091456485669234603486104543266482133936072602491412737245870066063155881748815209209628292540917153643678925903600113305305488204665213841469519415116094330572703657595919530921861173819326117931051185480744623799627495673518857527248912279381830119491298336733624406566430860213949463952247371907021798609437027705392171762931767523846748184676694051320005681271452635608277857713427577896091736371787214684409012249534301465495853710507922796892589235420199561121290219608640344181598136297747713099605187072113499999983729780499510597317328160963185950244594553469083026425223082533446850352619311881710100031378387528865875332083814206171776691473035982534904287554687311595628638823537875937519577818577805321712268066130019278766111959092164201989380952572010654858632789";
+var DEFAULTS = {
+  // These values must be integers within the stated ranges (inclusive).
+  // Most of these values can be changed at run-time using the `Decimal.config` method.
+  // The maximum number of significant digits of the result of a calculation or base conversion.
+  // E.g. `Decimal.config({ precision: 20 });`
+  precision: 20,
+  // 1 to MAX_DIGITS
+  // The rounding mode used when rounding to `precision`.
+  //
+  // ROUND_UP         0 Away from zero.
+  // ROUND_DOWN       1 Towards zero.
+  // ROUND_CEIL       2 Towards +Infinity.
+  // ROUND_FLOOR      3 Towards -Infinity.
+  // ROUND_HALF_UP    4 Towards nearest neighbour. If equidistant, up.
+  // ROUND_HALF_DOWN  5 Towards nearest neighbour. If equidistant, down.
+  // ROUND_HALF_EVEN  6 Towards nearest neighbour. If equidistant, towards even neighbour.
+  // ROUND_HALF_CEIL  7 Towards nearest neighbour. If equidistant, towards +Infinity.
+  // ROUND_HALF_FLOOR 8 Towards nearest neighbour. If equidistant, towards -Infinity.
+  //
+  // E.g.
+  // `Decimal.rounding = 4;`
+  // `Decimal.rounding = Decimal.ROUND_HALF_UP;`
+  rounding: 4,
+  // 0 to 8
+  // The modulo mode used when calculating the modulus: a mod n.
+  // The quotient (q = a / n) is calculated according to the corresponding rounding mode.
+  // The remainder (r) is calculated as: r = a - n * q.
+  //
+  // UP         0 The remainder is positive if the dividend is negative, else is negative.
+  // DOWN       1 The remainder has the same sign as the dividend (JavaScript %).
+  // FLOOR      3 The remainder has the same sign as the divisor (Python %).
+  // HALF_EVEN  6 The IEEE 754 remainder function.
+  // EUCLID     9 Euclidian division. q = sign(n) * floor(a / abs(n)). Always positive.
+  //
+  // Truncated division (1), floored division (3), the IEEE 754 remainder (6), and Euclidian
+  // division (9) are commonly used for the modulus operation. The other rounding modes can also
+  // be used, but they may not give useful results.
+  modulo: 1,
+  // 0 to 9
+  // The exponent value at and beneath which `toString` returns exponential notation.
+  // JavaScript numbers: -7
+  toExpNeg: -7,
+  // 0 to -EXP_LIMIT
+  // The exponent value at and above which `toString` returns exponential notation.
+  // JavaScript numbers: 21
+  toExpPos: 21,
+  // 0 to EXP_LIMIT
+  // The minimum exponent value, beneath which underflow to zero occurs.
+  // JavaScript numbers: -324  (5e-324)
+  minE: -EXP_LIMIT,
+  // -1 to -EXP_LIMIT
+  // The maximum exponent value, above which overflow to Infinity occurs.
+  // JavaScript numbers: 308  (1.7976931348623157e+308)
+  maxE: EXP_LIMIT,
+  // 1 to EXP_LIMIT
+  // Whether to use cryptographically-secure random number generation, if available.
+  crypto: false
+  // true/false
+};
+var inexact;
+var quadrant;
+var external = true;
+var decimalError = "[DecimalError] ";
+var invalidArgument = decimalError + "Invalid argument: ";
+var precisionLimitExceeded = decimalError + "Precision limit exceeded";
+var cryptoUnavailable = decimalError + "crypto unavailable";
+var tag = "[object Decimal]";
+var mathfloor = Math.floor;
+var mathpow = Math.pow;
+var isBinary = /^0b([01]+(\.[01]*)?|\.[01]+)(p[+-]?\d+)?$/i;
+var isHex = /^0x([0-9a-f]+(\.[0-9a-f]*)?|\.[0-9a-f]+)(p[+-]?\d+)?$/i;
+var isOctal = /^0o([0-7]+(\.[0-7]*)?|\.[0-7]+)(p[+-]?\d+)?$/i;
+var isDecimal = /^(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i;
+var BASE = 1e7;
+var LOG_BASE = 7;
+var MAX_SAFE_INTEGER = 9007199254740991;
+var LN10_PRECISION = LN10.length - 1;
+var PI_PRECISION = PI.length - 1;
+var P = { toStringTag: tag };
+P.absoluteValue = P.abs = function() {
+  var x2 = new this.constructor(this);
+  if (x2.s < 0) x2.s = 1;
+  return finalise(x2);
+};
+P.ceil = function() {
+  return finalise(new this.constructor(this), this.e + 1, 2);
+};
+P.clampedTo = P.clamp = function(min2, max3) {
+  var k, x2 = this, Ctor = x2.constructor;
+  min2 = new Ctor(min2);
+  max3 = new Ctor(max3);
+  if (!min2.s || !max3.s) return new Ctor(NaN);
+  if (min2.gt(max3)) throw Error(invalidArgument + max3);
+  k = x2.cmp(min2);
+  return k < 0 ? min2 : x2.cmp(max3) > 0 ? max3 : new Ctor(x2);
+};
+P.comparedTo = P.cmp = function(y) {
+  var i2, j, xdL, ydL, x2 = this, xd = x2.d, yd = (y = new x2.constructor(y)).d, xs = x2.s, ys = y.s;
+  if (!xd || !yd) {
+    return !xs || !ys ? NaN : xs !== ys ? xs : xd === yd ? 0 : !xd ^ xs < 0 ? 1 : -1;
+  }
+  if (!xd[0] || !yd[0]) return xd[0] ? xs : yd[0] ? -ys : 0;
+  if (xs !== ys) return xs;
+  if (x2.e !== y.e) return x2.e > y.e ^ xs < 0 ? 1 : -1;
+  xdL = xd.length;
+  ydL = yd.length;
+  for (i2 = 0, j = xdL < ydL ? xdL : ydL; i2 < j; ++i2) {
+    if (xd[i2] !== yd[i2]) return xd[i2] > yd[i2] ^ xs < 0 ? 1 : -1;
+  }
+  return xdL === ydL ? 0 : xdL > ydL ^ xs < 0 ? 1 : -1;
+};
+P.cosine = P.cos = function() {
+  var pr, rm, x2 = this, Ctor = x2.constructor;
+  if (!x2.d) return new Ctor(NaN);
+  if (!x2.d[0]) return new Ctor(1);
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  Ctor.precision = pr + Math.max(x2.e, x2.sd()) + LOG_BASE;
+  Ctor.rounding = 1;
+  x2 = cosine(Ctor, toLessThanHalfPi(Ctor, x2));
+  Ctor.precision = pr;
+  Ctor.rounding = rm;
+  return finalise(quadrant == 2 || quadrant == 3 ? x2.neg() : x2, pr, rm, true);
+};
+P.cubeRoot = P.cbrt = function() {
+  var e, m, n, r, rep, s, sd, t, t3, t3plusx, x2 = this, Ctor = x2.constructor;
+  if (!x2.isFinite() || x2.isZero()) return new Ctor(x2);
+  external = false;
+  s = x2.s * mathpow(x2.s * x2, 1 / 3);
+  if (!s || Math.abs(s) == 1 / 0) {
+    n = digitsToString(x2.d);
+    e = x2.e;
+    if (s = (e - n.length + 1) % 3) n += s == 1 || s == -2 ? "0" : "00";
+    s = mathpow(n, 1 / 3);
+    e = mathfloor((e + 1) / 3) - (e % 3 == (e < 0 ? -1 : 2));
+    if (s == 1 / 0) {
+      n = "5e" + e;
+    } else {
+      n = s.toExponential();
+      n = n.slice(0, n.indexOf("e") + 1) + e;
+    }
+    r = new Ctor(n);
+    r.s = x2.s;
+  } else {
+    r = new Ctor(s.toString());
+  }
+  sd = (e = Ctor.precision) + 3;
+  for (; ; ) {
+    t = r;
+    t3 = t.times(t).times(t);
+    t3plusx = t3.plus(x2);
+    r = divide(t3plusx.plus(x2).times(t), t3plusx.plus(t3), sd + 2, 1);
+    if (digitsToString(t.d).slice(0, sd) === (n = digitsToString(r.d)).slice(0, sd)) {
+      n = n.slice(sd - 3, sd + 1);
+      if (n == "9999" || !rep && n == "4999") {
+        if (!rep) {
+          finalise(t, e + 1, 0);
+          if (t.times(t).times(t).eq(x2)) {
+            r = t;
+            break;
+          }
+        }
+        sd += 4;
+        rep = 1;
+      } else {
+        if (!+n || !+n.slice(1) && n.charAt(0) == "5") {
+          finalise(r, e + 1, 1);
+          m = !r.times(r).times(r).eq(x2);
+        }
+        break;
+      }
+    }
+  }
+  external = true;
+  return finalise(r, e, Ctor.rounding, m);
+};
+P.decimalPlaces = P.dp = function() {
+  var w, d = this.d, n = NaN;
+  if (d) {
+    w = d.length - 1;
+    n = (w - mathfloor(this.e / LOG_BASE)) * LOG_BASE;
+    w = d[w];
+    if (w) for (; w % 10 == 0; w /= 10) n--;
+    if (n < 0) n = 0;
+  }
+  return n;
+};
+P.dividedBy = P.div = function(y) {
+  return divide(this, new this.constructor(y));
+};
+P.dividedToIntegerBy = P.divToInt = function(y) {
+  var x2 = this, Ctor = x2.constructor;
+  return finalise(divide(x2, new Ctor(y), 0, 1, 1), Ctor.precision, Ctor.rounding);
+};
+P.equals = P.eq = function(y) {
+  return this.cmp(y) === 0;
+};
+P.floor = function() {
+  return finalise(new this.constructor(this), this.e + 1, 3);
+};
+P.greaterThan = P.gt = function(y) {
+  return this.cmp(y) > 0;
+};
+P.greaterThanOrEqualTo = P.gte = function(y) {
+  var k = this.cmp(y);
+  return k == 1 || k === 0;
+};
+P.hyperbolicCosine = P.cosh = function() {
+  var k, n, pr, rm, len, x2 = this, Ctor = x2.constructor, one = new Ctor(1);
+  if (!x2.isFinite()) return new Ctor(x2.s ? 1 / 0 : NaN);
+  if (x2.isZero()) return one;
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  Ctor.precision = pr + Math.max(x2.e, x2.sd()) + 4;
+  Ctor.rounding = 1;
+  len = x2.d.length;
+  if (len < 32) {
+    k = Math.ceil(len / 3);
+    n = (1 / tinyPow(4, k)).toString();
+  } else {
+    k = 16;
+    n = "2.3283064365386962890625e-10";
+  }
+  x2 = taylorSeries(Ctor, 1, x2.times(n), new Ctor(1), true);
+  var cosh2_x, i2 = k, d8 = new Ctor(8);
+  for (; i2--; ) {
+    cosh2_x = x2.times(x2);
+    x2 = one.minus(cosh2_x.times(d8.minus(cosh2_x.times(d8))));
+  }
+  return finalise(x2, Ctor.precision = pr, Ctor.rounding = rm, true);
+};
+P.hyperbolicSine = P.sinh = function() {
+  var k, pr, rm, len, x2 = this, Ctor = x2.constructor;
+  if (!x2.isFinite() || x2.isZero()) return new Ctor(x2);
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  Ctor.precision = pr + Math.max(x2.e, x2.sd()) + 4;
+  Ctor.rounding = 1;
+  len = x2.d.length;
+  if (len < 3) {
+    x2 = taylorSeries(Ctor, 2, x2, x2, true);
+  } else {
+    k = 1.4 * Math.sqrt(len);
+    k = k > 16 ? 16 : k | 0;
+    x2 = x2.times(1 / tinyPow(5, k));
+    x2 = taylorSeries(Ctor, 2, x2, x2, true);
+    var sinh2_x, d5 = new Ctor(5), d16 = new Ctor(16), d20 = new Ctor(20);
+    for (; k--; ) {
+      sinh2_x = x2.times(x2);
+      x2 = x2.times(d5.plus(sinh2_x.times(d16.times(sinh2_x).plus(d20))));
+    }
+  }
+  Ctor.precision = pr;
+  Ctor.rounding = rm;
+  return finalise(x2, pr, rm, true);
+};
+P.hyperbolicTangent = P.tanh = function() {
+  var pr, rm, x2 = this, Ctor = x2.constructor;
+  if (!x2.isFinite()) return new Ctor(x2.s);
+  if (x2.isZero()) return new Ctor(x2);
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  Ctor.precision = pr + 7;
+  Ctor.rounding = 1;
+  return divide(x2.sinh(), x2.cosh(), Ctor.precision = pr, Ctor.rounding = rm);
+};
+P.inverseCosine = P.acos = function() {
+  var x2 = this, Ctor = x2.constructor, k = x2.abs().cmp(1), pr = Ctor.precision, rm = Ctor.rounding;
+  if (k !== -1) {
+    return k === 0 ? x2.isNeg() ? getPi(Ctor, pr, rm) : new Ctor(0) : new Ctor(NaN);
+  }
+  if (x2.isZero()) return getPi(Ctor, pr + 4, rm).times(0.5);
+  Ctor.precision = pr + 6;
+  Ctor.rounding = 1;
+  x2 = new Ctor(1).minus(x2).div(x2.plus(1)).sqrt().atan();
+  Ctor.precision = pr;
+  Ctor.rounding = rm;
+  return x2.times(2);
+};
+P.inverseHyperbolicCosine = P.acosh = function() {
+  var pr, rm, x2 = this, Ctor = x2.constructor;
+  if (x2.lte(1)) return new Ctor(x2.eq(1) ? 0 : NaN);
+  if (!x2.isFinite()) return new Ctor(x2);
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  Ctor.precision = pr + Math.max(Math.abs(x2.e), x2.sd()) + 4;
+  Ctor.rounding = 1;
+  external = false;
+  x2 = x2.times(x2).minus(1).sqrt().plus(x2);
+  external = true;
+  Ctor.precision = pr;
+  Ctor.rounding = rm;
+  return x2.ln();
+};
+P.inverseHyperbolicSine = P.asinh = function() {
+  var pr, rm, x2 = this, Ctor = x2.constructor;
+  if (!x2.isFinite() || x2.isZero()) return new Ctor(x2);
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  Ctor.precision = pr + 2 * Math.max(Math.abs(x2.e), x2.sd()) + 6;
+  Ctor.rounding = 1;
+  external = false;
+  x2 = x2.times(x2).plus(1).sqrt().plus(x2);
+  external = true;
+  Ctor.precision = pr;
+  Ctor.rounding = rm;
+  return x2.ln();
+};
+P.inverseHyperbolicTangent = P.atanh = function() {
+  var pr, rm, wpr, xsd, x2 = this, Ctor = x2.constructor;
+  if (!x2.isFinite()) return new Ctor(NaN);
+  if (x2.e >= 0) return new Ctor(x2.abs().eq(1) ? x2.s / 0 : x2.isZero() ? x2 : NaN);
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  xsd = x2.sd();
+  if (Math.max(xsd, pr) < 2 * -x2.e - 1) return finalise(new Ctor(x2), pr, rm, true);
+  Ctor.precision = wpr = xsd - x2.e;
+  x2 = divide(x2.plus(1), new Ctor(1).minus(x2), wpr + pr, 1);
+  Ctor.precision = pr + 4;
+  Ctor.rounding = 1;
+  x2 = x2.ln();
+  Ctor.precision = pr;
+  Ctor.rounding = rm;
+  return x2.times(0.5);
+};
+P.inverseSine = P.asin = function() {
+  var halfPi, k, pr, rm, x2 = this, Ctor = x2.constructor;
+  if (x2.isZero()) return new Ctor(x2);
+  k = x2.abs().cmp(1);
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  if (k !== -1) {
+    if (k === 0) {
+      halfPi = getPi(Ctor, pr + 4, rm).times(0.5);
+      halfPi.s = x2.s;
+      return halfPi;
+    }
+    return new Ctor(NaN);
+  }
+  Ctor.precision = pr + 6;
+  Ctor.rounding = 1;
+  x2 = x2.div(new Ctor(1).minus(x2.times(x2)).sqrt().plus(1)).atan();
+  Ctor.precision = pr;
+  Ctor.rounding = rm;
+  return x2.times(2);
+};
+P.inverseTangent = P.atan = function() {
+  var i2, j, k, n, px, t, r, wpr, x2, x3 = this, Ctor = x3.constructor, pr = Ctor.precision, rm = Ctor.rounding;
+  if (!x3.isFinite()) {
+    if (!x3.s) return new Ctor(NaN);
+    if (pr + 4 <= PI_PRECISION) {
+      r = getPi(Ctor, pr + 4, rm).times(0.5);
+      r.s = x3.s;
+      return r;
+    }
+  } else if (x3.isZero()) {
+    return new Ctor(x3);
+  } else if (x3.abs().eq(1) && pr + 4 <= PI_PRECISION) {
+    r = getPi(Ctor, pr + 4, rm).times(0.25);
+    r.s = x3.s;
+    return r;
+  }
+  Ctor.precision = wpr = pr + 10;
+  Ctor.rounding = 1;
+  k = Math.min(28, wpr / LOG_BASE + 2 | 0);
+  for (i2 = k; i2; --i2) x3 = x3.div(x3.times(x3).plus(1).sqrt().plus(1));
+  external = false;
+  j = Math.ceil(wpr / LOG_BASE);
+  n = 1;
+  x2 = x3.times(x3);
+  r = new Ctor(x3);
+  px = x3;
+  for (; i2 !== -1; ) {
+    px = px.times(x2);
+    t = r.minus(px.div(n += 2));
+    px = px.times(x2);
+    r = t.plus(px.div(n += 2));
+    if (r.d[j] !== void 0) for (i2 = j; r.d[i2] === t.d[i2] && i2--; ) ;
+  }
+  if (k) r = r.times(2 << k - 1);
+  external = true;
+  return finalise(r, Ctor.precision = pr, Ctor.rounding = rm, true);
+};
+P.isFinite = function() {
+  return !!this.d;
+};
+P.isInteger = P.isInt = function() {
+  return !!this.d && mathfloor(this.e / LOG_BASE) > this.d.length - 2;
+};
+P.isNaN = function() {
+  return !this.s;
+};
+P.isNegative = P.isNeg = function() {
+  return this.s < 0;
+};
+P.isPositive = P.isPos = function() {
+  return this.s > 0;
+};
+P.isZero = function() {
+  return !!this.d && this.d[0] === 0;
+};
+P.lessThan = P.lt = function(y) {
+  return this.cmp(y) < 0;
+};
+P.lessThanOrEqualTo = P.lte = function(y) {
+  return this.cmp(y) < 1;
+};
+P.logarithm = P.log = function(base) {
+  var isBase10, d, denominator, k, inf, num, sd, r, arg = this, Ctor = arg.constructor, pr = Ctor.precision, rm = Ctor.rounding, guard = 5;
+  if (base == null) {
+    base = new Ctor(10);
+    isBase10 = true;
+  } else {
+    base = new Ctor(base);
+    d = base.d;
+    if (base.s < 0 || !d || !d[0] || base.eq(1)) return new Ctor(NaN);
+    isBase10 = base.eq(10);
+  }
+  d = arg.d;
+  if (arg.s < 0 || !d || !d[0] || arg.eq(1)) {
+    return new Ctor(d && !d[0] ? -1 / 0 : arg.s != 1 ? NaN : d ? 0 : 1 / 0);
+  }
+  if (isBase10) {
+    if (d.length > 1) {
+      inf = true;
+    } else {
+      for (k = d[0]; k % 10 === 0; ) k /= 10;
+      inf = k !== 1;
+    }
+  }
+  external = false;
+  sd = pr + guard;
+  num = naturalLogarithm(arg, sd);
+  denominator = isBase10 ? getLn10(Ctor, sd + 10) : naturalLogarithm(base, sd);
+  r = divide(num, denominator, sd, 1);
+  if (checkRoundingDigits(r.d, k = pr, rm)) {
+    do {
+      sd += 10;
+      num = naturalLogarithm(arg, sd);
+      denominator = isBase10 ? getLn10(Ctor, sd + 10) : naturalLogarithm(base, sd);
+      r = divide(num, denominator, sd, 1);
+      if (!inf) {
+        if (+digitsToString(r.d).slice(k + 1, k + 15) + 1 == 1e14) {
+          r = finalise(r, pr + 1, 0);
+        }
+        break;
+      }
+    } while (checkRoundingDigits(r.d, k += 10, rm));
+  }
+  external = true;
+  return finalise(r, pr, rm);
+};
+P.minus = P.sub = function(y) {
+  var d, e, i2, j, k, len, pr, rm, xd, xe, xLTy, yd, x2 = this, Ctor = x2.constructor;
+  y = new Ctor(y);
+  if (!x2.d || !y.d) {
+    if (!x2.s || !y.s) y = new Ctor(NaN);
+    else if (x2.d) y.s = -y.s;
+    else y = new Ctor(y.d || x2.s !== y.s ? x2 : NaN);
+    return y;
+  }
+  if (x2.s != y.s) {
+    y.s = -y.s;
+    return x2.plus(y);
+  }
+  xd = x2.d;
+  yd = y.d;
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  if (!xd[0] || !yd[0]) {
+    if (yd[0]) y.s = -y.s;
+    else if (xd[0]) y = new Ctor(x2);
+    else return new Ctor(rm === 3 ? -0 : 0);
+    return external ? finalise(y, pr, rm) : y;
+  }
+  e = mathfloor(y.e / LOG_BASE);
+  xe = mathfloor(x2.e / LOG_BASE);
+  xd = xd.slice();
+  k = xe - e;
+  if (k) {
+    xLTy = k < 0;
+    if (xLTy) {
+      d = xd;
+      k = -k;
+      len = yd.length;
+    } else {
+      d = yd;
+      e = xe;
+      len = xd.length;
+    }
+    i2 = Math.max(Math.ceil(pr / LOG_BASE), len) + 2;
+    if (k > i2) {
+      k = i2;
+      d.length = 1;
+    }
+    d.reverse();
+    for (i2 = k; i2--; ) d.push(0);
+    d.reverse();
+  } else {
+    i2 = xd.length;
+    len = yd.length;
+    xLTy = i2 < len;
+    if (xLTy) len = i2;
+    for (i2 = 0; i2 < len; i2++) {
+      if (xd[i2] != yd[i2]) {
+        xLTy = xd[i2] < yd[i2];
+        break;
+      }
+    }
+    k = 0;
+  }
+  if (xLTy) {
+    d = xd;
+    xd = yd;
+    yd = d;
+    y.s = -y.s;
+  }
+  len = xd.length;
+  for (i2 = yd.length - len; i2 > 0; --i2) xd[len++] = 0;
+  for (i2 = yd.length; i2 > k; ) {
+    if (xd[--i2] < yd[i2]) {
+      for (j = i2; j && xd[--j] === 0; ) xd[j] = BASE - 1;
+      --xd[j];
+      xd[i2] += BASE;
+    }
+    xd[i2] -= yd[i2];
+  }
+  for (; xd[--len] === 0; ) xd.pop();
+  for (; xd[0] === 0; xd.shift()) --e;
+  if (!xd[0]) return new Ctor(rm === 3 ? -0 : 0);
+  y.d = xd;
+  y.e = getBase10Exponent(xd, e);
+  return external ? finalise(y, pr, rm) : y;
+};
+P.modulo = P.mod = function(y) {
+  var q, x2 = this, Ctor = x2.constructor;
+  y = new Ctor(y);
+  if (!x2.d || !y.s || y.d && !y.d[0]) return new Ctor(NaN);
+  if (!y.d || x2.d && !x2.d[0]) {
+    return finalise(new Ctor(x2), Ctor.precision, Ctor.rounding);
+  }
+  external = false;
+  if (Ctor.modulo == 9) {
+    q = divide(x2, y.abs(), 0, 3, 1);
+    q.s *= y.s;
+  } else {
+    q = divide(x2, y, 0, Ctor.modulo, 1);
+  }
+  q = q.times(y);
+  external = true;
+  return x2.minus(q);
+};
+P.naturalExponential = P.exp = function() {
+  return naturalExponential(this);
+};
+P.naturalLogarithm = P.ln = function() {
+  return naturalLogarithm(this);
+};
+P.negated = P.neg = function() {
+  var x2 = new this.constructor(this);
+  x2.s = -x2.s;
+  return finalise(x2);
+};
+P.plus = P.add = function(y) {
+  var carry, d, e, i2, k, len, pr, rm, xd, yd, x2 = this, Ctor = x2.constructor;
+  y = new Ctor(y);
+  if (!x2.d || !y.d) {
+    if (!x2.s || !y.s) y = new Ctor(NaN);
+    else if (!x2.d) y = new Ctor(y.d || x2.s === y.s ? x2 : NaN);
+    return y;
+  }
+  if (x2.s != y.s) {
+    y.s = -y.s;
+    return x2.minus(y);
+  }
+  xd = x2.d;
+  yd = y.d;
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  if (!xd[0] || !yd[0]) {
+    if (!yd[0]) y = new Ctor(x2);
+    return external ? finalise(y, pr, rm) : y;
+  }
+  k = mathfloor(x2.e / LOG_BASE);
+  e = mathfloor(y.e / LOG_BASE);
+  xd = xd.slice();
+  i2 = k - e;
+  if (i2) {
+    if (i2 < 0) {
+      d = xd;
+      i2 = -i2;
+      len = yd.length;
+    } else {
+      d = yd;
+      e = k;
+      len = xd.length;
+    }
+    k = Math.ceil(pr / LOG_BASE);
+    len = k > len ? k + 1 : len + 1;
+    if (i2 > len) {
+      i2 = len;
+      d.length = 1;
+    }
+    d.reverse();
+    for (; i2--; ) d.push(0);
+    d.reverse();
+  }
+  len = xd.length;
+  i2 = yd.length;
+  if (len - i2 < 0) {
+    i2 = len;
+    d = yd;
+    yd = xd;
+    xd = d;
+  }
+  for (carry = 0; i2; ) {
+    carry = (xd[--i2] = xd[i2] + yd[i2] + carry) / BASE | 0;
+    xd[i2] %= BASE;
+  }
+  if (carry) {
+    xd.unshift(carry);
+    ++e;
+  }
+  for (len = xd.length; xd[--len] == 0; ) xd.pop();
+  y.d = xd;
+  y.e = getBase10Exponent(xd, e);
+  return external ? finalise(y, pr, rm) : y;
+};
+P.precision = P.sd = function(z) {
+  var k, x2 = this;
+  if (z !== void 0 && z !== !!z && z !== 1 && z !== 0) throw Error(invalidArgument + z);
+  if (x2.d) {
+    k = getPrecision(x2.d);
+    if (z && x2.e + 1 > k) k = x2.e + 1;
+  } else {
+    k = NaN;
+  }
+  return k;
+};
+P.round = function() {
+  var x2 = this, Ctor = x2.constructor;
+  return finalise(new Ctor(x2), x2.e + 1, Ctor.rounding);
+};
+P.sine = P.sin = function() {
+  var pr, rm, x2 = this, Ctor = x2.constructor;
+  if (!x2.isFinite()) return new Ctor(NaN);
+  if (x2.isZero()) return new Ctor(x2);
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  Ctor.precision = pr + Math.max(x2.e, x2.sd()) + LOG_BASE;
+  Ctor.rounding = 1;
+  x2 = sine(Ctor, toLessThanHalfPi(Ctor, x2));
+  Ctor.precision = pr;
+  Ctor.rounding = rm;
+  return finalise(quadrant > 2 ? x2.neg() : x2, pr, rm, true);
+};
+P.squareRoot = P.sqrt = function() {
+  var m, n, sd, r, rep, t, x2 = this, d = x2.d, e = x2.e, s = x2.s, Ctor = x2.constructor;
+  if (s !== 1 || !d || !d[0]) {
+    return new Ctor(!s || s < 0 && (!d || d[0]) ? NaN : d ? x2 : 1 / 0);
+  }
+  external = false;
+  s = Math.sqrt(+x2);
+  if (s == 0 || s == 1 / 0) {
+    n = digitsToString(d);
+    if ((n.length + e) % 2 == 0) n += "0";
+    s = Math.sqrt(n);
+    e = mathfloor((e + 1) / 2) - (e < 0 || e % 2);
+    if (s == 1 / 0) {
+      n = "5e" + e;
+    } else {
+      n = s.toExponential();
+      n = n.slice(0, n.indexOf("e") + 1) + e;
+    }
+    r = new Ctor(n);
+  } else {
+    r = new Ctor(s.toString());
+  }
+  sd = (e = Ctor.precision) + 3;
+  for (; ; ) {
+    t = r;
+    r = t.plus(divide(x2, t, sd + 2, 1)).times(0.5);
+    if (digitsToString(t.d).slice(0, sd) === (n = digitsToString(r.d)).slice(0, sd)) {
+      n = n.slice(sd - 3, sd + 1);
+      if (n == "9999" || !rep && n == "4999") {
+        if (!rep) {
+          finalise(t, e + 1, 0);
+          if (t.times(t).eq(x2)) {
+            r = t;
+            break;
+          }
+        }
+        sd += 4;
+        rep = 1;
+      } else {
+        if (!+n || !+n.slice(1) && n.charAt(0) == "5") {
+          finalise(r, e + 1, 1);
+          m = !r.times(r).eq(x2);
+        }
+        break;
+      }
+    }
+  }
+  external = true;
+  return finalise(r, e, Ctor.rounding, m);
+};
+P.tangent = P.tan = function() {
+  var pr, rm, x2 = this, Ctor = x2.constructor;
+  if (!x2.isFinite()) return new Ctor(NaN);
+  if (x2.isZero()) return new Ctor(x2);
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  Ctor.precision = pr + 10;
+  Ctor.rounding = 1;
+  x2 = x2.sin();
+  x2.s = 1;
+  x2 = divide(x2, new Ctor(1).minus(x2.times(x2)).sqrt(), pr + 10, 0);
+  Ctor.precision = pr;
+  Ctor.rounding = rm;
+  return finalise(quadrant == 2 || quadrant == 4 ? x2.neg() : x2, pr, rm, true);
+};
+P.times = P.mul = function(y) {
+  var carry, e, i2, k, r, rL, t, xdL, ydL, x2 = this, Ctor = x2.constructor, xd = x2.d, yd = (y = new Ctor(y)).d;
+  y.s *= x2.s;
+  if (!xd || !xd[0] || !yd || !yd[0]) {
+    return new Ctor(!y.s || xd && !xd[0] && !yd || yd && !yd[0] && !xd ? NaN : !xd || !yd ? y.s / 0 : y.s * 0);
+  }
+  e = mathfloor(x2.e / LOG_BASE) + mathfloor(y.e / LOG_BASE);
+  xdL = xd.length;
+  ydL = yd.length;
+  if (xdL < ydL) {
+    r = xd;
+    xd = yd;
+    yd = r;
+    rL = xdL;
+    xdL = ydL;
+    ydL = rL;
+  }
+  r = [];
+  rL = xdL + ydL;
+  for (i2 = rL; i2--; ) r.push(0);
+  for (i2 = ydL; --i2 >= 0; ) {
+    carry = 0;
+    for (k = xdL + i2; k > i2; ) {
+      t = r[k] + yd[i2] * xd[k - i2 - 1] + carry;
+      r[k--] = t % BASE | 0;
+      carry = t / BASE | 0;
+    }
+    r[k] = (r[k] + carry) % BASE | 0;
+  }
+  for (; !r[--rL]; ) r.pop();
+  if (carry) ++e;
+  else r.shift();
+  y.d = r;
+  y.e = getBase10Exponent(r, e);
+  return external ? finalise(y, Ctor.precision, Ctor.rounding) : y;
+};
+P.toBinary = function(sd, rm) {
+  return toStringBinary(this, 2, sd, rm);
+};
+P.toDecimalPlaces = P.toDP = function(dp, rm) {
+  var x2 = this, Ctor = x2.constructor;
+  x2 = new Ctor(x2);
+  if (dp === void 0) return x2;
+  checkInt32(dp, 0, MAX_DIGITS);
+  if (rm === void 0) rm = Ctor.rounding;
+  else checkInt32(rm, 0, 8);
+  return finalise(x2, dp + x2.e + 1, rm);
+};
+P.toExponential = function(dp, rm) {
+  var str, x2 = this, Ctor = x2.constructor;
+  if (dp === void 0) {
+    str = finiteToString(x2, true);
+  } else {
+    checkInt32(dp, 0, MAX_DIGITS);
+    if (rm === void 0) rm = Ctor.rounding;
+    else checkInt32(rm, 0, 8);
+    x2 = finalise(new Ctor(x2), dp + 1, rm);
+    str = finiteToString(x2, true, dp + 1);
+  }
+  return x2.isNeg() && !x2.isZero() ? "-" + str : str;
+};
+P.toFixed = function(dp, rm) {
+  var str, y, x2 = this, Ctor = x2.constructor;
+  if (dp === void 0) {
+    str = finiteToString(x2);
+  } else {
+    checkInt32(dp, 0, MAX_DIGITS);
+    if (rm === void 0) rm = Ctor.rounding;
+    else checkInt32(rm, 0, 8);
+    y = finalise(new Ctor(x2), dp + x2.e + 1, rm);
+    str = finiteToString(y, false, dp + y.e + 1);
+  }
+  return x2.isNeg() && !x2.isZero() ? "-" + str : str;
+};
+P.toFraction = function(maxD) {
+  var d, d0, d1, d2, e, k, n, n0, n1, pr, q, r, x2 = this, xd = x2.d, Ctor = x2.constructor;
+  if (!xd) return new Ctor(x2);
+  n1 = d0 = new Ctor(1);
+  d1 = n0 = new Ctor(0);
+  d = new Ctor(d1);
+  e = d.e = getPrecision(xd) - x2.e - 1;
+  k = e % LOG_BASE;
+  d.d[0] = mathpow(10, k < 0 ? LOG_BASE + k : k);
+  if (maxD == null) {
+    maxD = e > 0 ? d : n1;
+  } else {
+    n = new Ctor(maxD);
+    if (!n.isInt() || n.lt(n1)) throw Error(invalidArgument + n);
+    maxD = n.gt(d) ? e > 0 ? d : n1 : n;
+  }
+  external = false;
+  n = new Ctor(digitsToString(xd));
+  pr = Ctor.precision;
+  Ctor.precision = e = xd.length * LOG_BASE * 2;
+  for (; ; ) {
+    q = divide(n, d, 0, 1, 1);
+    d2 = d0.plus(q.times(d1));
+    if (d2.cmp(maxD) == 1) break;
+    d0 = d1;
+    d1 = d2;
+    d2 = n1;
+    n1 = n0.plus(q.times(d2));
+    n0 = d2;
+    d2 = d;
+    d = n.minus(q.times(d2));
+    n = d2;
+  }
+  d2 = divide(maxD.minus(d0), d1, 0, 1, 1);
+  n0 = n0.plus(d2.times(n1));
+  d0 = d0.plus(d2.times(d1));
+  n0.s = n1.s = x2.s;
+  r = divide(n1, d1, e, 1).minus(x2).abs().cmp(divide(n0, d0, e, 1).minus(x2).abs()) < 1 ? [n1, d1] : [n0, d0];
+  Ctor.precision = pr;
+  external = true;
+  return r;
+};
+P.toHexadecimal = P.toHex = function(sd, rm) {
+  return toStringBinary(this, 16, sd, rm);
+};
+P.toNearest = function(y, rm) {
+  var x2 = this, Ctor = x2.constructor;
+  x2 = new Ctor(x2);
+  if (y == null) {
+    if (!x2.d) return x2;
+    y = new Ctor(1);
+    rm = Ctor.rounding;
+  } else {
+    y = new Ctor(y);
+    if (rm === void 0) {
+      rm = Ctor.rounding;
+    } else {
+      checkInt32(rm, 0, 8);
+    }
+    if (!x2.d) return y.s ? x2 : y;
+    if (!y.d) {
+      if (y.s) y.s = x2.s;
+      return y;
+    }
+  }
+  if (y.d[0]) {
+    external = false;
+    x2 = divide(x2, y, 0, rm, 1).times(y);
+    external = true;
+    finalise(x2);
+  } else {
+    y.s = x2.s;
+    x2 = y;
+  }
+  return x2;
+};
+P.toNumber = function() {
+  return +this;
+};
+P.toOctal = function(sd, rm) {
+  return toStringBinary(this, 8, sd, rm);
+};
+P.toPower = P.pow = function(y) {
+  var e, k, pr, r, rm, s, x2 = this, Ctor = x2.constructor, yn = +(y = new Ctor(y));
+  if (!x2.d || !y.d || !x2.d[0] || !y.d[0]) return new Ctor(mathpow(+x2, yn));
+  x2 = new Ctor(x2);
+  if (x2.eq(1)) return x2;
+  pr = Ctor.precision;
+  rm = Ctor.rounding;
+  if (y.eq(1)) return finalise(x2, pr, rm);
+  e = mathfloor(y.e / LOG_BASE);
+  if (e >= y.d.length - 1 && (k = yn < 0 ? -yn : yn) <= MAX_SAFE_INTEGER) {
+    r = intPow(Ctor, x2, k, pr);
+    return y.s < 0 ? new Ctor(1).div(r) : finalise(r, pr, rm);
+  }
+  s = x2.s;
+  if (s < 0) {
+    if (e < y.d.length - 1) return new Ctor(NaN);
+    if ((y.d[e] & 1) == 0) s = 1;
+    if (x2.e == 0 && x2.d[0] == 1 && x2.d.length == 1) {
+      x2.s = s;
+      return x2;
+    }
+  }
+  k = mathpow(+x2, yn);
+  e = k == 0 || !isFinite(k) ? mathfloor(yn * (Math.log("0." + digitsToString(x2.d)) / Math.LN10 + x2.e + 1)) : new Ctor(k + "").e;
+  if (e > Ctor.maxE + 1 || e < Ctor.minE - 1) return new Ctor(e > 0 ? s / 0 : 0);
+  external = false;
+  Ctor.rounding = x2.s = 1;
+  k = Math.min(12, (e + "").length);
+  r = naturalExponential(y.times(naturalLogarithm(x2, pr + k)), pr);
+  if (r.d) {
+    r = finalise(r, pr + 5, 1);
+    if (checkRoundingDigits(r.d, pr, rm)) {
+      e = pr + 10;
+      r = finalise(naturalExponential(y.times(naturalLogarithm(x2, e + k)), e), e + 5, 1);
+      if (+digitsToString(r.d).slice(pr + 1, pr + 15) + 1 == 1e14) {
+        r = finalise(r, pr + 1, 0);
+      }
+    }
+  }
+  r.s = s;
+  external = true;
+  Ctor.rounding = rm;
+  return finalise(r, pr, rm);
+};
+P.toPrecision = function(sd, rm) {
+  var str, x2 = this, Ctor = x2.constructor;
+  if (sd === void 0) {
+    str = finiteToString(x2, x2.e <= Ctor.toExpNeg || x2.e >= Ctor.toExpPos);
+  } else {
+    checkInt32(sd, 1, MAX_DIGITS);
+    if (rm === void 0) rm = Ctor.rounding;
+    else checkInt32(rm, 0, 8);
+    x2 = finalise(new Ctor(x2), sd, rm);
+    str = finiteToString(x2, sd <= x2.e || x2.e <= Ctor.toExpNeg, sd);
+  }
+  return x2.isNeg() && !x2.isZero() ? "-" + str : str;
+};
+P.toSignificantDigits = P.toSD = function(sd, rm) {
+  var x2 = this, Ctor = x2.constructor;
+  if (sd === void 0) {
+    sd = Ctor.precision;
+    rm = Ctor.rounding;
+  } else {
+    checkInt32(sd, 1, MAX_DIGITS);
+    if (rm === void 0) rm = Ctor.rounding;
+    else checkInt32(rm, 0, 8);
+  }
+  return finalise(new Ctor(x2), sd, rm);
+};
+P.toString = function() {
+  var x2 = this, Ctor = x2.constructor, str = finiteToString(x2, x2.e <= Ctor.toExpNeg || x2.e >= Ctor.toExpPos);
+  return x2.isNeg() && !x2.isZero() ? "-" + str : str;
+};
+P.truncated = P.trunc = function() {
+  return finalise(new this.constructor(this), this.e + 1, 1);
+};
+P.valueOf = P.toJSON = function() {
+  var x2 = this, Ctor = x2.constructor, str = finiteToString(x2, x2.e <= Ctor.toExpNeg || x2.e >= Ctor.toExpPos);
+  return x2.isNeg() ? "-" + str : str;
+};
+function digitsToString(d) {
+  var i2, k, ws, indexOfLastWord = d.length - 1, str = "", w = d[0];
+  if (indexOfLastWord > 0) {
+    str += w;
+    for (i2 = 1; i2 < indexOfLastWord; i2++) {
+      ws = d[i2] + "";
+      k = LOG_BASE - ws.length;
+      if (k) str += getZeroString(k);
+      str += ws;
+    }
+    w = d[i2];
+    ws = w + "";
+    k = LOG_BASE - ws.length;
+    if (k) str += getZeroString(k);
+  } else if (w === 0) {
+    return "0";
+  }
+  for (; w % 10 === 0; ) w /= 10;
+  return str + w;
+}
+function checkInt32(i2, min2, max3) {
+  if (i2 !== ~~i2 || i2 < min2 || i2 > max3) {
+    throw Error(invalidArgument + i2);
+  }
+}
+function checkRoundingDigits(d, i2, rm, repeating) {
+  var di, k, r, rd;
+  for (k = d[0]; k >= 10; k /= 10) --i2;
+  if (--i2 < 0) {
+    i2 += LOG_BASE;
+    di = 0;
+  } else {
+    di = Math.ceil((i2 + 1) / LOG_BASE);
+    i2 %= LOG_BASE;
+  }
+  k = mathpow(10, LOG_BASE - i2);
+  rd = d[di] % k | 0;
+  if (repeating == null) {
+    if (i2 < 3) {
+      if (i2 == 0) rd = rd / 100 | 0;
+      else if (i2 == 1) rd = rd / 10 | 0;
+      r = rm < 4 && rd == 99999 || rm > 3 && rd == 49999 || rd == 5e4 || rd == 0;
+    } else {
+      r = (rm < 4 && rd + 1 == k || rm > 3 && rd + 1 == k / 2) && (d[di + 1] / k / 100 | 0) == mathpow(10, i2 - 2) - 1 || (rd == k / 2 || rd == 0) && (d[di + 1] / k / 100 | 0) == 0;
+    }
+  } else {
+    if (i2 < 4) {
+      if (i2 == 0) rd = rd / 1e3 | 0;
+      else if (i2 == 1) rd = rd / 100 | 0;
+      else if (i2 == 2) rd = rd / 10 | 0;
+      r = (repeating || rm < 4) && rd == 9999 || !repeating && rm > 3 && rd == 4999;
+    } else {
+      r = ((repeating || rm < 4) && rd + 1 == k || !repeating && rm > 3 && rd + 1 == k / 2) && (d[di + 1] / k / 1e3 | 0) == mathpow(10, i2 - 3) - 1;
+    }
+  }
+  return r;
+}
+function convertBase(str, baseIn, baseOut) {
+  var j, arr2 = [0], arrL, i2 = 0, strL = str.length;
+  for (; i2 < strL; ) {
+    for (arrL = arr2.length; arrL--; ) arr2[arrL] *= baseIn;
+    arr2[0] += NUMERALS.indexOf(str.charAt(i2++));
+    for (j = 0; j < arr2.length; j++) {
+      if (arr2[j] > baseOut - 1) {
+        if (arr2[j + 1] === void 0) arr2[j + 1] = 0;
+        arr2[j + 1] += arr2[j] / baseOut | 0;
+        arr2[j] %= baseOut;
+      }
+    }
+  }
+  return arr2.reverse();
+}
+function cosine(Ctor, x2) {
+  var k, len, y;
+  if (x2.isZero()) return x2;
+  len = x2.d.length;
+  if (len < 32) {
+    k = Math.ceil(len / 3);
+    y = (1 / tinyPow(4, k)).toString();
+  } else {
+    k = 16;
+    y = "2.3283064365386962890625e-10";
+  }
+  Ctor.precision += k;
+  x2 = taylorSeries(Ctor, 1, x2.times(y), new Ctor(1));
+  for (var i2 = k; i2--; ) {
+    var cos2x = x2.times(x2);
+    x2 = cos2x.times(cos2x).minus(cos2x).times(8).plus(1);
+  }
+  Ctor.precision -= k;
+  return x2;
+}
+var divide = /* @__PURE__ */ (function() {
+  function multiplyInteger(x2, k, base) {
+    var temp, carry = 0, i2 = x2.length;
+    for (x2 = x2.slice(); i2--; ) {
+      temp = x2[i2] * k + carry;
+      x2[i2] = temp % base | 0;
+      carry = temp / base | 0;
+    }
+    if (carry) x2.unshift(carry);
+    return x2;
+  }
+  function compare2(a, b, aL, bL) {
+    var i2, r;
+    if (aL != bL) {
+      r = aL > bL ? 1 : -1;
+    } else {
+      for (i2 = r = 0; i2 < aL; i2++) {
+        if (a[i2] != b[i2]) {
+          r = a[i2] > b[i2] ? 1 : -1;
+          break;
+        }
+      }
+    }
+    return r;
+  }
+  function subtract(a, b, aL, base) {
+    var i2 = 0;
+    for (; aL--; ) {
+      a[aL] -= i2;
+      i2 = a[aL] < b[aL] ? 1 : 0;
+      a[aL] = i2 * base + a[aL] - b[aL];
+    }
+    for (; !a[0] && a.length > 1; ) a.shift();
+  }
+  return function(x2, y, pr, rm, dp, base) {
+    var cmp, e, i2, k, logBase, more, prod, prodL, q, qd, rem, remL, rem0, sd, t, xi, xL, yd0, yL, yz, Ctor = x2.constructor, sign2 = x2.s == y.s ? 1 : -1, xd = x2.d, yd = y.d;
+    if (!xd || !xd[0] || !yd || !yd[0]) {
+      return new Ctor(
+        // Return NaN if either NaN, or both Infinity or 0.
+        !x2.s || !y.s || (xd ? yd && xd[0] == yd[0] : !yd) ? NaN : (
+          // Return ±0 if x is 0 or y is ±Infinity, or return ±Infinity as y is 0.
+          xd && xd[0] == 0 || !yd ? sign2 * 0 : sign2 / 0
+        )
+      );
+    }
+    if (base) {
+      logBase = 1;
+      e = x2.e - y.e;
+    } else {
+      base = BASE;
+      logBase = LOG_BASE;
+      e = mathfloor(x2.e / logBase) - mathfloor(y.e / logBase);
+    }
+    yL = yd.length;
+    xL = xd.length;
+    q = new Ctor(sign2);
+    qd = q.d = [];
+    for (i2 = 0; yd[i2] == (xd[i2] || 0); i2++) ;
+    if (yd[i2] > (xd[i2] || 0)) e--;
+    if (pr == null) {
+      sd = pr = Ctor.precision;
+      rm = Ctor.rounding;
+    } else if (dp) {
+      sd = pr + (x2.e - y.e) + 1;
+    } else {
+      sd = pr;
+    }
+    if (sd < 0) {
+      qd.push(1);
+      more = true;
+    } else {
+      sd = sd / logBase + 2 | 0;
+      i2 = 0;
+      if (yL == 1) {
+        k = 0;
+        yd = yd[0];
+        sd++;
+        for (; (i2 < xL || k) && sd--; i2++) {
+          t = k * base + (xd[i2] || 0);
+          qd[i2] = t / yd | 0;
+          k = t % yd | 0;
+        }
+        more = k || i2 < xL;
+      } else {
+        k = base / (yd[0] + 1) | 0;
+        if (k > 1) {
+          yd = multiplyInteger(yd, k, base);
+          xd = multiplyInteger(xd, k, base);
+          yL = yd.length;
+          xL = xd.length;
+        }
+        xi = yL;
+        rem = xd.slice(0, yL);
+        remL = rem.length;
+        for (; remL < yL; ) rem[remL++] = 0;
+        yz = yd.slice();
+        yz.unshift(0);
+        yd0 = yd[0];
+        if (yd[1] >= base / 2) ++yd0;
+        do {
+          k = 0;
+          cmp = compare2(yd, rem, yL, remL);
+          if (cmp < 0) {
+            rem0 = rem[0];
+            if (yL != remL) rem0 = rem0 * base + (rem[1] || 0);
+            k = rem0 / yd0 | 0;
+            if (k > 1) {
+              if (k >= base) k = base - 1;
+              prod = multiplyInteger(yd, k, base);
+              prodL = prod.length;
+              remL = rem.length;
+              cmp = compare2(prod, rem, prodL, remL);
+              if (cmp == 1) {
+                k--;
+                subtract(prod, yL < prodL ? yz : yd, prodL, base);
+              }
+            } else {
+              if (k == 0) cmp = k = 1;
+              prod = yd.slice();
+            }
+            prodL = prod.length;
+            if (prodL < remL) prod.unshift(0);
+            subtract(rem, prod, remL, base);
+            if (cmp == -1) {
+              remL = rem.length;
+              cmp = compare2(yd, rem, yL, remL);
+              if (cmp < 1) {
+                k++;
+                subtract(rem, yL < remL ? yz : yd, remL, base);
+              }
+            }
+            remL = rem.length;
+          } else if (cmp === 0) {
+            k++;
+            rem = [0];
+          }
+          qd[i2++] = k;
+          if (cmp && rem[0]) {
+            rem[remL++] = xd[xi] || 0;
+          } else {
+            rem = [xd[xi]];
+            remL = 1;
+          }
+        } while ((xi++ < xL || rem[0] !== void 0) && sd--);
+        more = rem[0] !== void 0;
+      }
+      if (!qd[0]) qd.shift();
+    }
+    if (logBase == 1) {
+      q.e = e;
+      inexact = more;
+    } else {
+      for (i2 = 1, k = qd[0]; k >= 10; k /= 10) i2++;
+      q.e = i2 + e * logBase - 1;
+      finalise(q, dp ? pr + q.e + 1 : pr, rm, more);
+    }
+    return q;
+  };
+})();
+function finalise(x2, sd, rm, isTruncated) {
+  var digits, i2, j, k, rd, roundUp, w, xd, xdi, Ctor = x2.constructor;
+  out: if (sd != null) {
+    xd = x2.d;
+    if (!xd) return x2;
+    for (digits = 1, k = xd[0]; k >= 10; k /= 10) digits++;
+    i2 = sd - digits;
+    if (i2 < 0) {
+      i2 += LOG_BASE;
+      j = sd;
+      w = xd[xdi = 0];
+      rd = w / mathpow(10, digits - j - 1) % 10 | 0;
+    } else {
+      xdi = Math.ceil((i2 + 1) / LOG_BASE);
+      k = xd.length;
+      if (xdi >= k) {
+        if (isTruncated) {
+          for (; k++ <= xdi; ) xd.push(0);
+          w = rd = 0;
+          digits = 1;
+          i2 %= LOG_BASE;
+          j = i2 - LOG_BASE + 1;
+        } else {
+          break out;
+        }
+      } else {
+        w = k = xd[xdi];
+        for (digits = 1; k >= 10; k /= 10) digits++;
+        i2 %= LOG_BASE;
+        j = i2 - LOG_BASE + digits;
+        rd = j < 0 ? 0 : w / mathpow(10, digits - j - 1) % 10 | 0;
+      }
+    }
+    isTruncated = isTruncated || sd < 0 || xd[xdi + 1] !== void 0 || (j < 0 ? w : w % mathpow(10, digits - j - 1));
+    roundUp = rm < 4 ? (rd || isTruncated) && (rm == 0 || rm == (x2.s < 0 ? 3 : 2)) : rd > 5 || rd == 5 && (rm == 4 || isTruncated || rm == 6 && // Check whether the digit to the left of the rounding digit is odd.
+    (i2 > 0 ? j > 0 ? w / mathpow(10, digits - j) : 0 : xd[xdi - 1]) % 10 & 1 || rm == (x2.s < 0 ? 8 : 7));
+    if (sd < 1 || !xd[0]) {
+      xd.length = 0;
+      if (roundUp) {
+        sd -= x2.e + 1;
+        xd[0] = mathpow(10, (LOG_BASE - sd % LOG_BASE) % LOG_BASE);
+        x2.e = -sd || 0;
+      } else {
+        xd[0] = x2.e = 0;
+      }
+      return x2;
+    }
+    if (i2 == 0) {
+      xd.length = xdi;
+      k = 1;
+      xdi--;
+    } else {
+      xd.length = xdi + 1;
+      k = mathpow(10, LOG_BASE - i2);
+      xd[xdi] = j > 0 ? (w / mathpow(10, digits - j) % mathpow(10, j) | 0) * k : 0;
+    }
+    if (roundUp) {
+      for (; ; ) {
+        if (xdi == 0) {
+          for (i2 = 1, j = xd[0]; j >= 10; j /= 10) i2++;
+          j = xd[0] += k;
+          for (k = 1; j >= 10; j /= 10) k++;
+          if (i2 != k) {
+            x2.e++;
+            if (xd[0] == BASE) xd[0] = 1;
+          }
+          break;
+        } else {
+          xd[xdi] += k;
+          if (xd[xdi] != BASE) break;
+          xd[xdi--] = 0;
+          k = 1;
+        }
+      }
+    }
+    for (i2 = xd.length; xd[--i2] === 0; ) xd.pop();
+  }
+  if (external) {
+    if (x2.e > Ctor.maxE) {
+      x2.d = null;
+      x2.e = NaN;
+    } else if (x2.e < Ctor.minE) {
+      x2.e = 0;
+      x2.d = [0];
+    }
+  }
+  return x2;
+}
+function finiteToString(x2, isExp, sd) {
+  if (!x2.isFinite()) return nonFiniteToString(x2);
+  var k, e = x2.e, str = digitsToString(x2.d), len = str.length;
+  if (isExp) {
+    if (sd && (k = sd - len) > 0) {
+      str = str.charAt(0) + "." + str.slice(1) + getZeroString(k);
+    } else if (len > 1) {
+      str = str.charAt(0) + "." + str.slice(1);
+    }
+    str = str + (x2.e < 0 ? "e" : "e+") + x2.e;
+  } else if (e < 0) {
+    str = "0." + getZeroString(-e - 1) + str;
+    if (sd && (k = sd - len) > 0) str += getZeroString(k);
+  } else if (e >= len) {
+    str += getZeroString(e + 1 - len);
+    if (sd && (k = sd - e - 1) > 0) str = str + "." + getZeroString(k);
+  } else {
+    if ((k = e + 1) < len) str = str.slice(0, k) + "." + str.slice(k);
+    if (sd && (k = sd - len) > 0) {
+      if (e + 1 === len) str += ".";
+      str += getZeroString(k);
+    }
+  }
+  return str;
+}
+function getBase10Exponent(digits, e) {
+  var w = digits[0];
+  for (e *= LOG_BASE; w >= 10; w /= 10) e++;
+  return e;
+}
+function getLn10(Ctor, sd, pr) {
+  if (sd > LN10_PRECISION) {
+    external = true;
+    if (pr) Ctor.precision = pr;
+    throw Error(precisionLimitExceeded);
+  }
+  return finalise(new Ctor(LN10), sd, 1, true);
+}
+function getPi(Ctor, sd, rm) {
+  if (sd > PI_PRECISION) throw Error(precisionLimitExceeded);
+  return finalise(new Ctor(PI), sd, rm, true);
+}
+function getPrecision(digits) {
+  var w = digits.length - 1, len = w * LOG_BASE + 1;
+  w = digits[w];
+  if (w) {
+    for (; w % 10 == 0; w /= 10) len--;
+    for (w = digits[0]; w >= 10; w /= 10) len++;
+  }
+  return len;
+}
+function getZeroString(k) {
+  var zs = "";
+  for (; k--; ) zs += "0";
+  return zs;
+}
+function intPow(Ctor, x2, n, pr) {
+  var isTruncated, r = new Ctor(1), k = Math.ceil(pr / LOG_BASE + 4);
+  external = false;
+  for (; ; ) {
+    if (n % 2) {
+      r = r.times(x2);
+      if (truncate(r.d, k)) isTruncated = true;
+    }
+    n = mathfloor(n / 2);
+    if (n === 0) {
+      n = r.d.length - 1;
+      if (isTruncated && r.d[n] === 0) ++r.d[n];
+      break;
+    }
+    x2 = x2.times(x2);
+    truncate(x2.d, k);
+  }
+  external = true;
+  return r;
+}
+function isOdd(n) {
+  return n.d[n.d.length - 1] & 1;
+}
+function maxOrMin(Ctor, args, n) {
+  var k, y, x2 = new Ctor(args[0]), i2 = 0;
+  for (; ++i2 < args.length; ) {
+    y = new Ctor(args[i2]);
+    if (!y.s) {
+      x2 = y;
+      break;
+    }
+    k = x2.cmp(y);
+    if (k === n || k === 0 && x2.s === n) {
+      x2 = y;
+    }
+  }
+  return x2;
+}
+function naturalExponential(x2, sd) {
+  var denominator, guard, j, pow2, sum4, t, wpr, rep = 0, i2 = 0, k = 0, Ctor = x2.constructor, rm = Ctor.rounding, pr = Ctor.precision;
+  if (!x2.d || !x2.d[0] || x2.e > 17) {
+    return new Ctor(x2.d ? !x2.d[0] ? 1 : x2.s < 0 ? 0 : 1 / 0 : x2.s ? x2.s < 0 ? 0 : x2 : 0 / 0);
+  }
+  if (sd == null) {
+    external = false;
+    wpr = pr;
+  } else {
+    wpr = sd;
+  }
+  t = new Ctor(0.03125);
+  while (x2.e > -2) {
+    x2 = x2.times(t);
+    k += 5;
+  }
+  guard = Math.log(mathpow(2, k)) / Math.LN10 * 2 + 5 | 0;
+  wpr += guard;
+  denominator = pow2 = sum4 = new Ctor(1);
+  Ctor.precision = wpr;
+  for (; ; ) {
+    pow2 = finalise(pow2.times(x2), wpr, 1);
+    denominator = denominator.times(++i2);
+    t = sum4.plus(divide(pow2, denominator, wpr, 1));
+    if (digitsToString(t.d).slice(0, wpr) === digitsToString(sum4.d).slice(0, wpr)) {
+      j = k;
+      while (j--) sum4 = finalise(sum4.times(sum4), wpr, 1);
+      if (sd == null) {
+        if (rep < 3 && checkRoundingDigits(sum4.d, wpr - guard, rm, rep)) {
+          Ctor.precision = wpr += 10;
+          denominator = pow2 = t = new Ctor(1);
+          i2 = 0;
+          rep++;
+        } else {
+          return finalise(sum4, Ctor.precision = pr, rm, external = true);
+        }
+      } else {
+        Ctor.precision = pr;
+        return sum4;
+      }
+    }
+    sum4 = t;
+  }
+}
+function naturalLogarithm(y, sd) {
+  var c, c0, denominator, e, numerator, rep, sum4, t, wpr, x1, x2, n = 1, guard = 10, x3 = y, xd = x3.d, Ctor = x3.constructor, rm = Ctor.rounding, pr = Ctor.precision;
+  if (x3.s < 0 || !xd || !xd[0] || !x3.e && xd[0] == 1 && xd.length == 1) {
+    return new Ctor(xd && !xd[0] ? -1 / 0 : x3.s != 1 ? NaN : xd ? 0 : x3);
+  }
+  if (sd == null) {
+    external = false;
+    wpr = pr;
+  } else {
+    wpr = sd;
+  }
+  Ctor.precision = wpr += guard;
+  c = digitsToString(xd);
+  c0 = c.charAt(0);
+  if (Math.abs(e = x3.e) < 15e14) {
+    while (c0 < 7 && c0 != 1 || c0 == 1 && c.charAt(1) > 3) {
+      x3 = x3.times(y);
+      c = digitsToString(x3.d);
+      c0 = c.charAt(0);
+      n++;
+    }
+    e = x3.e;
+    if (c0 > 1) {
+      x3 = new Ctor("0." + c);
+      e++;
+    } else {
+      x3 = new Ctor(c0 + "." + c.slice(1));
+    }
+  } else {
+    t = getLn10(Ctor, wpr + 2, pr).times(e + "");
+    x3 = naturalLogarithm(new Ctor(c0 + "." + c.slice(1)), wpr - guard).plus(t);
+    Ctor.precision = pr;
+    return sd == null ? finalise(x3, pr, rm, external = true) : x3;
+  }
+  x1 = x3;
+  sum4 = numerator = x3 = divide(x3.minus(1), x3.plus(1), wpr, 1);
+  x2 = finalise(x3.times(x3), wpr, 1);
+  denominator = 3;
+  for (; ; ) {
+    numerator = finalise(numerator.times(x2), wpr, 1);
+    t = sum4.plus(divide(numerator, new Ctor(denominator), wpr, 1));
+    if (digitsToString(t.d).slice(0, wpr) === digitsToString(sum4.d).slice(0, wpr)) {
+      sum4 = sum4.times(2);
+      if (e !== 0) sum4 = sum4.plus(getLn10(Ctor, wpr + 2, pr).times(e + ""));
+      sum4 = divide(sum4, new Ctor(n), wpr, 1);
+      if (sd == null) {
+        if (checkRoundingDigits(sum4.d, wpr - guard, rm, rep)) {
+          Ctor.precision = wpr += guard;
+          t = numerator = x3 = divide(x1.minus(1), x1.plus(1), wpr, 1);
+          x2 = finalise(x3.times(x3), wpr, 1);
+          denominator = rep = 1;
+        } else {
+          return finalise(sum4, Ctor.precision = pr, rm, external = true);
+        }
+      } else {
+        Ctor.precision = pr;
+        return sum4;
+      }
+    }
+    sum4 = t;
+    denominator += 2;
+  }
+}
+function nonFiniteToString(x2) {
+  return String(x2.s * x2.s / 0);
+}
+function parseDecimal(x2, str) {
+  var e, i2, len;
+  if ((e = str.indexOf(".")) > -1) str = str.replace(".", "");
+  if ((i2 = str.search(/e/i)) > 0) {
+    if (e < 0) e = i2;
+    e += +str.slice(i2 + 1);
+    str = str.substring(0, i2);
+  } else if (e < 0) {
+    e = str.length;
+  }
+  for (i2 = 0; str.charCodeAt(i2) === 48; i2++) ;
+  for (len = str.length; str.charCodeAt(len - 1) === 48; --len) ;
+  str = str.slice(i2, len);
+  if (str) {
+    len -= i2;
+    x2.e = e = e - i2 - 1;
+    x2.d = [];
+    i2 = (e + 1) % LOG_BASE;
+    if (e < 0) i2 += LOG_BASE;
+    if (i2 < len) {
+      if (i2) x2.d.push(+str.slice(0, i2));
+      for (len -= LOG_BASE; i2 < len; ) x2.d.push(+str.slice(i2, i2 += LOG_BASE));
+      str = str.slice(i2);
+      i2 = LOG_BASE - str.length;
+    } else {
+      i2 -= len;
+    }
+    for (; i2--; ) str += "0";
+    x2.d.push(+str);
+    if (external) {
+      if (x2.e > x2.constructor.maxE) {
+        x2.d = null;
+        x2.e = NaN;
+      } else if (x2.e < x2.constructor.minE) {
+        x2.e = 0;
+        x2.d = [0];
+      }
+    }
+  } else {
+    x2.e = 0;
+    x2.d = [0];
+  }
+  return x2;
+}
+function parseOther(x2, str) {
+  var base, Ctor, divisor, i2, isFloat, len, p, xd, xe;
+  if (str.indexOf("_") > -1) {
+    str = str.replace(/(\d)_(?=\d)/g, "$1");
+    if (isDecimal.test(str)) return parseDecimal(x2, str);
+  } else if (str === "Infinity" || str === "NaN") {
+    if (!+str) x2.s = NaN;
+    x2.e = NaN;
+    x2.d = null;
+    return x2;
+  }
+  if (isHex.test(str)) {
+    base = 16;
+    str = str.toLowerCase();
+  } else if (isBinary.test(str)) {
+    base = 2;
+  } else if (isOctal.test(str)) {
+    base = 8;
+  } else {
+    throw Error(invalidArgument + str);
+  }
+  i2 = str.search(/p/i);
+  if (i2 > 0) {
+    p = +str.slice(i2 + 1);
+    str = str.substring(2, i2);
+  } else {
+    str = str.slice(2);
+  }
+  i2 = str.indexOf(".");
+  isFloat = i2 >= 0;
+  Ctor = x2.constructor;
+  if (isFloat) {
+    str = str.replace(".", "");
+    len = str.length;
+    i2 = len - i2;
+    divisor = intPow(Ctor, new Ctor(base), i2, i2 * 2);
+  }
+  xd = convertBase(str, base, BASE);
+  xe = xd.length - 1;
+  for (i2 = xe; xd[i2] === 0; --i2) xd.pop();
+  if (i2 < 0) return new Ctor(x2.s * 0);
+  x2.e = getBase10Exponent(xd, xe);
+  x2.d = xd;
+  external = false;
+  if (isFloat) x2 = divide(x2, divisor, len * 4);
+  if (p) x2 = x2.times(Math.abs(p) < 54 ? mathpow(2, p) : Decimal.pow(2, p));
+  external = true;
+  return x2;
+}
+function sine(Ctor, x2) {
+  var k, len = x2.d.length;
+  if (len < 3) {
+    return x2.isZero() ? x2 : taylorSeries(Ctor, 2, x2, x2);
+  }
+  k = 1.4 * Math.sqrt(len);
+  k = k > 16 ? 16 : k | 0;
+  x2 = x2.times(1 / tinyPow(5, k));
+  x2 = taylorSeries(Ctor, 2, x2, x2);
+  var sin2_x, d5 = new Ctor(5), d16 = new Ctor(16), d20 = new Ctor(20);
+  for (; k--; ) {
+    sin2_x = x2.times(x2);
+    x2 = x2.times(d5.plus(sin2_x.times(d16.times(sin2_x).minus(d20))));
+  }
+  return x2;
+}
+function taylorSeries(Ctor, n, x2, y, isHyperbolic) {
+  var j, t, u, x22, i2 = 1, pr = Ctor.precision, k = Math.ceil(pr / LOG_BASE);
+  external = false;
+  x22 = x2.times(x2);
+  u = new Ctor(y);
+  for (; ; ) {
+    t = divide(u.times(x22), new Ctor(n++ * n++), pr, 1);
+    u = isHyperbolic ? y.plus(t) : y.minus(t);
+    y = divide(t.times(x22), new Ctor(n++ * n++), pr, 1);
+    t = u.plus(y);
+    if (t.d[k] !== void 0) {
+      for (j = k; t.d[j] === u.d[j] && j--; ) ;
+      if (j == -1) break;
+    }
+    j = u;
+    u = y;
+    y = t;
+    t = j;
+    i2++;
+  }
+  external = true;
+  t.d.length = k + 1;
+  return t;
+}
+function tinyPow(b, e) {
+  var n = b;
+  while (--e) n *= b;
+  return n;
+}
+function toLessThanHalfPi(Ctor, x2) {
+  var t, isNeg = x2.s < 0, pi = getPi(Ctor, Ctor.precision, 1), halfPi = pi.times(0.5);
+  x2 = x2.abs();
+  if (x2.lte(halfPi)) {
+    quadrant = isNeg ? 4 : 1;
+    return x2;
+  }
+  t = x2.divToInt(pi);
+  if (t.isZero()) {
+    quadrant = isNeg ? 3 : 2;
+  } else {
+    x2 = x2.minus(t.times(pi));
+    if (x2.lte(halfPi)) {
+      quadrant = isOdd(t) ? isNeg ? 2 : 3 : isNeg ? 4 : 1;
+      return x2;
+    }
+    quadrant = isOdd(t) ? isNeg ? 1 : 4 : isNeg ? 3 : 2;
+  }
+  return x2.minus(pi).abs();
+}
+function toStringBinary(x2, baseOut, sd, rm) {
+  var base, e, i2, k, len, roundUp, str, xd, y, Ctor = x2.constructor, isExp = sd !== void 0;
+  if (isExp) {
+    checkInt32(sd, 1, MAX_DIGITS);
+    if (rm === void 0) rm = Ctor.rounding;
+    else checkInt32(rm, 0, 8);
+  } else {
+    sd = Ctor.precision;
+    rm = Ctor.rounding;
+  }
+  if (!x2.isFinite()) {
+    str = nonFiniteToString(x2);
+  } else {
+    str = finiteToString(x2);
+    i2 = str.indexOf(".");
+    if (isExp) {
+      base = 2;
+      if (baseOut == 16) {
+        sd = sd * 4 - 3;
+      } else if (baseOut == 8) {
+        sd = sd * 3 - 2;
+      }
+    } else {
+      base = baseOut;
+    }
+    if (i2 >= 0) {
+      str = str.replace(".", "");
+      y = new Ctor(1);
+      y.e = str.length - i2;
+      y.d = convertBase(finiteToString(y), 10, base);
+      y.e = y.d.length;
+    }
+    xd = convertBase(str, 10, base);
+    e = len = xd.length;
+    for (; xd[--len] == 0; ) xd.pop();
+    if (!xd[0]) {
+      str = isExp ? "0p+0" : "0";
+    } else {
+      if (i2 < 0) {
+        e--;
+      } else {
+        x2 = new Ctor(x2);
+        x2.d = xd;
+        x2.e = e;
+        x2 = divide(x2, y, sd, rm, 0, base);
+        xd = x2.d;
+        e = x2.e;
+        roundUp = inexact;
+      }
+      i2 = xd[sd];
+      k = base / 2;
+      roundUp = roundUp || xd[sd + 1] !== void 0;
+      roundUp = rm < 4 ? (i2 !== void 0 || roundUp) && (rm === 0 || rm === (x2.s < 0 ? 3 : 2)) : i2 > k || i2 === k && (rm === 4 || roundUp || rm === 6 && xd[sd - 1] & 1 || rm === (x2.s < 0 ? 8 : 7));
+      xd.length = sd;
+      if (roundUp) {
+        for (; ++xd[--sd] > base - 1; ) {
+          xd[sd] = 0;
+          if (!sd) {
+            ++e;
+            xd.unshift(1);
+          }
+        }
+      }
+      for (len = xd.length; !xd[len - 1]; --len) ;
+      for (i2 = 0, str = ""; i2 < len; i2++) str += NUMERALS.charAt(xd[i2]);
+      if (isExp) {
+        if (len > 1) {
+          if (baseOut == 16 || baseOut == 8) {
+            i2 = baseOut == 16 ? 4 : 3;
+            for (--len; len % i2; len++) str += "0";
+            xd = convertBase(str, base, baseOut);
+            for (len = xd.length; !xd[len - 1]; --len) ;
+            for (i2 = 1, str = "1."; i2 < len; i2++) str += NUMERALS.charAt(xd[i2]);
+          } else {
+            str = str.charAt(0) + "." + str.slice(1);
+          }
+        }
+        str = str + (e < 0 ? "p" : "p+") + e;
+      } else if (e < 0) {
+        for (; ++e; ) str = "0" + str;
+        str = "0." + str;
+      } else {
+        if (++e > len) for (e -= len; e--; ) str += "0";
+        else if (e < len) str = str.slice(0, e) + "." + str.slice(e);
+      }
+    }
+    str = (baseOut == 16 ? "0x" : baseOut == 2 ? "0b" : baseOut == 8 ? "0o" : "") + str;
+  }
+  return x2.s < 0 ? "-" + str : str;
+}
+function truncate(arr2, len) {
+  if (arr2.length > len) {
+    arr2.length = len;
+    return true;
+  }
+}
+function abs(x2) {
+  return new this(x2).abs();
+}
+function acos(x2) {
+  return new this(x2).acos();
+}
+function acosh(x2) {
+  return new this(x2).acosh();
+}
+function add(x2, y) {
+  return new this(x2).plus(y);
+}
+function asin(x2) {
+  return new this(x2).asin();
+}
+function asinh(x2) {
+  return new this(x2).asinh();
+}
+function atan(x2) {
+  return new this(x2).atan();
+}
+function atanh(x2) {
+  return new this(x2).atanh();
+}
+function atan2(y, x2) {
+  y = new this(y);
+  x2 = new this(x2);
+  var r, pr = this.precision, rm = this.rounding, wpr = pr + 4;
+  if (!y.s || !x2.s) {
+    r = new this(NaN);
+  } else if (!y.d && !x2.d) {
+    r = getPi(this, wpr, 1).times(x2.s > 0 ? 0.25 : 0.75);
+    r.s = y.s;
+  } else if (!x2.d || y.isZero()) {
+    r = x2.s < 0 ? getPi(this, pr, rm) : new this(0);
+    r.s = y.s;
+  } else if (!y.d || x2.isZero()) {
+    r = getPi(this, wpr, 1).times(0.5);
+    r.s = y.s;
+  } else if (x2.s < 0) {
+    this.precision = wpr;
+    this.rounding = 1;
+    r = this.atan(divide(y, x2, wpr, 1));
+    x2 = getPi(this, wpr, 1);
+    this.precision = pr;
+    this.rounding = rm;
+    r = y.s < 0 ? r.minus(x2) : r.plus(x2);
+  } else {
+    r = this.atan(divide(y, x2, wpr, 1));
+  }
+  return r;
+}
+function cbrt(x2) {
+  return new this(x2).cbrt();
+}
+function ceil(x2) {
+  return finalise(x2 = new this(x2), x2.e + 1, 2);
+}
+function clamp(x2, min2, max3) {
+  return new this(x2).clamp(min2, max3);
+}
+function config(obj) {
+  if (!obj || typeof obj !== "object") throw Error(decimalError + "Object expected");
+  var i2, p, v, useDefaults = obj.defaults === true, ps = [
+    "precision",
+    1,
+    MAX_DIGITS,
+    "rounding",
+    0,
+    8,
+    "toExpNeg",
+    -EXP_LIMIT,
+    0,
+    "toExpPos",
+    0,
+    EXP_LIMIT,
+    "maxE",
+    0,
+    EXP_LIMIT,
+    "minE",
+    -EXP_LIMIT,
+    0,
+    "modulo",
+    0,
+    9
+  ];
+  for (i2 = 0; i2 < ps.length; i2 += 3) {
+    if (p = ps[i2], useDefaults) this[p] = DEFAULTS[p];
+    if ((v = obj[p]) !== void 0) {
+      if (mathfloor(v) === v && v >= ps[i2 + 1] && v <= ps[i2 + 2]) this[p] = v;
+      else throw Error(invalidArgument + p + ": " + v);
+    }
+  }
+  if (p = "crypto", useDefaults) this[p] = DEFAULTS[p];
+  if ((v = obj[p]) !== void 0) {
+    if (v === true || v === false || v === 0 || v === 1) {
+      if (v) {
+        if (typeof crypto != "undefined" && crypto && (crypto.getRandomValues || crypto.randomBytes)) {
+          this[p] = true;
+        } else {
+          throw Error(cryptoUnavailable);
+        }
+      } else {
+        this[p] = false;
+      }
+    } else {
+      throw Error(invalidArgument + p + ": " + v);
+    }
+  }
+  return this;
+}
+function cos(x2) {
+  return new this(x2).cos();
+}
+function cosh(x2) {
+  return new this(x2).cosh();
+}
+function clone(obj) {
+  var i2, p, ps;
+  function Decimal2(v) {
+    var e, i3, t, x2 = this;
+    if (!(x2 instanceof Decimal2)) return new Decimal2(v);
+    x2.constructor = Decimal2;
+    if (isDecimalInstance(v)) {
+      x2.s = v.s;
+      if (external) {
+        if (!v.d || v.e > Decimal2.maxE) {
+          x2.e = NaN;
+          x2.d = null;
+        } else if (v.e < Decimal2.minE) {
+          x2.e = 0;
+          x2.d = [0];
+        } else {
+          x2.e = v.e;
+          x2.d = v.d.slice();
+        }
+      } else {
+        x2.e = v.e;
+        x2.d = v.d ? v.d.slice() : v.d;
+      }
+      return;
+    }
+    t = typeof v;
+    if (t === "number") {
+      if (v === 0) {
+        x2.s = 1 / v < 0 ? -1 : 1;
+        x2.e = 0;
+        x2.d = [0];
+        return;
+      }
+      if (v < 0) {
+        v = -v;
+        x2.s = -1;
+      } else {
+        x2.s = 1;
+      }
+      if (v === ~~v && v < 1e7) {
+        for (e = 0, i3 = v; i3 >= 10; i3 /= 10) e++;
+        if (external) {
+          if (e > Decimal2.maxE) {
+            x2.e = NaN;
+            x2.d = null;
+          } else if (e < Decimal2.minE) {
+            x2.e = 0;
+            x2.d = [0];
+          } else {
+            x2.e = e;
+            x2.d = [v];
+          }
+        } else {
+          x2.e = e;
+          x2.d = [v];
+        }
+        return;
+      }
+      if (v * 0 !== 0) {
+        if (!v) x2.s = NaN;
+        x2.e = NaN;
+        x2.d = null;
+        return;
+      }
+      return parseDecimal(x2, v.toString());
+    }
+    if (t === "string") {
+      if ((i3 = v.charCodeAt(0)) === 45) {
+        v = v.slice(1);
+        x2.s = -1;
+      } else {
+        if (i3 === 43) v = v.slice(1);
+        x2.s = 1;
+      }
+      return isDecimal.test(v) ? parseDecimal(x2, v) : parseOther(x2, v);
+    }
+    if (t === "bigint") {
+      if (v < 0) {
+        v = -v;
+        x2.s = -1;
+      } else {
+        x2.s = 1;
+      }
+      return parseDecimal(x2, v.toString());
+    }
+    throw Error(invalidArgument + v);
+  }
+  Decimal2.prototype = P;
+  Decimal2.ROUND_UP = 0;
+  Decimal2.ROUND_DOWN = 1;
+  Decimal2.ROUND_CEIL = 2;
+  Decimal2.ROUND_FLOOR = 3;
+  Decimal2.ROUND_HALF_UP = 4;
+  Decimal2.ROUND_HALF_DOWN = 5;
+  Decimal2.ROUND_HALF_EVEN = 6;
+  Decimal2.ROUND_HALF_CEIL = 7;
+  Decimal2.ROUND_HALF_FLOOR = 8;
+  Decimal2.EUCLID = 9;
+  Decimal2.config = Decimal2.set = config;
+  Decimal2.clone = clone;
+  Decimal2.isDecimal = isDecimalInstance;
+  Decimal2.abs = abs;
+  Decimal2.acos = acos;
+  Decimal2.acosh = acosh;
+  Decimal2.add = add;
+  Decimal2.asin = asin;
+  Decimal2.asinh = asinh;
+  Decimal2.atan = atan;
+  Decimal2.atanh = atanh;
+  Decimal2.atan2 = atan2;
+  Decimal2.cbrt = cbrt;
+  Decimal2.ceil = ceil;
+  Decimal2.clamp = clamp;
+  Decimal2.cos = cos;
+  Decimal2.cosh = cosh;
+  Decimal2.div = div;
+  Decimal2.exp = exp;
+  Decimal2.floor = floor;
+  Decimal2.hypot = hypot;
+  Decimal2.ln = ln;
+  Decimal2.log = log;
+  Decimal2.log10 = log10;
+  Decimal2.log2 = log2;
+  Decimal2.max = max;
+  Decimal2.min = min;
+  Decimal2.mod = mod;
+  Decimal2.mul = mul;
+  Decimal2.pow = pow;
+  Decimal2.random = random;
+  Decimal2.round = round;
+  Decimal2.sign = sign;
+  Decimal2.sin = sin;
+  Decimal2.sinh = sinh;
+  Decimal2.sqrt = sqrt;
+  Decimal2.sub = sub;
+  Decimal2.sum = sum;
+  Decimal2.tan = tan;
+  Decimal2.tanh = tanh;
+  Decimal2.trunc = trunc;
+  if (obj === void 0) obj = {};
+  if (obj) {
+    if (obj.defaults !== true) {
+      ps = ["precision", "rounding", "toExpNeg", "toExpPos", "maxE", "minE", "modulo", "crypto"];
+      for (i2 = 0; i2 < ps.length; ) if (!obj.hasOwnProperty(p = ps[i2++])) obj[p] = this[p];
+    }
+  }
+  Decimal2.config(obj);
+  return Decimal2;
+}
+function div(x2, y) {
+  return new this(x2).div(y);
+}
+function exp(x2) {
+  return new this(x2).exp();
+}
+function floor(x2) {
+  return finalise(x2 = new this(x2), x2.e + 1, 3);
+}
+function hypot() {
+  var i2, n, t = new this(0);
+  external = false;
+  for (i2 = 0; i2 < arguments.length; ) {
+    n = new this(arguments[i2++]);
+    if (!n.d) {
+      if (n.s) {
+        external = true;
+        return new this(1 / 0);
+      }
+      t = n;
+    } else if (t.d) {
+      t = t.plus(n.times(n));
+    }
+  }
+  external = true;
+  return t.sqrt();
+}
+function isDecimalInstance(obj) {
+  return obj instanceof Decimal || obj && obj.toStringTag === tag || false;
+}
+function ln(x2) {
+  return new this(x2).ln();
+}
+function log(x2, y) {
+  return new this(x2).log(y);
+}
+function log2(x2) {
+  return new this(x2).log(2);
+}
+function log10(x2) {
+  return new this(x2).log(10);
+}
+function max() {
+  return maxOrMin(this, arguments, -1);
+}
+function min() {
+  return maxOrMin(this, arguments, 1);
+}
+function mod(x2, y) {
+  return new this(x2).mod(y);
+}
+function mul(x2, y) {
+  return new this(x2).mul(y);
+}
+function pow(x2, y) {
+  return new this(x2).pow(y);
+}
+function random(sd) {
+  var d, e, k, n, i2 = 0, r = new this(1), rd = [];
+  if (sd === void 0) sd = this.precision;
+  else checkInt32(sd, 1, MAX_DIGITS);
+  k = Math.ceil(sd / LOG_BASE);
+  if (!this.crypto) {
+    for (; i2 < k; ) rd[i2++] = Math.random() * 1e7 | 0;
+  } else if (crypto.getRandomValues) {
+    d = crypto.getRandomValues(new Uint32Array(k));
+    for (; i2 < k; ) {
+      n = d[i2];
+      if (n >= 429e7) {
+        d[i2] = crypto.getRandomValues(new Uint32Array(1))[0];
+      } else {
+        rd[i2++] = n % 1e7;
+      }
+    }
+  } else if (crypto.randomBytes) {
+    d = crypto.randomBytes(k *= 4);
+    for (; i2 < k; ) {
+      n = d[i2] + (d[i2 + 1] << 8) + (d[i2 + 2] << 16) + ((d[i2 + 3] & 127) << 24);
+      if (n >= 214e7) {
+        crypto.randomBytes(4).copy(d, i2);
+      } else {
+        rd.push(n % 1e7);
+        i2 += 4;
+      }
+    }
+    i2 = k / 4;
+  } else {
+    throw Error(cryptoUnavailable);
+  }
+  k = rd[--i2];
+  sd %= LOG_BASE;
+  if (k && sd) {
+    n = mathpow(10, LOG_BASE - sd);
+    rd[i2] = (k / n | 0) * n;
+  }
+  for (; rd[i2] === 0; i2--) rd.pop();
+  if (i2 < 0) {
+    e = 0;
+    rd = [0];
+  } else {
+    e = -1;
+    for (; rd[0] === 0; e -= LOG_BASE) rd.shift();
+    for (k = 1, n = rd[0]; n >= 10; n /= 10) k++;
+    if (k < LOG_BASE) e -= LOG_BASE - k;
+  }
+  r.e = e;
+  r.d = rd;
+  return r;
+}
+function round(x2) {
+  return finalise(x2 = new this(x2), x2.e + 1, this.rounding);
+}
+function sign(x2) {
+  x2 = new this(x2);
+  return x2.d ? x2.d[0] ? x2.s : 0 * x2.s : x2.s || NaN;
+}
+function sin(x2) {
+  return new this(x2).sin();
+}
+function sinh(x2) {
+  return new this(x2).sinh();
+}
+function sqrt(x2) {
+  return new this(x2).sqrt();
+}
+function sub(x2, y) {
+  return new this(x2).sub(y);
+}
+function sum() {
+  var i2 = 0, args = arguments, x2 = new this(args[i2]);
+  external = false;
+  for (; x2.s && ++i2 < args.length; ) x2 = x2.plus(args[i2]);
+  external = true;
+  return finalise(x2, this.precision, this.rounding);
+}
+function tan(x2) {
+  return new this(x2).tan();
+}
+function tanh(x2) {
+  return new this(x2).tanh();
+}
+function trunc(x2) {
+  return finalise(x2 = new this(x2), x2.e + 1, 1);
+}
+P[/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")] = P.toString;
+P[Symbol.toStringTag] = "Decimal";
+var Decimal = P.constructor = clone(DEFAULTS);
+LN10 = new Decimal(LN10);
+PI = new Decimal(PI);
+var decimal_default = Decimal;
+
+// server/profit/decimal.mjs
+var D = decimal_default.clone({ precision: 40, rounding: decimal_default.ROUND_HALF_UP });
+var money = (x2) => x2 == null ? null : new D(x2).toDecimalPlaces(2).toFixed(2);
+var six = (x2) => new D(x2).toDecimalPlaces(6);
+var sum2 = (xs) => xs.some((x2) => x2 == null) ? null : xs.reduce((s, x2) => s.plus(x2), new D(0));
+var valid = (r) => ["已确认", "模拟确认", "暂估", "不适用"].includes(r.status);
+
+// server/profit/baseline.mjs
+function prepareBaseline(dataset) {
+  const { order: o, baseline: b } = dataset;
+  const p = b.params;
+  const q = sum2(b.recipe.map((m) => m.quantity));
+  const ref = sum2(b.recipe.map((m) => m.quantity == null || m.referencePrice == null ? null : new D(m.quantity).times(m.referencePrice)));
+  const available = q?.gt(0) && ref?.gt(0) && o.price != null && o.weight != null && new D(o.weight).gt(0) && p.material_pct != null;
+  const factor = available ? new D(o.price).times(p.material_pct).div(o.weight).div(ref.div(q)) : null;
+  const materials = b.recipe.map((m) => ({ ...m, share: available ? new D(m.quantity).div(q) : null, price: available ? six(new D(m.referencePrice).times(factor)) : null }));
+  function theoretical(quantity, mode = "ideal") {
+    const revenue = o.price == null || quantity == null ? null : new D(quantity).times(o.price);
+    const material = quantity == null ? null : sum2(materials.map((m) => m.price == null ? null : new D(money(six(new D(quantity).times(o.weight).times(m.share)).times(m.price)))));
+    const byQty = (k) => quantity == null || p[k] == null ? null : new D(money(new D(quantity).times(p[k])));
+    const byRevenue = (k) => revenue == null || p[k] == null ? null : new D(money(revenue.times(p[k])));
+    const labor = p.prep_piece == null || p.press_piece == null || quantity == null ? null : new D(money(new D(quantity).times(new D(p.prep_piece).plus(p.press_piece))));
+    const management = byRevenue("production_mgmt"), energy = byRevenue("energy_pct"), otherProduction = byQty("other_production_piece");
+    const reserve = mode === "budget" ? sum2([byRevenue("production_loss_budget"), byRevenue("defect_loss_budget")]) : new D(0);
+    const production = sum2([material, labor, management, energy, otherProduction, reserve]);
+    const gross = revenue != null && production != null ? revenue.minus(production) : null;
+    const operatingCosts = sum2([byRevenue("company_mgmt"), byRevenue("admin_pct"), byQty("logistics_piece"), byQty("finance_piece")]);
+    const operating = gross != null && operatingCosts != null ? gross.minus(operatingCosts) : null;
+    return { revenue: money(revenue), material: money(material), labor: money(labor), manufacturing: money(sum2([management, energy])), productionManagement: money(management), energy: money(energy), otherProduction: money(otherProduction), reserve: money(reserve), operatingCosts: money(operatingCosts), gross: money(gross), operating: money(operating) };
+  }
+  return { materials, theoretical };
+}
+
+// server/profit/diagnosis.mjs
+var DIAGNOSIS_RULE_VERSION = "DIAG-1.0";
+var REFERENCE_RULE_VERSION = "REF-1.0";
+var SEVERITY_RULE_VERSION = "SEV-1.0";
+var PRIMARY_SHARE_THRESHOLD = "0.60";
+var SEVERITY_THRESHOLDS = { normalMax: "0.10", attentionMax: "0.20", keyMax: "0.30" };
+var dec = (v) => v == null || v === "" ? null : new D(v);
+var amount = (d, places = 2) => d == null ? null : d.toFixed(places);
+var ratio = (d) => d == null ? null : d.toFixed(8);
+var pp = (d) => d == null ? null : d.times(100).toFixed(2);
+var COMPONENTS = {
+  materialPrice: {
+    label: "材料价格",
+    kind: "production",
+    increase: "实际采购单价合计高于理论基准，增加差距。",
+    offset: "实际采购单价合计低于理论基准，抵消差距。",
+    suggestion: "核对采购单价、供应商报价和调价生效日期，确认是否存在未同步到理论基准的涨价。",
+    evidence: "每日材料记录（净耗、单价）"
+  },
+  materialUsage: {
+    label: "材料耗用",
+    kind: "production",
+    increase: "实际材料净耗高于同进度标准，增加差距。",
+    offset: "实际材料净耗低于同进度标准，抵消差距。",
+    suggestion: "核对领退料、配方重量、计量口径和不良品耗料记录，确认净耗偏高的具体批次。",
+    evidence: "每日材料记录、原订单配方"
+  },
+  labor: {
+    label: "人工",
+    kind: "production",
+    increase: "实际人工费用高于同进度标准，增加差距。",
+    offset: "实际人工费用低于同进度标准，抵消差距。",
+    suggestion: "核对工价、计件量和人工归属期间，确认人工费用偏高的具体工序。",
+    evidence: "每日费用（人工）"
+  },
+  energy: {
+    label: "能源",
+    kind: "production",
+    increase: "实际能源费用高于同进度标准，增加差距。",
+    offset: "实际能源费用低于同进度标准，抵消差距。",
+    suggestion: "核对能源抄表、单价和分摊口径。",
+    evidence: "每日费用（制造·能源）"
+  },
+  otherManufacturing: {
+    label: "其他制造",
+    kind: "production",
+    increase: "实际其他制造费用高于同进度标准，增加差距。",
+    offset: "实际其他制造费用低于同进度标准，抵消差距。",
+    suggestion: "核对制造费用项目、分摊口径与归属期间。",
+    evidence: "每日费用（制造）"
+  },
+  otherProduction: {
+    label: "其他生产",
+    kind: "production",
+    increase: "实际其他生产费用高于同进度标准，增加差距。",
+    offset: "实际其他生产费用低于同进度标准，抵消差距。",
+    suggestion: "核对其他生产费用项目与归属期间。",
+    evidence: "每日费用（其他生产）"
+  },
+  budgetAdjustment: {
+    label: "预算允许损耗",
+    kind: "baseline",
+    increase: "预算允许损耗按基线计提，属于对照口径调整。",
+    offset: "预算允许损耗按基线计提，属于对照口径调整。",
+    suggestion: null,
+    evidence: "成本计算中的生产损耗与不良损耗预算"
+  },
+  rounding: {
+    label: "舍入调整",
+    kind: "rounding",
+    increase: "舍入调整，仅用于金额闭合。",
+    offset: "舍入调整，仅用于金额闭合。",
+    suggestion: null,
+    evidence: "逐日舍入后的差值"
+  }
+};
+function classify(component, value) {
+  if (value == null) return { effect: "unknown", fact: "该项资料待补齐，暂不判断。" };
+  if (value.isZero()) return { effect: "neutral", fact: "该项净影响为零。" };
+  const meta = COMPONENTS[component];
+  return { effect: value.gt(0) ? "increase" : "offset", fact: value.gt(0) ? meta.increase : meta.offset };
+}
+function referenceItem({ key, label, formula, unit: unit2, actual, threshold, actualKnown, thresholdKnown, reasons, basis, source, applicability, compare: compare2 }) {
+  const known = actualKnown && thresholdKnown && actual != null && threshold != null;
+  const breached = known ? compare2(actual, threshold) : null;
+  return {
+    key,
+    label,
+    status: known ? "known" : "unknown",
+    actualKnown,
+    thresholdKnown,
+    actual: ratio(actual),
+    threshold: ratio(threshold),
+    breached,
+    gapPp: known ? pp(actual.minus(threshold).abs()) : null,
+    relation: known ? breached ? key === "margin" ? "below" : "above" : key === "margin" ? "at_or_above" : "at_or_below" : null,
+    reasons,
+    formula,
+    unit: unit2,
+    basis,
+    source,
+    applicability
+  };
+}
+function buildReferenceThresholds({ order, cumulative, theoreticalBudget, baselineId, asOf } = {}) {
+  const revenue = dec(theoreticalBudget?.revenue);
+  const gross = dec(theoreticalBudget?.gross);
+  const actualMargin = dec(cumulative?.actual?.margin);
+  const marginReasons = [];
+  if (actualMargin == null) marginReasons.push("累计实际毛利率待补齐");
+  if (revenue == null) marginReasons.push("预算理论收入待补齐");
+  else if (revenue.lte(0)) marginReasons.push("预算理论收入为零，不能作为分母");
+  if (gross == null) marginReasons.push("预算理论毛利待补齐");
+  const marginThreshold = revenue != null && revenue.gt(0) && gross != null ? gross.div(revenue) : null;
+  const margin = referenceItem({
+    key: "margin",
+    label: "毛利率",
+    formula: "预算理论毛利 ÷ 预算理论收入",
+    unit: "比例",
+    actual: actualMargin,
+    threshold: marginThreshold,
+    actualKnown: actualMargin != null,
+    thresholdKnown: marginThreshold != null,
+    reasons: marginReasons,
+    basis: { revenue: amount(revenue), gross: amount(gross) },
+    source: "成本模型 · 含损耗预算基线",
+    applicability: "仅作预算模型参考，不是已核定的企业安全底线。",
+    compare: (a, t) => a.lt(t)
+  });
+  const quantity = dec(order?.quantity);
+  const reserve = dec(theoreticalBudget?.reserve);
+  const material = dec(theoreticalBudget?.material);
+  const labor = dec(theoreticalBudget?.labor);
+  const processed = dec(cumulative?.processed);
+  const defects = dec(cumulative?.defects);
+  const actualDefect = processed != null && processed.gt(0) && defects != null ? defects.div(processed) : null;
+  const defectReasons = [];
+  if (actualDefect == null) {
+    if (processed == null) defectReasons.push("累计加工量待补齐");
+    else if (processed.lte(0)) defectReasons.push("累计加工量为零，不能作为分母");
+    if (defects == null) defectReasons.push("累计不良量待补齐");
+  }
+  if (quantity == null) defectReasons.push("合同数量待补齐");
+  else if (quantity.lte(0)) defectReasons.push("合同数量为零，不能作为分母");
+  if (reserve == null) defectReasons.push("预算损耗准备金待补齐");
+  else if (reserve.lt(0)) defectReasons.push("预算损耗准备金为负，不能推导参考阈值");
+  if (material == null) defectReasons.push("预算材料成本待补齐");
+  else if (material.lt(0)) defectReasons.push("预算材料成本为负，不能推导参考阈值");
+  if (labor == null) defectReasons.push("预算人工成本待补齐");
+  else if (labor.lt(0)) defectReasons.push("预算人工成本为负，不能推导参考阈值");
+  const unitCost = material != null && labor != null && quantity != null && quantity.gt(0) ? material.plus(labor).div(quantity) : null;
+  if (unitCost != null && unitCost.lte(0)) defectReasons.push("预算材料及人工单位成本为零，不能换算参考阈值");
+  const allowed = reserve != null && reserve.gte(0) && unitCost != null && unitCost.gt(0) ? reserve.div(unitCost) : null;
+  const defectThreshold = allowed != null && quantity != null && quantity.gt(0) ? allowed.div(quantity.plus(allowed)) : null;
+  if (defectThreshold == null && defectReasons.length === 0) defectReasons.push("参考阈值所需参数不完整");
+  const defect = referenceItem({
+    key: "defect",
+    label: "产品不良率",
+    formula: "允许补产量 = 损耗准备金 ÷（（预算材料 + 预算人工）÷ 合同数量）；参考阈值 = 允许补产量 ÷（合同数量 + 允许补产量）",
+    unit: "比例",
+    actual: actualDefect,
+    threshold: defectThreshold,
+    actualKnown: actualDefect != null,
+    thresholdKnown: defectThreshold != null,
+    reasons: defectReasons,
+    basis: {
+      reserve: amount(reserve),
+      material: amount(material),
+      labor: amount(labor),
+      quantity: quantity == null ? null : quantity.toString(),
+      unitCost: amount(unitCost, 6),
+      allowedQuantity: amount(allowed, 6),
+      processed: processed == null ? null : processed.toString(),
+      defects: defects == null ? null : defects.toString()
+    },
+    source: "成本模型 · 含损耗预算基线中的生产损耗与不良损耗预算",
+    applicability: "仅作预算模型参考，不是质量检验标准；材料、人工、收入或数量缺失、为零时不推导。",
+    compare: (a, t) => a.gt(t)
+  });
+  const breaches = [margin, defect].filter((x2) => x2.breached).map((x2) => `${x2.label}${x2.key === "margin" ? "低于" : "高于"}参考阈值 ${x2.gapPp} 个百分点`);
+  const unknownItems = [margin, defect].filter((x2) => x2.status === "unknown").map((x2) => ({
+    key: x2.key,
+    label: x2.label,
+    actualKnown: x2.actualKnown,
+    thresholdKnown: x2.thresholdKnown,
+    reasons: x2.reasons
+  }));
+  const state = breaches.length ? "breach" : unknownItems.length === 2 ? "unknown" : unknownItems.length ? "partial" : "ok";
+  return {
+    state,
+    breaches,
+    unknownItems,
+    margin,
+    defect,
+    baselineId: baselineId ?? null,
+    asOf: asOf ?? null,
+    ruleVersion: REFERENCE_RULE_VERSION,
+    model: "预算模型参考阈值",
+    source: "成本模型 · 含损耗预算基线",
+    applicability: "仅作预算模型参考，不是企业质量检验标准或已核定的经营底线。",
+    note: "毛利率与不良率分别判断；任一未知时不作肯定判断。"
+  };
+}
+function buildSeverity(analysis = {}) {
+  const actual = dec(analysis.cumulative?.actual?.margin);
+  const expected = dec(analysis.cumulative?.expected?.margin);
+  const reasons = [];
+  if (actual == null) reasons.push("累计实际毛利率待补齐");
+  if (expected == null) reasons.push("同进度理论毛利率待补齐");
+  else if (expected.lte(0)) reasons.push("同进度理论毛利率为零或负，不能计算相对下降");
+  const base = {
+    actual: ratio(actual),
+    expected: ratio(expected),
+    decline: null,
+    declinePct: null,
+    declineAbsPct: null,
+    differencePp: null,
+    differenceAbsPp: null,
+    thresholds: {
+      normalMaxPct: new D(SEVERITY_THRESHOLDS.normalMax).times(100).toFixed(2),
+      attentionMaxPct: new D(SEVERITY_THRESHOLDS.attentionMax).times(100).toFixed(2),
+      keyMaxPct: new D(SEVERITY_THRESHOLDS.keyMax).times(100).toFixed(2)
+    },
+    ruleVersion: SEVERITY_RULE_VERSION,
+    source: "累计实际毛利率 vs 同进度理论毛利率（当前对照基线）",
+    note: "按相对下降分档：0–10% 可接受误差，10–20% 需关注，20–30% 重点注意，超过 30% 为大型偏差；该分级不是预算参考阈值越线判断。",
+    reasons
+  };
+  if (reasons.length) return { ...base, level: "not_applicable", label: "待核算", tone: "pending" };
+  const decline = expected.minus(actual).div(expected);
+  const difference = actual.minus(expected);
+  let level, label, tone;
+  if (decline.lt(0)) {
+    level = "better";
+    label = "优于同进度理论";
+    tone = "ok";
+  } else if (decline.isZero()) {
+    level = "normal";
+    label = "与同进度理论持平";
+    tone = "ok";
+  } else if (decline.lte(SEVERITY_THRESHOLDS.normalMax)) {
+    level = "normal";
+    label = "可接受误差";
+    tone = "ok";
+  } else if (decline.lte(SEVERITY_THRESHOLDS.attentionMax)) {
+    level = "attention";
+    label = "需要关注";
+    tone = "caution";
+  } else if (decline.lte(SEVERITY_THRESHOLDS.keyMax)) {
+    level = "key";
+    label = "重点注意";
+    tone = "caution";
+  } else {
+    level = "severe";
+    label = "大型偏差";
+    tone = "bad";
+  }
+  return {
+    ...base,
+    level,
+    label,
+    tone,
+    decline: ratio(decline),
+    declinePct: pp(decline),
+    declineAbsPct: pp(decline.abs()),
+    differencePp: pp(difference),
+    differenceAbsPp: pp(difference.abs())
+  };
+}
+function buildDiagnosis(analysis = {}) {
+  const raw = analysis.bridge?.components ?? {};
+  const total = dec(analysis.bridge?.total);
+  const components = Object.entries(COMPONENTS).map(([key, meta]) => {
+    const value = dec(raw[key]);
+    const stated = classify(key, value);
+    return {
+      key,
+      label: meta.label,
+      kind: meta.kind,
+      amount: amount(value),
+      effect: stated.effect,
+      fact: stated.fact,
+      shareOfIncrease: null,
+      evidence: meta.evidence
+    };
+  });
+  const production = components.filter((c) => c.kind === "production");
+  const increases = production.filter((c) => c.effect === "increase").sort((a, b) => Number(b.amount) - Number(a.amount));
+  const offsets = production.filter((c) => c.effect === "offset").sort((a, b) => Number(a.amount) - Number(b.amount));
+  const unknowns = components.filter((c) => c.effect === "unknown");
+  const productionComplete = production.every((c) => c.amount != null);
+  const closureComplete = components.every((c) => c.amount != null);
+  const knownIncreasesTotal = increases.reduce((s, c) => s.plus(c.amount), new D(0));
+  const knownOffsetsTotal = offsets.reduce((s, c) => s.plus(c.amount), new D(0));
+  const increasesTotal = productionComplete ? knownIncreasesTotal : null;
+  const offsetsTotal = productionComplete ? knownOffsetsTotal : null;
+  if (productionComplete && knownIncreasesTotal.gt(0)) {
+    for (const c of increases) c.shareOfIncrease = new D(c.amount).div(knownIncreasesTotal).toFixed(8);
+  }
+  const primary = productionComplete && increasesTotal != null && increasesTotal.gt(0) && increases.length && new D(increases[0].shareOfIncrease).gte(PRIMARY_SHARE_THRESHOLD) ? increases[0] : null;
+  const baseline = components.find((c) => c.key === "budgetAdjustment");
+  const rounding = components.find((c) => c.key === "rounding");
+  const top = increases[0] ?? null;
+  const missingLabels = unknowns.map((c) => c.label).join("、");
+  let state, title, sub2;
+  if (total == null) {
+    state = "pending";
+    title = "差距原因待补齐";
+    sub2 = `总差距或关键资料缺失，暂不判断主因${missingLabels ? `；待补齐：${missingLabels}` : ""}。`;
+  } else if (total.lte(0)) {
+    state = "at_target";
+    title = "当前没有少赚差距";
+    sub2 = total.isZero() ? "实际生产毛利与同进度理论持平。" : `实际生产毛利高于同进度理论 ¥${total.abs().toFixed(2)}，未形成少赚。`;
+    if (!closureComplete) sub2 += "部分归因资料待补齐，不影响已确认的总差距状态。";
+  } else if (!productionComplete) {
+    state = "gap";
+    title = "差距已确认，部分归因待补齐";
+    sub2 = `已确认少赚 ¥${total.toFixed(2)}；${missingLabels || "部分生产归因项"}资料不完整，暂不判断主因，也不计算完整占比。`;
+  } else if (primary) {
+    state = "gap";
+    title = `差距主要体现在${primary.label}`;
+    sub2 = `${primary.label}影响 ¥${new D(primary.amount).abs().toFixed(2)}，占增支 ${new D(primary.shareOfIncrease).times(100).toFixed(1)}%。`;
+    if (offsetsTotal != null && offsetsTotal.lt(0)) sub2 += `另有抵消项 ¥${offsetsTotal.abs().toFixed(2)}。`;
+  } else if (increasesTotal != null && increasesTotal.gt(0)) {
+    state = "gap";
+    title = "差距由多项成本共同造成";
+    sub2 = `增支合计 ¥${increasesTotal.toFixed(2)}；最大项为${top.label} ¥${new D(top.amount).toFixed(2)}（占增支 ${new D(top.shareOfIncrease).times(100).toFixed(1)}%）。`;
+    if (offsetsTotal != null && offsetsTotal.lt(0)) sub2 += `另有抵消项 ¥${offsetsTotal.abs().toFixed(2)}。`;
+  } else {
+    state = "gap";
+    title = "差距主要来自预算调整";
+    sub2 = "未发现生产成本增支项；差额来自预算允许损耗、舍入或其他调整，需结合基线口径核对。";
+  }
+  const suggestions = total != null && total.gt(0) ? increases.slice(0, 3).map((c) => ({
+    key: c.key,
+    label: c.label,
+    amount: c.amount,
+    shareOfIncrease: c.shareOfIncrease,
+    text: COMPONENTS[c.key].suggestion,
+    evidence: {
+      asOf: analysis.asOf ?? null,
+      revisionId: analysis.revisionId ?? null,
+      baselineId: analysis.baselineId ?? null,
+      source: COMPONENTS[c.key].evidence
+    }
+  })) : [];
+  return {
+    state,
+    severity: buildSeverity(analysis),
+    total: amount(total),
+    attributionComplete: productionComplete,
+    closureComplete,
+    increases,
+    offsets,
+    unknowns,
+    baseline,
+    rounding,
+    components,
+    increasesTotal: amount(increasesTotal),
+    offsetsTotal: amount(offsetsTotal),
+    knownIncreasesTotal: amount(knownIncreasesTotal),
+    knownOffsetsTotal: amount(knownOffsetsTotal),
+    primary: primary ? { key: primary.key, label: primary.label, amount: primary.amount, shareOfIncrease: primary.shareOfIncrease } : null,
+    summary: { title, sub: sub2 },
+    suggestions,
+    evidence: {
+      asOf: analysis.asOf ?? null,
+      revisionId: analysis.revisionId ?? null,
+      baselineId: analysis.baselineId ?? null
+    },
+    rule: {
+      version: DIAGNOSIS_RULE_VERSION,
+      primaryShareThreshold: PRIMARY_SHARE_THRESHOLD,
+      shareDenominator: "正向增支合计",
+      shareLabel: "占增支",
+      note: "主因仅在单一增支项占正向增支合计不低于60%时标识；否则按多项共同造成展示。该阈值是展示规则，不是企业已确认的风险标准。"
+    }
+  };
+}
+
+// server/import/validation.mjs
+function decimal(value) {
+  if (value === null || value === void 0 || String(value).trim() === "") return null;
+  const s = String(value).trim();
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(s)) throw new Error("必须是数值");
+  const d = new decimal_default(s);
+  if (!d.isFinite() || d.abs().gt("1e15") || d.isNegative()) throw new Error("数值必须非负且不超过10^15");
+  return d.toFixed();
+}
+function excelDate(value, epoch1904 = false, withTime = false) {
+  if (value === null || value === void 0 || value === "") throw new Error("日期缺失");
+  if (/^\d{4}-\d{2}-\d{2}/.test(String(value))) {
+    const s = String(value), m = s.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|\+08:00)?)?$/);
+    if (!m || Number(m[2] ?? 0) > 23 || Number(m[3] ?? 0) > 59 || Number(m[4] ?? 0) > 59) throw new Error("日期或时间无效；时区须为+08:00");
+    const date2 = m[1];
+    if ((/* @__PURE__ */ new Date(date2 + "T00:00:00Z")).toISOString().slice(0, 10) !== date2) throw new Error("日期无效");
+    if (withTime && m[5] === "Z") return new Date(Date.parse(s) + 8 * 36e5).toISOString().slice(0, 19) + "+08:00";
+    return withTime ? `${date2}T${m[2] ?? "00"}:${m[3] ?? "00"}:${m[4] ?? "00"}+08:00` : date2;
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 2958465 || !epoch1904 && Math.floor(n) === 60) throw new Error("Excel日期无效");
+  const epoch = epoch1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, n < 60 ? 31 : 30);
+  const ms = epoch + Math.round(n * 86400) * 1e3;
+  const iso = new Date(ms).toISOString();
+  return withTime ? iso.slice(0, 19) + "+08:00" : iso.slice(0, 10);
+}
+function columnIndex(c) {
+  let n = 0;
+  for (const x2 of c) n = n * 26 + x2.charCodeAt(0) - 64;
+  return n;
+}
+function addDays(date2, n) {
+  const d = /* @__PURE__ */ new Date(date2 + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// server/model.mjs
+var CATEGORIES = ["人工", "制造", "其他生产", "管理", "销售", "财务"];
+var STATUSES = ["已确认", "暂估", "缺失", "不适用", "模拟确认"];
+var SCHEMA_VERSION = "IMPORT-0.2";
+
+// server/profit/evaluate.mjs
+var amountSum = (xs) => money(sum2(xs));
+function evaluate(dataset, { asOf, baselineMode = "ideal", knownAt } = {}) {
+  const { order: o, baseline: b } = dataset;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf ?? "") || Number.isNaN(Date.parse(asOf)) || new Date(asOf).toISOString().slice(0, 10) !== asOf) throw new Error("请选择有效日期");
+  if (!["ideal", "budget"].includes(baselineMode)) throw new Error("理论基线模式无效");
+  if (knownAt !== void 0 && (typeof knownAt !== "string" || !/(Z|[+-]\d{2}:\d{2})$/.test(knownAt) || !Number.isFinite(Date.parse(knownAt)))) throw new Error("信息截止时间无效");
+  const base = prepareBaseline(dataset), missing = [], cutoff = knownAt ?? asOf + "T23:59:59+08:00";
+  const cutoffMs = Date.parse(cutoff);
+  const visible = (r) => r.availableAt && Date.parse(r.availableAt) <= cutoffMs;
+  const miss = (date2, field, detail) => {
+    if (missing.length < 1e3) missing.push({ date: date2, field, detail });
+  };
+  for (const k of ["quantity", "price", "weight", "opening"]) if (o[k] == null) miss(null, "order", `订单${k}待补齐`);
+  for (const [k, v] of Object.entries(b.params)) if (v == null) miss(null, "baseline", `基线参数${k}待补齐`);
+  for (const r of b.recipe) if (r.quantity == null || r.referencePrice == null) miss(null, "baseline", `${r.id}配方量或参考价格待补齐`);
+  const sizePlanComplete = b.sizePlan.length > 0 && b.sizePlan.every((s) => s.quantity != null);
+  if (!sizePlanComplete) miss(null, "production", "分码合同量待补齐");
+  const activeSizes = b.sizePlan.filter((s) => s.quantity != null && new D(s.quantity).gt(0));
+  const days = [];
+  for (let date2 = o.start; date2 <= o.end && date2 <= asOf; date2 = addDays(date2, 1)) {
+    const allProduction = dataset.production.filter((r) => r.date === date2);
+    const productions = allProduction.filter(visible);
+    const complete = sizePlanComplete && activeSizes.length > 0 && productions.every((r) => valid(r) && r.dayStatus !== "待补录" && r.processed != null && r.defects != null) && activeSizes.every((s) => {
+      const rs = productions.filter((r) => r.size === s.id);
+      return rs.length === 1 && valid(rs[0]) && rs[0].processed !== null && rs[0].defects !== null;
+    });
+    if (!complete) miss(date2, "production", "日码数量缺失、待确认或尚不可见");
+    const processed = complete ? productions.reduce((s, r) => s + Number(r.processed), 0) : null, defects = complete ? productions.reduce((s, r) => s + Number(r.defects), 0) : null, quantity = complete ? processed - defects : null;
+    const revenue = quantity !== null && o.price !== null ? money(new D(quantity).times(o.price)) : null;
+    const allMaterials = dataset.materials.filter((r) => r.date === date2), materials = allMaterials.filter(visible);
+    let materialCost = new D(0), priceImpact = new D(0), usageImpact = new D(0), materialComplete = true;
+    for (const m of base.materials) {
+      const all = allMaterials.filter((r) => r.materialId === m.id), rs = materials.filter((r) => r.materialId === m.id);
+      if (!rs.length || rs.length !== all.length || rs.some((r) => !valid(r) || r.net === null || r.price === null)) {
+        materialComplete = false;
+        miss(date2, "material", `${m.id}净耗、单价或可见时间待补齐`);
+        continue;
+      }
+      materialCost = materialCost.plus(sum2(rs.map((r) => money(six(r.net).times(six(r.price))))));
+      if (quantity !== null && m.price !== null) {
+        const actualNet = sum2(rs.map((r) => six(r.net)));
+        const standard = six(new D(quantity).times(o.weight).times(m.share));
+        priceImpact = priceImpact.plus(sum2(rs.map((r) => money(six(r.net).times(six(r.price).minus(m.price))))));
+        usageImpact = usageImpact.plus(money(actualNet.minus(standard).times(m.price)));
+      }
+    }
+    const allExpenses = dataset.expenses.filter((r) => r.date === date2), expenses = allExpenses.filter(visible), costs = {};
+    for (const cat of CATEGORIES) {
+      const all = allExpenses.filter((r) => r.category === cat), rs = expenses.filter((r) => r.category === cat);
+      const good = rs.length > 0 && all.length === rs.length && rs.every((r) => valid(r) && r.amount !== null);
+      costs[cat] = good ? amountSum(rs.map((r) => money(r.amount))) : null;
+      if (!good) miss(date2, cat, "费用未完整归属、尚不可见或待补齐");
+    }
+    const actualCost = materialComplete ? sum2([money(materialCost), costs.人工, costs.制造, costs.其他生产]) : null;
+    const gross = revenue !== null && actualCost !== null ? money(new D(revenue).minus(actualCost)) : null;
+    const operatingCost = sum2([costs.管理, costs.销售, costs.财务]);
+    const operating = gross !== null && operatingCost !== null ? money(new D(gross).minus(operatingCost)) : null;
+    const expected = base.theoretical(quantity, baselineMode), gap = expected.gross !== null && gross !== null ? money(new D(expected.gross).minus(gross)) : null;
+    const diff = (a, e) => a !== null && e !== null ? money(new D(a).minus(e)) : null;
+    const energyRows = expenses.filter((r) => r.category === "制造" && /能源/.test(r.item));
+    const energyActual = costs.制造 === null ? null : amountSum(energyRows.map((r) => r.amount));
+    const energyDiff = diff(energyActual, expected.energy);
+    const otherManufacturing = costs.制造 !== null && expected.productionManagement !== null && energyActual !== null ? money(new D(costs.制造).minus(energyActual).minus(expected.productionManagement)) : null;
+    const components2 = { materialPrice: materialComplete && matsReady(base) && quantity !== null ? money(priceImpact) : null, materialUsage: materialComplete && matsReady(base) && quantity !== null ? money(usageImpact) : null, labor: diff(costs.人工, expected.labor), energy: energyDiff, otherManufacturing, otherProduction: diff(costs.其他生产, expected.otherProduction), budgetAdjustment: expected.reserve === null ? null : money(new D(expected.reserve).negated()) };
+    components2.rounding = gap !== null && Object.values(components2).every((v) => v !== null) ? money(new D(gap).minus(sum2(Object.values(components2)))) : null;
+    days.push({ date: date2, quantity, processed, defects, revenue, actual: { material: materialComplete ? money(materialCost) : null, costs, productionCost: money(actualCost), gross, operating, margin: gross !== null && Number(revenue) > 0 ? new D(gross).div(revenue).toFixed(8) : null }, expected, gap, delta: gap === null ? null : money(new D(gap).negated()), components: components2, rows: { production: productions, materials, expenses, supplements: dataset.supplements.filter((s) => s.date === date2 && visible(s)) } });
+  }
+  const aggregate = (field, side) => amountSum(days.map((d) => side ? d[side][field] : d[field]));
+  const totalQuantity = days.some((d) => d.quantity === null) || o.opening === null ? null : days.reduce((s, d) => s + d.quantity, 0);
+  const dailySum = (fn) => amountSum(days.map(fn));
+  const cumulative = { quantity: totalQuantity, processed: days.some((d) => d.processed === null) ? null : days.reduce((s, d) => s + d.processed, 0), defects: days.some((d) => d.defects === null) ? null : days.reduce((s, d) => s + d.defects, 0), revenue: aggregate("revenue"), actual: { gross: aggregate("gross", "actual"), operating: aggregate("operating", "actual") }, expected: { gross: aggregate("gross", "expected"), operating: aggregate("operating", "expected") }, gap: aggregate("gap"), delta: aggregate("delta") };
+  cumulative.actual.material = dailySum((d) => d.actual.material);
+  cumulative.actual.costs = Object.fromEntries(CATEGORIES.map((c) => [c, dailySum((d) => d.actual.costs[c])]));
+  for (const k of ["material", "labor", "manufacturing", "otherProduction", "reserve", "operatingCosts"]) cumulative.expected[k] = dailySum((d) => d.expected[k]);
+  cumulative.actual.margin = cumulative.actual.gross !== null && Number(cumulative.revenue) > 0 ? new D(cumulative.actual.gross).div(cumulative.revenue).toFixed(8) : null;
+  cumulative.expected.margin = cumulative.expected.gross !== null && Number(cumulative.revenue) > 0 ? new D(cumulative.expected.gross).div(cumulative.revenue).toFixed(8) : null;
+  cumulative.progress = totalQuantity !== null && Number(o.quantity) > 0 ? new D(totalQuantity).div(o.quantity).toFixed(8) : null;
+  cumulative.remaining = totalQuantity === null ? null : Math.max(0, Number(o.quantity) - totalQuantity);
+  cumulative.overproduction = totalQuantity === null ? null : Math.max(0, totalQuantity - Number(o.quantity));
+  const components = Object.fromEntries(["materialPrice", "materialUsage", "labor", "energy", "otherManufacturing", "otherProduction", "budgetAdjustment", "rounding"].map((k) => [k, amountSum(days.map((d) => d.components[k]))]));
+  const state = asOf < o.start ? "not_started" : missing.some((m) => ["order", "baseline", "production", "material", "人工", "制造", "其他生产"].includes(m.field)) ? "incomplete" : dataset.production.concat(dataset.materials, dataset.expenses).some((r) => r.date <= asOf && visible(r) && r.status === "暂估") ? "provisional" : missing.length ? "operating_incomplete" : "complete";
+  const visibleSupplements = dataset.supplements.filter((r) => r.date <= asOf && visible(r));
+  const visibilityEnd = dataset.production.concat(dataset.materials, dataset.expenses, dataset.supplements).reduce((end, r) => r.availableAt?.slice(0, 10) > end ? r.availableAt.slice(0, 10) : end, o.end);
+  const sameQuantityTheory = base.theoretical(totalQuantity, baselineMode);
+  cumulative.expected.revenue = sameQuantityTheory.revenue;
+  const theoreticalRounding = sameQuantityTheory.gross !== null && cumulative.expected.gross !== null ? money(new D(sameQuantityTheory.gross).minus(cumulative.expected.gross)) : null;
+  const dimension = (items) => ({ state: items.length ? "incomplete" : "complete", missing: items });
+  const completeness = {
+    actual: dimension(missing.filter((m) => m.field !== "baseline" && m.field !== "production")),
+    baseline: dimension(missing.filter((m) => m.field === "baseline")),
+    progress: dimension(missing.filter((m) => m.field === "production" || m.field === "order"))
+  };
+  const profitScope = { grossProfit: cumulative.actual.gross, managementProfit: cumulative.actual.operating, forecastProfit: null, finalProfit: null, settlement: { state: "open", reason: "导入首版不包含正式结算资料；最终利润待结算后提供" } };
+  const daySummaries = days.map((d) => ({ date: d.date, quantity: d.quantity, revenue: d.revenue, actual: { material: d.actual.material, costs: d.actual.costs, gross: d.actual.gross, operating: d.actual.operating }, expected: { gross: d.expected.gross, revenue: d.expected.revenue }, gap: d.gap, components: d.components }));
+  const result = { knownAt: knownAt ?? null, visibilityEnd, theoreticalRounding, order: o, revisionId: dataset.revision.id, baselineId: b.id, baselineMode, asOf, daily: days.find((d) => d.date === asOf) ?? null, daySummaries, cumulative, theoreticalTotal: base.theoretical(o.quantity, baselineMode), bridge: { total: cumulative.gap, components }, profitScope, quality: { state, missing, completeness, isDemo: o.isDemo }, evidence: days.flatMap((d) => [...d.rows.production, ...d.rows.materials, ...d.rows.expenses].map((r) => r.source)), warnings: visibleSupplements.length ? [`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter((r) => r.date <= asOf && visible(r)).reduce((s, r) => s + Number(r.defects ?? 0), 0) - visibleSupplements.reduce((s, r) => s + Number(r.quantity ?? 0), 0)}双`] : [] };
+  result.referenceThresholds = buildReferenceThresholds({ order: o, cumulative, theoreticalBudget: base.theoretical(o.quantity, "budget"), baselineId: b.id, asOf });
+  result.diagnosis = buildDiagnosis(result);
+  return result;
+}
+function matsReady(base) {
+  return base.materials.every((m) => m.price !== null);
+}
+
+// server/storage/store.mjs
+import { mkdir as mkdir2, readdir, readFile as readFile2, writeFile as writeFile2, rename as rename2, unlink as unlink2 } from "node:fs/promises";
+import { createHash as createHash2, randomUUID as randomUUID3 } from "node:crypto";
+import path2 from "node:path";
+function stable(v) {
+  if (Array.isArray(v)) {
+    const a = v.map(stable);
+    return a.every((x2) => x2 && typeof x2 === "object" && "id" in x2) ? a.sort((x2, y) => String(x2.id).localeCompare(String(y.id))) : a;
+  }
+  if (v && typeof v === "object") return Object.fromEntries(Object.keys(v).filter((k) => !["source", "sourceFiles"].includes(k)).sort().map((k) => [k, stable(v[k])]));
+  return v;
+}
+var digest = (v) => createHash2("sha256").update(JSON.stringify(stable(v))).digest("hex");
+var conflict = (message) => Object.assign(new Error(message), { status: 409 });
+function createStore(directory) {
+  let queue = Promise.resolve();
+  const readAll = async () => {
+    await mkdir2(directory, { recursive: true });
+    const result = [];
+    for (const name of (await readdir(directory)).filter((n) => /^[a-f0-9]{64}\.json$/.test(n))) {
+      let v;
+      try {
+        v = JSON.parse(await readFile2(path2.join(directory, name), "utf8"));
+      } catch {
+        throw new Error("本地导入数据损坏，请从备份恢复");
+      }
+      if (!v.dataset?.order?.id || !v.dataset?.revision?.id) throw new Error("本地导入版本无效");
+      result.push(v);
+    }
+    return result.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  };
+  const listRevisions = async (id) => (await readAll()).filter((x2) => x2.dataset.order.id === id).reverse().map((x2) => ({ revisionId: x2.dataset.revision.id, baselineId: x2.dataset.baseline.id, createdAt: x2.createdAt, hash: x2.hash }));
+  const get = async (id, revision) => {
+    const versions = (await readAll()).filter((x2) => x2.dataset.order.id === id && (!revision || x2.dataset.revision.id === revision));
+    if (!versions.length) throw Object.assign(new Error("未找到订单或数据版本"), { status: 404 });
+    return versions.at(-1).dataset;
+  };
+  const listOrders = async () => {
+    const latest = /* @__PURE__ */ new Map();
+    for (const v of await readAll()) {
+      const d = v.dataset;
+      latest.set(d.order.id, { ...d.order, revisionId: d.revision.id, baselineId: d.baseline.id, createdAt: v.createdAt, counts: { production: d.production.length, supplements: d.supplements.length, materials: d.materials.length, expenses: d.expenses.length } });
+    }
+    return [...latest.values()];
+  };
+  const commit = (dataset) => {
+    const job = queue.then(async () => {
+      const all = await readAll(), hash2 = digest(dataset), baseHash = digest(dataset.baseline), same = all.find((v) => v.dataset.order.id === dataset.order.id && v.dataset.revision.id === dataset.revision.id);
+      if (same) {
+        if (same.hash !== hash2) throw conflict("同一修订号内容已改变，请使用新修订版本");
+        return { orderId: dataset.order.id, revisionId: dataset.revision.id, reused: true };
+      }
+      for (const v of all.filter((v2) => v2.dataset.order.id === dataset.order.id)) {
+        if (v.dataset.order.lineId !== dataset.order.lineId) throw conflict("首版同订单只支持一个核算子项，请使用独立订单标识");
+        if (v.dataset.baseline.id === dataset.baseline.id && (digest(v.dataset.baseline) !== baseHash || ["quantity", "price", "weight"].some((k) => v.dataset.order[k] !== dataset.order[k]))) throw conflict("冻结基线内容已改变，请使用新基线版本");
+      }
+      const key = createHash2("sha256").update(dataset.order.id + "\0" + dataset.revision.id).digest("hex"), target = path2.join(directory, key + ".json"), tmp = path2.join(directory, key + "." + randomUUID3() + ".tmp");
+      const timestamp2 = Math.max(Date.now(), all.length ? Date.parse(all.at(-1).createdAt) + 1 : 0);
+      try {
+        await writeFile2(tmp, JSON.stringify({ hash: hash2, createdAt: new Date(timestamp2).toISOString(), dataset }), { flag: "wx" });
+        await rename2(tmp, target);
+      } catch (e) {
+        await unlink2(tmp).catch(() => {
+        });
+        throw e;
+      }
+      return { orderId: dataset.order.id, revisionId: dataset.revision.id, reused: false };
+    });
+    queue = job.catch(() => {
+    });
+    return job;
+  };
+  return { listOrders, listRevisions, get, commit, listVersions: readAll };
+}
+
+// server/profit/contract-adapter.mjs
+var FORMULA_VERSION = "IMPORT-FORMULA-0.2";
+var RULE_VERSION = "IMPORT-RULES-0.2";
+var ratio2 = (x2) => x2 == null ? null : new D(x2).toFixed(6);
+var mapQuality = (state) => ({ complete: "complete", provisional: "estimated", not_started: "incomplete", incomplete: "incomplete", operating_incomplete: "incomplete" })[state] ?? "incomplete";
+var unitProfit = (gross, quantity) => gross === null || quantity === null || Number(quantity) <= 0 ? null : new D(gross).div(quantity).toFixed(6);
+var metrics = (c, side, quality) => {
+  const x2 = c[side], revenue = side === "actual" ? c.revenue : c.expected.revenue;
+  return { revenue: revenue ?? null, material_cost: x2.material ?? null, labor_cost: side === "actual" ? x2.costs?.人工 ?? null : x2.labor ?? null, manufacturing_cost: side === "actual" ? x2.costs?.制造 ?? null : x2.manufacturing ?? null, other_production_cost: side === "actual" ? x2.costs?.其他生产 ?? null : x2.otherProduction ?? null, total_production_cost: revenue != null && x2.gross != null ? money(new D(revenue).minus(x2.gross)) : null, gross_profit: x2.gross ?? null, unit_gross_profit: unitProfit(x2.gross ?? null, c.quantity), gross_margin: ratio2(x2.margin), management_profit: x2.operating ?? null, forecast_profit: null, final_profit: null, quality };
+};
+var variance = (category, expected, actual) => ({ category, expected: expected ?? null, actual: actual ?? null, delta: expected != null && actual != null ? money(new D(actual).minus(expected)) : null, evidence_ids: [] });
+function toCalculationResult(evaluation, { dataset, snapshotId, computedAt } = {}) {
+  if (!dataset) throw new Error("契约适配需要原始数据集");
+  const { cumulative: c, order: o, quality } = evaluation, mapped = mapQuality(quality.state), comparable = c.actual.gross !== null && c.expected.gross !== null;
+  const profitDelta = comparable ? c.delta : null;
+  const marginDelta = comparable && c.actual.margin != null && c.expected.margin != null ? ratio2(new D(c.actual.margin).minus(c.expected.margin)) : null;
+  const relativeDecline = comparable && c.expected.margin != null && new D(c.expected.margin).gt(0) ? ratio2(new D(c.expected.margin).minus(c.actual.margin).div(c.expected.margin)) : null;
+  const hash2 = digest(dataset), costVariances = [variance("material", c.expected.material, c.actual.material), variance("labor", c.expected.labor, c.actual.costs?.人工), variance("manufacturing", c.expected.manufacturing, c.actual.costs?.制造), variance("other_production", c.expected.otherProduction, c.actual.costs?.其他生产)];
+  const issues = [...quality.missing.map((m) => ({ code: "IMPORT_MISSING", message: m.detail, field: m.field ?? "", severity: "blocking", source_refs: [] })), ...(evaluation.warnings ?? []).map((message) => ({ code: "IMPORT_WARNING", message, field: "", severity: "warning", source_refs: [] }))];
+  return {
+    snapshot_id: snapshotId ?? `local-${hash2.slice(0, 16)}-${evaluation.asOf}-${evaluation.baselineMode}`,
+    order_id: o.id,
+    baseline_id: evaluation.baselineId ?? null,
+    input_hash: hash2,
+    formula_version: FORMULA_VERSION,
+    rule_version: RULE_VERSION,
+    computed_at: computedAt ?? (/* @__PURE__ */ new Date()).toISOString(),
+    scope: { basis: "cumulative", period_start: o.start, period_end: evaluation.asOf, quantity_basis: "completed_good", quantity: c.quantity == null ? null : String(c.quantity), quantity_unit: "双", currency: "CNY", tax_basis: "ignored", cost_scope_id: evaluation.baselineId ?? "IMPORT-0.2", revenue_basis: "production_equivalent", settlement_state: "open" },
+    expected: metrics(c, "expected", mapped),
+    actual: metrics(c, "actual", mapped),
+    comparison: { comparable, quality: mapped, reasons: quality.missing.slice(0, 10).map((m) => m.detail).concat(comparable ? [] : ["实际或同进度理论毛利缺失，暂不可比"]), profit_delta: profitDelta, revenue_delta: comparable ? "0.00" : null, margin_delta: marginDelta, relative_decline: relativeDecline, risk: { level: "not_applicable", rule_version: RULE_VERSION, reason: "导入适配层未接入风险分级；差距与质量状态以导入核算结果为准", loss: c.actual.gross !== null && new D(c.actual.gross).lt(0) }, cost_variances: costVariances },
+    issues,
+    evidence: []
+  };
+}
+
+// server/monitor/recommendations.mjs
+var positive = (x2, y) => x2 != null && y != null && new D(x2).gt(y);
+var unit = (x2, q) => x2 != null && q > 0 ? new D(x2).div(q) : null;
+function recommendations({ today, previous, comparison, orderId, revisionId, baselineMode, asOf, snapshotId }) {
+  const result = [];
+  const add2 = (ruleId, change, advice, rows, impact = null) => {
+    result.push({ ruleId, change, advice, unitCostImpact: impact?.toString() ?? null, evidence: rows.map((r) => ({ evidenceId: `${snapshotId}:${r.id}`, snapshotId, orderId, businessDate: r.date, revisionId, baselineMode, category: r.category ?? null, materialId: r.materialId ?? null, recordId: r.id, source: r.source ?? null })), comparisonStatus: comparison.status });
+  };
+  if (comparison.status !== "comparable") {
+    add2("DATA_CHECK", comparison.reasons.join("；"), "先核对缺项、录入时间及版本；资料更新不能直接解释为经营恶化。", [...today?.rows.production ?? [], ...today?.rows.expenses ?? []]);
+    return result;
+  }
+  const tq = today.quantity, pq = previous.quantity;
+  const materialIds = [...new Set(today.rows.materials.map((r) => r.materialId))];
+  for (const id of materialIds) {
+    const now = today.rows.materials.filter((r) => r.materialId === id), before = previous.rows.materials.filter((r) => r.materialId === id);
+    if (!before.length || [...now, ...before].some((r) => r.net == null || r.price == null)) continue;
+    const net = (rs) => rs.reduce((s, r) => s.plus(r.net), new D(0)), cost = (rs) => rs.reduce((s, r) => s.plus(new D(r.net).times(r.price)), new D(0));
+    const n = net(now), b = net(before), price = n.gt(0) ? cost(now).div(n) : null, oldPrice = b.gt(0) ? cost(before).div(b) : null;
+    if (positive(price, oldPrice) && positive(unit(today.components.materialPrice, tq), unit(previous.components.materialPrice, pq))) add2("MATERIAL_PRICE", `材料 ${id} 加权单价 ${oldPrice.toFixed(6)} → ${price.toFixed(6)} 元/kg`, "核对采购批次、供应商报价、入库单价和录入值。", [...before, ...now], price.minus(oldPrice).times(n).div(tq));
+    if (positive(unit(n, tq), unit(b, pq))) add2("MATERIAL_USAGE", `材料 ${id} 单位合格品净耗 ${unit(b, pq).toFixed(6)} → ${unit(n, tq).toFixed(6)} kg/双`, "核对领退料、标准重量、不良数量及净耗口径；耗用增加原因待核实。", [...before, ...now], unit(n, tq).minus(unit(b, pq)).times(oldPrice ?? 0));
+  }
+  for (const [category, ruleId, advice] of [["人工", "LABOR", "核对工价、计件量、合格产量与费用归属。"], ["制造", "MANUFACTURING", "核对费用所属日期、订单及分摊依据；现有资料不足以认定停机低效。"]]) {
+    const now = unit(today.actual.costs[category], tq), before = unit(previous.actual.costs[category], pq);
+    if (positive(now, before)) add2(ruleId, `单位合格品${category}费用 ${money(before)} → ${money(now)} 元/双`, advice, [...previous.rows.expenses, ...today.rows.expenses].filter((r) => r.category === category), now.minus(before));
+  }
+  const supplements = today.rows.supplements ?? [], prior = previous.rows.supplements ?? [];
+  const qty = (rs) => rs.reduce((s, r) => r.quantity == null ? s : s.plus(r.quantity), new D(0));
+  if (supplements.length && positive(unit(qty(supplements), tq), unit(qty(prior), pq))) add2("SUPPLEMENT_LINK", "补单数量占合格产量的比例增加", "核对补料/补产用途及关联；已含加工量和净耗的补单不重复扣成本。", supplements);
+  const grouped = /* @__PURE__ */ new Map();
+  for (const item of result) {
+    const old = grouped.get(item.ruleId);
+    if (!old) {
+      grouped.set(item.ruleId, item);
+      continue;
+    }
+    old.change += "；" + item.change;
+    old.evidence.push(...item.evidence);
+    old.unitCostImpact = old.unitCostImpact == null || item.unitCostImpact == null ? null : new D(old.unitCostImpact).plus(item.unitCostImpact).toString();
+  }
+  return [...grouped.values()].sort((a, b) => a.unitCostImpact == null ? b.unitCostImpact == null ? 0 : 1 : b.unitCostImpact == null ? -1 : new D(b.unitCostImpact).cmp(a.unitCostImpact)).slice(0, 3);
+}
+
+// server/profit/monitor-risk.mjs
+var MONITOR_RISK_VERSION = "RELATIVE-MARGIN-1";
+var priorities = { "严重": 0, "重点": 1, "注意": 2, "数据不足": 3, "缺少基线": 4, "不可评级": 5, "正常": 6, "优于预期": 7 };
+function classifyMonitorRisk({ actual, expected, revenue, baselineComplete = true }) {
+  let label, reason, relativeDecline = null;
+  if (actual == null || revenue == null || !new D(revenue).gt(0)) {
+    label = "数据不足";
+    reason = "实际生产毛利或正收入尚不完整";
+  } else if (expected == null || !baselineComplete) {
+    label = "缺少基线";
+    reason = "同进度理论基线不完整";
+  } else if (!new D(expected).gt(0)) {
+    label = "不可评级";
+    reason = "预期毛利率非正，不适用相对下降分级";
+  } else {
+    const decline = new D(expected).minus(actual).div(expected);
+    relativeDecline = decline.toString();
+    label = decline.lt(0) ? "优于预期" : decline.lte(".1") ? "正常" : decline.lte(".2") ? "注意" : decline.lte(".3") ? "重点" : "严重";
+    reason = "同进度毛利率相对下降：≤10%正常，≤20%注意，≤30%重点，超过30%严重";
+  }
+  return { label, priority: priorities[label], reason, relativeDecline, ruleVersion: MONITOR_RISK_VERSION };
+}
+
+// server/monitor/overview.mjs
+function date(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? "") || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) throw fail("INVALID_REQUEST", "业务日期无效");
+  return value;
+}
+var shift = (day, n) => new Date(Date.parse(day + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+function timestamp(v) {
+  if (typeof v !== "string" || !/(Z|[+-]\d{2}:\d{2})$/.test(v) || !Number.isFinite(Date.parse(v))) throw fail("INVALID_REQUEST", "信息截止时间需要包含时区");
+  return new Date(v).toISOString();
+}
+var sum3 = (rows, fn) => rows.length ? money(rows.reduce((s, r) => s.plus(fn(r)), new D(0))) : null;
+var distributionKey = (day) => {
+  const margin = day?.actual.gross != null && day?.revenue != null && new D(day.revenue).gt(0) ? new D(day.actual.gross).div(day.revenue) : day?.actual.margin;
+  return margin == null ? "unknown" : new D(margin).gte(".3") ? "high" : new D(margin).gte(".1") ? "medium" : new D(margin).gte(0) ? "low" : "negative";
+};
+function compare(dataset, today, previous, asOf) {
+  const reasons = [];
+  if (!today || !previous) reasons.push("缺少当日或昨日明确报工");
+  for (const d of [previous, today]) if (d) {
+    if (d.revenue == null || !new D(d.revenue).gt(0)) reasons.push(`${d.date} 收入为零或未知`);
+    if (d.actual.productionCost == null || d.actual.margin == null) reasons.push(`${d.date} 生产成本或毛利率不完整`);
+    if (!(d.quantity > 0)) reasons.push(`${d.date} 合格量为零或未知`);
+  }
+  const affected = [...dataset.production, ...dataset.materials, ...dataset.expenses, ...dataset.supplements].filter((r) => [asOf, shift(asOf, -1)].includes(r.date));
+  if (affected.some((r) => r.availableAt && Date.parse(r.availableAt) > Date.parse(r.date + "T23:59:59.999+08:00"))) reasons.push("存在迟录资料，资料更新待核查");
+  if (dataset._revisionCount > 1) reasons.push("整套导入修订发生变化，无法可靠区分经营变化与资料修订");
+  if (reasons.length) return { status: "unavailable", reasons: [...new Set(reasons)], marginChangePp: null, unitCost: null, previousUnitCost: null, unitCostChange: null, deteriorated: false };
+  const change = new D(today.actual.gross).div(today.revenue).minus(new D(previous.actual.gross).div(previous.revenue)).times(100), now = new D(today.actual.productionCost).div(today.quantity), before = new D(previous.actual.productionCost).div(previous.quantity);
+  return { status: "comparable", reasons: [], marginChangePp: change.toString(), unitCost: now.toFixed(6), previousUnitCost: before.toFixed(6), unitCostChange: now.minus(before).toFixed(6), deteriorated: change.lt(0) };
+}
+async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal", knownAt, viewId = randomUUID4(), compute = evaluate, customer = "", status = "", risk = "", search = "" } = {}) {
+  date(asOf);
+  knownAt = timestamp(knownAt ?? (/* @__PURE__ */ new Date()).toISOString());
+  if (!["ideal", "budget"].includes(baselineMode) || !Number.isInteger(period) || period < 1 || period > 90) throw fail("INVALID_REQUEST", "理论模式或趋势窗口无效（1–90 天）");
+  const requestedStart = shift(asOf, 1 - period), firstStart = entries.map((e) => e.dataset.order.start).sort()[0], start = firstStart && firstStart <= asOf && firstStart > requestedStart ? firstStart : requestedStart, snapshots = [], orders = [];
+  for (const entry of entries) {
+    const dataset = entry.dataset, visible = dataset, evaluation = compute(visible, { asOf, baselineMode, knownAt }), snapshotId = randomUUID4();
+    const previous = evaluation.days?.find((d) => d.date === shift(asOf, -1)) ?? compute(visible, { asOf: shift(asOf, -1), baselineMode, knownAt }).daily;
+    const comparison = compare({ ...dataset, _revisionCount: entry.revisionCount }, evaluation.daily, previous, asOf);
+    const contract = toCalculationResult(evaluation, { dataset, snapshotId, computedAt: (/* @__PURE__ */ new Date()).toISOString() });
+    const cumulative = evaluation.cumulative, eligible = asOf >= dataset.order.start && cumulative.actual.gross != null && cumulative.expected.gross != null;
+    const monitoringStatus = asOf < dataset.order.start ? "未开工" : cumulative.quantity == null ? "待确认" : dataset.order.quantity != null && new D(cumulative.quantity).gte(dataset.order.quantity) ? "已完工" : "生产中";
+    const riskInfo = classifyMonitorRisk({ actual: cumulative.actual.gross, expected: cumulative.expected.gross, revenue: cumulative.revenue, baselineComplete: evaluation.quality.completeness?.baseline.state === "complete" });
+    const marginDeviationPp = eligible && cumulative.revenue != null && new D(cumulative.revenue).gt(0) ? new D(cumulative.actual.gross).minus(cumulative.expected.gross).div(cumulative.revenue).times(100).toString() : null;
+    const points = [];
+    for (let d = start; d <= asOf; d = shift(d, 1)) {
+      const a = d === asOf ? evaluation : compute(visible, { asOf: d, baselineMode, knownAt });
+      points.push({ date: d, actual: a.cumulative.actual.gross, expected: a.cumulative.expected.gross, comparable: a.cumulative.actual.gross != null && a.cumulative.expected.gross != null && d >= dataset.order.start });
+    }
+    const row = { order: dataset.order, revisionId: dataset.revision.id, baselineId: dataset.baseline.id, snapshotId, cumulative, daily: evaluation.daily, comparison, quality: evaluation.quality, comparable: eligible, distribution: asOf < dataset.order.start ? "not_started" : distributionKey(evaluation.daily), points, loss: cumulative.actual.gross != null && new D(cumulative.actual.gross).lt(0), cumulativeDeviation: eligible && new D(cumulative.gap).gt(0), recommendations: recommendations({ today: evaluation.daily, previous, comparison, orderId: dataset.order.id, revisionId: dataset.revision.id, baselineMode, asOf, snapshotId }) };
+    row.evidence = [...evaluation.evidence.map((source, i2) => ({ evidenceId: `${snapshotId}:source-${i2}`, source })), ...row.recommendations.flatMap((r) => r.evidence)];
+    Object.assign(row, { monitoringStatus, risk: riskInfo, marginDeviationPp });
+    snapshots.push({ snapshot_id: snapshotId, order_id: dataset.order.id, as_of: asOf, known_at: knownAt, revision_id: dataset.revision.id, baseline_mode: baselineMode, input_hash: hash(dataset), result: contract, evaluation: { daily: evaluation.daily }, previous, recorded_at: (/* @__PURE__ */ new Date()).toISOString(), evidence: row.evidence });
+    orders.push(row);
+  }
+  const filterOptions = { customers: [...new Set(orders.map((r) => r.order.customer).filter(Boolean))].sort(), statuses: ["生产中", "已完工", "未开工", "待确认"], risks: ["严重", "重点", "注意", "数据不足", "缺少基线", "不可评级", "正常", "优于预期"] };
+  if (status && !filterOptions.statuses.includes(status) || risk && !filterOptions.risks.includes(risk) || search.length > 200) throw fail("INVALID_REQUEST", "筛选条件无效");
+  orders.splice(0, orders.length, ...orders.filter((r) => (!customer || r.order.customer === customer) && (!status || r.monitoringStatus === status) && (!risk || r.risk.label === risk) && (!search || [r.order.id, r.order.product, r.order.customer].join(" ").toLowerCase().includes(search.toLowerCase()))));
+  const firstFiltered = orders.map((r) => r.order.start).sort()[0], displayStart = firstFiltered && firstFiltered <= asOf && firstFiltered > start ? firstFiltered : start;
+  for (const row of orders) row.points = row.points.filter((p) => p.date >= displayStart);
+  const filteredPointCount = Math.round((Date.parse(asOf) - Date.parse(displayStart)) / 864e5) + 1;
+  orders.sort((a, b) => {
+    const x2 = a.comparison.marginChangePp, y = b.comparison.marginChangePp;
+    return x2 == null ? y == null ? a.order.id.localeCompare(b.order.id) : 1 : y == null ? -1 : new D(x2).cmp(y) || a.order.id.localeCompare(b.order.id);
+  });
+  const comparable = orders.filter((r) => r.comparable), intersection = orders.filter((r) => r.points.every((p) => p.comparable));
+  const trend2 = Array.from({ length: filteredPointCount }, (_, i2) => {
+    const day = shift(displayStart, i2), rows = intersection.map((r) => r.points[i2]);
+    return { date: day, actual: sum3(rows, (r) => r.actual), expected: sum3(rows, (r) => r.expected), includedCount: rows.length, excludedCount: orders.length - rows.length };
+  });
+  const buckets = [["high", "≥30%"], ["medium", "10%–不足30%"], ["low", "0%–不足10%"], ["negative", "<0%"], ["unknown", "无法计算"], ["not_started", "未开工"]].map(([key, label]) => ({ key, label, count: orders.filter((r) => r.distribution === key).length, ratio: orders.length ? new D(orders.filter((r) => r.distribution === key).length).div(orders.length).toFixed(6) : null }));
+  const overview = { viewId, filterOptions, filters: { customer, status, risk, search }, scope: { asOf, knownAt, periodStart: displayStart, baselineMode, source: "imported", currency: "CNY", versionSet: orders.map((r) => ({ orderId: r.order.id, revisionId: r.revisionId, baselineId: r.baselineId, snapshotId: r.snapshotId })), note: "本地标准导入口径：CNY、生产等价收入、模拟报价不拆税。迟录和整套修订不纳入纯经营恶化判断。" }, coverage: { total: orders.length, known: orders.filter((r) => r.cumulative.actual.gross != null && asOf >= r.order.start).length, comparable: comparable.length, dayComparable: orders.filter((r) => r.comparison.status === "comparable").length, incomplete: orders.filter((r) => r.quality.missing.length > 0).length, exclusions: orders.filter((r) => !r.comparable || r.comparison.status !== "comparable").map((r) => ({ orderId: r.order.id, reasons: [...r.comparison.reasons, ...r.quality.missing.map((m) => `${m.date ?? ""} ${m.detail}`)] })) }, summary: { actualGross: sum3(comparable, (r) => r.cumulative.actual.gross), expectedGross: sum3(comparable, (r) => r.cumulative.expected.gross), gap: sum3(comparable, (r) => r.cumulative.gap), deteriorated: orders.filter((r) => r.comparison.deteriorated).length }, trend: { includedCount: intersection.length, excludedCount: orders.length - intersection.length, points: trend2 }, distribution: buckets, attention: orders.filter((r) => r.comparison.deteriorated).slice(0, 5).map((r) => r.order.id), reminders: orders.filter((r) => r.loss || r.cumulativeDeviation || r.quality.missing.length).map((r) => ({ orderId: r.order.id, loss: r.loss, cumulativeDeviation: r.cumulativeDeviation, incomplete: r.quality.missing.length > 0 })), orders };
+  return { overview, snapshots: snapshots.filter((s) => orders.some((r) => r.snapshotId === s.snapshot_id)) };
+}
+function createMonitorService({ store, repository, clock = Date.now }) {
+  return {
+    async create(options = {}) {
+      const knownAt = timestamp(options.knownAt ?? new Date(clock()).toISOString());
+      if (Date.parse(knownAt) > clock()) throw fail("INVALID_REQUEST", "信息截止时间不能晚于服务端当前时间");
+      const versions = await store.listVersions();
+      const selected = /* @__PURE__ */ new Map();
+      for (const v of versions) if (Date.parse(v.createdAt) <= Date.parse(knownAt)) {
+        const old = selected.get(v.dataset.order.id);
+        selected.set(v.dataset.order.id, { ...v, revisionCount: (old?.revisionCount ?? 0) + 1 });
+      }
+      const entries = [...selected.values()], asOf = options.asOf ?? (entries.length ? entries.reduce((s, v) => v.dataset.order.end > s ? v.dataset.order.end : s, entries[0].dataset.order.end) : new Date(clock() + 8 * 36e5).toISOString().slice(0, 10));
+      const cacheKey = hash({ options: { ...options, asOf, knownAt: options.knownAt ?? null }, versions: entries.map((v) => [v.hash, v.createdAt, v.revisionCount]), visible: entries.map((v) => ["production", "materials", "expenses", "supplements"].map((k) => v.dataset[k].map((r) => !!r.availableAt && Date.parse(r.availableAt) <= Date.parse(knownAt)))) });
+      if (repository.findCached) {
+        const cached = await repository.findCached(cacheKey);
+        if (cached) return cached;
+      } else {
+        const cached = (await repository.read()).views.find((v) => v.cacheKey === cacheKey && v.kind === "import-monitor");
+        if (cached) return cached.overview;
+      }
+      const built = await buildOverview(entries, { ...options, asOf, knownAt });
+      built.overview.coverage.unfilteredTotal = entries.length;
+      if (repository.save) await repository.save(built.overview, built.snapshots, cacheKey);
+      else await repository.transact((s) => {
+        s.snapshots.push(...built.snapshots);
+        s.views.push({ view_id: built.overview.viewId, kind: "import-monitor", cacheKey, overview: built.overview, recorded_at: new Date(clock()).toISOString() });
+      });
+      return built.overview;
+    },
+    async get(viewId) {
+      if (repository.getView) {
+        const v2 = await repository.getView(viewId);
+        if (!v2) throw fail("VIEW_NOT_FOUND", "未找到固定监测视图", 404);
+        return v2;
+      }
+      const s = await repository.read(), v = s.views.find((v2) => v2.view_id === viewId && v2.kind === "import-monitor");
+      if (!v) throw fail("VIEW_NOT_FOUND", "未找到固定监测视图", 404);
+      return v.overview;
+    },
+    async evidence(viewId, snapshotId) {
+      const v = await this.get(viewId);
+      if (!v.scope.versionSet.some((r) => r.snapshotId === snapshotId)) throw fail("SCOPE_MISMATCH", "快照不属于此视图", 409);
+      const snapshot = repository.getSnapshot ? await repository.getSnapshot(viewId, snapshotId) : (await repository.read()).snapshots.find((x2) => x2.snapshot_id === snapshotId);
+      if (!snapshot) throw fail("SNAPSHOT_NOT_FOUND", "快照不存在", 404);
+      return { viewId, snapshotId, revisionId: snapshot.revision_id, baselineMode: snapshot.baseline_mode, asOf: snapshot.as_of, knownAt: snapshot.known_at, daily: snapshot.evaluation.daily, previous: snapshot.previous, evidence: snapshot.evidence };
+    }
+  };
+}
+
+// server/http/routes.mjs
+import { randomUUID as randomUUID5, randomBytes } from "node:crypto";
 
 // node_modules/fflate/esm/index.mjs
 import { createRequire } from "module";
@@ -3942,7 +7050,7 @@ for (i = 0; i < 32; ++i)
 var i;
 var flrm = /* @__PURE__ */ hMap(flt, 9, 1);
 var fdrm = /* @__PURE__ */ hMap(fdt, 5, 1);
-var max = function(a) {
+var max2 = function(a) {
   var m = a[0];
   for (var i2 = 1; i2 < a.length; ++i2) {
     if (a[i2] > m)
@@ -4043,7 +7151,7 @@ var inflt = function(dat, st, buf, dict) {
           clt[clim[i2]] = bits(dat, pos + i2 * 3, 7);
         }
         pos += hcLen * 3;
-        var clb = max(clt), clbmsk = (1 << clb) - 1;
+        var clb = max2(clt), clbmsk = (1 << clb) - 1;
         var clm = hMap(clt, clb, 1);
         for (var i2 = 0; i2 < tl; ) {
           var r = clm[bits(dat, pos, clbmsk)];
@@ -4064,8 +7172,8 @@ var inflt = function(dat, st, buf, dict) {
           }
         }
         var lt = ldt.subarray(0, hLit), dt = ldt.subarray(hLit);
-        lbt = max(lt);
-        dbt = max(dt);
+        lbt = max2(lt);
+        dbt = max2(dt);
         lm = hMap(lt, lbt, 1);
         dm = hMap(dt, dbt, 1);
       } else
@@ -4120,11 +7228,11 @@ var inflt = function(dat, st, buf, dict) {
           cbuf(bt + 131072);
         var end = bt + add2;
         if (bt < dt) {
-          var shift = dl - dt, dend = Math.min(dt, end);
-          if (shift + bt < 0)
+          var shift2 = dl - dt, dend = Math.min(dt, end);
+          if (shift2 + bt < 0)
             err(3);
           for (; bt < dend; ++bt)
-            buf[bt] = dict[shift + bt];
+            buf[bt] = dict[shift2 + bt];
         }
         for (; bt < end; ++bt)
           buf[bt] = buf[bt - dt];
@@ -6519,16 +9627,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path4 = this._matcher.path;
-    return path4.length > 0 ? path4[path4.length - 1].tag : void 0;
+    const path6 = this._matcher.path;
+    return path6.length > 0 ? path6[path6.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path4 = this._matcher.path;
-    return path4.length > 0 ? path4[path4.length - 1].namespace : void 0;
+    const path6 = this._matcher.path;
+    return path6.length > 0 ? path6[path6.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -6536,9 +9644,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path4 = this._matcher.path;
-    if (path4.length === 0) return void 0;
-    return path4[path4.length - 1].values?.[attrName];
+    const path6 = this._matcher.path;
+    if (path6.length === 0) return void 0;
+    return path6[path6.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -6546,9 +9654,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path4 = this._matcher.path;
-    if (path4.length === 0) return false;
-    const current = path4[path4.length - 1];
+    const path6 = this._matcher.path;
+    if (path6.length === 0) return false;
+    const current = path6[path6.length - 1];
     return current.values !== void 0 && attrName in current.values;
   }
   /**
@@ -6574,18 +9682,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path4 = this._matcher.path;
-    if (path4.length === 0) return -1;
-    return path4[path4.length - 1].position ?? 0;
+    const path6 = this._matcher.path;
+    if (path6.length === 0) return -1;
+    return path6[path6.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path4 = this._matcher.path;
-    if (path4.length === 0) return -1;
-    return path4[path4.length - 1].counter ?? 0;
+    const path6 = this._matcher.path;
+    if (path6.length === 0) return -1;
+    return path6[path6.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -8461,9 +11569,9 @@ var XMLParser = class {
     this.options = buildOptions(options);
   }
   /**
-   * Parse XML dats to JS object 
-   * @param {string|Uint8Array} xmlData 
-   * @param {boolean|Object} validationOption 
+   * Parse XML dats to JS object
+   * @param {string|Uint8Array} xmlData
+   * @param {boolean|Object} validationOption
    */
   parse(xmlData, validationOption) {
     if (typeof xmlData !== "string" && xmlData.toString) {
@@ -8489,8 +11597,8 @@ var XMLParser = class {
   }
   /**
    * Add Entity which is not by default supported by this library
-   * @param {string} key 
-   * @param {string} value 
+   * @param {string} key
+   * @param {string} value
    */
   addEntity(key, value) {
     if (value.indexOf("&") !== -1) {
@@ -8506,10 +11614,10 @@ var XMLParser = class {
   /**
    * Returns a Symbol that can be used to access the metadata
    * property on a node.
-   * 
+   *
    * If Symbol is not available in the environment, an ordinary property is used
    * and the name of the property is here returned.
-   * 
+   *
    * The XMLMetaData property is only present when `captureMetaData`
    * is true in the options.
    */
@@ -8524,8 +11632,8 @@ var XMLValidator = {
 };
 
 // server/import/xlsx.mjs
-import { createHash } from "node:crypto";
-import path from "node:path";
+import { createHash as createHash3 } from "node:crypto";
+import path3 from "node:path";
 var arr = (x2) => x2 == null ? [] : Array.isArray(x2) ? x2 : [x2];
 var text = (x2) => x2 == null ? "" : typeof x2 === "object" ? String(x2["#text"] ?? "") : String(x2);
 function readXlsx(buffer, { limits = {} } = {}) {
@@ -8582,7 +11690,7 @@ function readXlsx(buffer, { limits = {} } = {}) {
   const sheets = arr(book?.sheets?.sheet).map((sh) => {
     const rel = relations[sh["@_id"]];
     if (!rel || rel["@_TargetMode"] === "External") throw new Error("Excel工作表关系无效");
-    const target = path.posix.normalize(rel["@_Target"].startsWith("/") ? rel["@_Target"].slice(1) : "xl/" + rel["@_Target"]);
+    const target = path3.posix.normalize(rel["@_Target"].startsWith("/") ? rel["@_Target"].slice(1) : "xl/" + rel["@_Target"]);
     if (!target.startsWith("xl/")) throw new Error("Excel工作表路径无效");
     const ws = xml(target).worksheet, cells = {};
     const rows = arr(ws?.sheetData?.row);
@@ -8619,13 +11727,13 @@ function readXlsx(buffer, { limits = {} } = {}) {
       if (kind === "text" && value) value = value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
       cells[ref] = { ref, value, kind };
     }
-    const relFile = path.posix.dirname(target) + "/_rels/" + path.posix.basename(target) + ".rels";
+    const relFile = path3.posix.dirname(target) + "/_rels/" + path3.posix.basename(target) + ".rels";
     let tables = [];
     if (entries.has(relFile)) {
       const rs = arr(xml(relFile).Relationships?.Relationship);
       for (const r of rs) if (/\/table$/.test(r["@_Type"] ?? "")) {
         if (r["@_TargetMode"] === "External") throw new Error("外部Excel表不支持");
-        const tp = path.posix.normalize(r["@_Target"].startsWith("/") ? r["@_Target"].slice(1) : path.posix.dirname(target) + "/" + r["@_Target"]);
+        const tp = path3.posix.normalize(r["@_Target"].startsWith("/") ? r["@_Target"].slice(1) : path3.posix.dirname(target) + "/" + r["@_Target"]);
         if (!tp.startsWith("xl/")) throw new Error("Excel表路径无效");
         const tb = xml(tp).table;
         tables.push({ name: tb["@_name"] ?? tb["@_displayName"], ref: tb["@_ref"] });
@@ -8634,2234 +11742,8 @@ function readXlsx(buffer, { limits = {} } = {}) {
     return { name: sh["@_name"], cells, tables };
   });
   if (new Set(sheets.map((s) => s.name)).size !== sheets.length) throw new Error("Excel工作表名称重复");
-  return { epoch1904: ["1", "true"].includes(book?.workbookPr?.["@_date1904"]), hash: createHash("sha256").update(buffer).digest("hex"), sheets };
+  return { epoch1904: ["1", "true"].includes(book?.workbookPr?.["@_date1904"]), hash: createHash3("sha256").update(buffer).digest("hex"), sheets };
 }
-
-// node_modules/decimal.js/decimal.mjs
-/*!
- *  decimal.js v10.6.0
- *  An arbitrary-precision Decimal type for JavaScript.
- *  https://github.com/MikeMcl/decimal.js
- *  Copyright (c) 2025 Michael Mclaughlin <M8ch88l@gmail.com>
- *  MIT Licence
- */
-var EXP_LIMIT = 9e15;
-var MAX_DIGITS = 1e9;
-var NUMERALS = "0123456789abcdef";
-var LN10 = "2.3025850929940456840179914546843642076011014886287729760333279009675726096773524802359972050895982983419677840422862486334095254650828067566662873690987816894829072083255546808437998948262331985283935053089653777326288461633662222876982198867465436674744042432743651550489343149393914796194044002221051017141748003688084012647080685567743216228355220114804663715659121373450747856947683463616792101806445070648000277502684916746550586856935673420670581136429224554405758925724208241314695689016758940256776311356919292033376587141660230105703089634572075440370847469940168269282808481184289314848524948644871927809676271275775397027668605952496716674183485704422507197965004714951050492214776567636938662976979522110718264549734772662425709429322582798502585509785265383207606726317164309505995087807523710333101197857547331541421808427543863591778117054309827482385045648019095610299291824318237525357709750539565187697510374970888692180205189339507238539205144634197265287286965110862571492198849978748873771345686209167058";
-var PI = "3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679821480865132823066470938446095505822317253594081284811174502841027019385211055596446229489549303819644288109756659334461284756482337867831652712019091456485669234603486104543266482133936072602491412737245870066063155881748815209209628292540917153643678925903600113305305488204665213841469519415116094330572703657595919530921861173819326117931051185480744623799627495673518857527248912279381830119491298336733624406566430860213949463952247371907021798609437027705392171762931767523846748184676694051320005681271452635608277857713427577896091736371787214684409012249534301465495853710507922796892589235420199561121290219608640344181598136297747713099605187072113499999983729780499510597317328160963185950244594553469083026425223082533446850352619311881710100031378387528865875332083814206171776691473035982534904287554687311595628638823537875937519577818577805321712268066130019278766111959092164201989380952572010654858632789";
-var DEFAULTS = {
-  // These values must be integers within the stated ranges (inclusive).
-  // Most of these values can be changed at run-time using the `Decimal.config` method.
-  // The maximum number of significant digits of the result of a calculation or base conversion.
-  // E.g. `Decimal.config({ precision: 20 });`
-  precision: 20,
-  // 1 to MAX_DIGITS
-  // The rounding mode used when rounding to `precision`.
-  //
-  // ROUND_UP         0 Away from zero.
-  // ROUND_DOWN       1 Towards zero.
-  // ROUND_CEIL       2 Towards +Infinity.
-  // ROUND_FLOOR      3 Towards -Infinity.
-  // ROUND_HALF_UP    4 Towards nearest neighbour. If equidistant, up.
-  // ROUND_HALF_DOWN  5 Towards nearest neighbour. If equidistant, down.
-  // ROUND_HALF_EVEN  6 Towards nearest neighbour. If equidistant, towards even neighbour.
-  // ROUND_HALF_CEIL  7 Towards nearest neighbour. If equidistant, towards +Infinity.
-  // ROUND_HALF_FLOOR 8 Towards nearest neighbour. If equidistant, towards -Infinity.
-  //
-  // E.g.
-  // `Decimal.rounding = 4;`
-  // `Decimal.rounding = Decimal.ROUND_HALF_UP;`
-  rounding: 4,
-  // 0 to 8
-  // The modulo mode used when calculating the modulus: a mod n.
-  // The quotient (q = a / n) is calculated according to the corresponding rounding mode.
-  // The remainder (r) is calculated as: r = a - n * q.
-  //
-  // UP         0 The remainder is positive if the dividend is negative, else is negative.
-  // DOWN       1 The remainder has the same sign as the dividend (JavaScript %).
-  // FLOOR      3 The remainder has the same sign as the divisor (Python %).
-  // HALF_EVEN  6 The IEEE 754 remainder function.
-  // EUCLID     9 Euclidian division. q = sign(n) * floor(a / abs(n)). Always positive.
-  //
-  // Truncated division (1), floored division (3), the IEEE 754 remainder (6), and Euclidian
-  // division (9) are commonly used for the modulus operation. The other rounding modes can also
-  // be used, but they may not give useful results.
-  modulo: 1,
-  // 0 to 9
-  // The exponent value at and beneath which `toString` returns exponential notation.
-  // JavaScript numbers: -7
-  toExpNeg: -7,
-  // 0 to -EXP_LIMIT
-  // The exponent value at and above which `toString` returns exponential notation.
-  // JavaScript numbers: 21
-  toExpPos: 21,
-  // 0 to EXP_LIMIT
-  // The minimum exponent value, beneath which underflow to zero occurs.
-  // JavaScript numbers: -324  (5e-324)
-  minE: -EXP_LIMIT,
-  // -1 to -EXP_LIMIT
-  // The maximum exponent value, above which overflow to Infinity occurs.
-  // JavaScript numbers: 308  (1.7976931348623157e+308)
-  maxE: EXP_LIMIT,
-  // 1 to EXP_LIMIT
-  // Whether to use cryptographically-secure random number generation, if available.
-  crypto: false
-  // true/false
-};
-var inexact;
-var quadrant;
-var external = true;
-var decimalError = "[DecimalError] ";
-var invalidArgument = decimalError + "Invalid argument: ";
-var precisionLimitExceeded = decimalError + "Precision limit exceeded";
-var cryptoUnavailable = decimalError + "crypto unavailable";
-var tag = "[object Decimal]";
-var mathfloor = Math.floor;
-var mathpow = Math.pow;
-var isBinary = /^0b([01]+(\.[01]*)?|\.[01]+)(p[+-]?\d+)?$/i;
-var isHex = /^0x([0-9a-f]+(\.[0-9a-f]*)?|\.[0-9a-f]+)(p[+-]?\d+)?$/i;
-var isOctal = /^0o([0-7]+(\.[0-7]*)?|\.[0-7]+)(p[+-]?\d+)?$/i;
-var isDecimal = /^(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i;
-var BASE = 1e7;
-var LOG_BASE = 7;
-var MAX_SAFE_INTEGER = 9007199254740991;
-var LN10_PRECISION = LN10.length - 1;
-var PI_PRECISION = PI.length - 1;
-var P = { toStringTag: tag };
-P.absoluteValue = P.abs = function() {
-  var x2 = new this.constructor(this);
-  if (x2.s < 0) x2.s = 1;
-  return finalise(x2);
-};
-P.ceil = function() {
-  return finalise(new this.constructor(this), this.e + 1, 2);
-};
-P.clampedTo = P.clamp = function(min2, max3) {
-  var k, x2 = this, Ctor = x2.constructor;
-  min2 = new Ctor(min2);
-  max3 = new Ctor(max3);
-  if (!min2.s || !max3.s) return new Ctor(NaN);
-  if (min2.gt(max3)) throw Error(invalidArgument + max3);
-  k = x2.cmp(min2);
-  return k < 0 ? min2 : x2.cmp(max3) > 0 ? max3 : new Ctor(x2);
-};
-P.comparedTo = P.cmp = function(y) {
-  var i2, j, xdL, ydL, x2 = this, xd = x2.d, yd = (y = new x2.constructor(y)).d, xs = x2.s, ys = y.s;
-  if (!xd || !yd) {
-    return !xs || !ys ? NaN : xs !== ys ? xs : xd === yd ? 0 : !xd ^ xs < 0 ? 1 : -1;
-  }
-  if (!xd[0] || !yd[0]) return xd[0] ? xs : yd[0] ? -ys : 0;
-  if (xs !== ys) return xs;
-  if (x2.e !== y.e) return x2.e > y.e ^ xs < 0 ? 1 : -1;
-  xdL = xd.length;
-  ydL = yd.length;
-  for (i2 = 0, j = xdL < ydL ? xdL : ydL; i2 < j; ++i2) {
-    if (xd[i2] !== yd[i2]) return xd[i2] > yd[i2] ^ xs < 0 ? 1 : -1;
-  }
-  return xdL === ydL ? 0 : xdL > ydL ^ xs < 0 ? 1 : -1;
-};
-P.cosine = P.cos = function() {
-  var pr, rm, x2 = this, Ctor = x2.constructor;
-  if (!x2.d) return new Ctor(NaN);
-  if (!x2.d[0]) return new Ctor(1);
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  Ctor.precision = pr + Math.max(x2.e, x2.sd()) + LOG_BASE;
-  Ctor.rounding = 1;
-  x2 = cosine(Ctor, toLessThanHalfPi(Ctor, x2));
-  Ctor.precision = pr;
-  Ctor.rounding = rm;
-  return finalise(quadrant == 2 || quadrant == 3 ? x2.neg() : x2, pr, rm, true);
-};
-P.cubeRoot = P.cbrt = function() {
-  var e, m, n, r, rep, s, sd, t, t3, t3plusx, x2 = this, Ctor = x2.constructor;
-  if (!x2.isFinite() || x2.isZero()) return new Ctor(x2);
-  external = false;
-  s = x2.s * mathpow(x2.s * x2, 1 / 3);
-  if (!s || Math.abs(s) == 1 / 0) {
-    n = digitsToString(x2.d);
-    e = x2.e;
-    if (s = (e - n.length + 1) % 3) n += s == 1 || s == -2 ? "0" : "00";
-    s = mathpow(n, 1 / 3);
-    e = mathfloor((e + 1) / 3) - (e % 3 == (e < 0 ? -1 : 2));
-    if (s == 1 / 0) {
-      n = "5e" + e;
-    } else {
-      n = s.toExponential();
-      n = n.slice(0, n.indexOf("e") + 1) + e;
-    }
-    r = new Ctor(n);
-    r.s = x2.s;
-  } else {
-    r = new Ctor(s.toString());
-  }
-  sd = (e = Ctor.precision) + 3;
-  for (; ; ) {
-    t = r;
-    t3 = t.times(t).times(t);
-    t3plusx = t3.plus(x2);
-    r = divide(t3plusx.plus(x2).times(t), t3plusx.plus(t3), sd + 2, 1);
-    if (digitsToString(t.d).slice(0, sd) === (n = digitsToString(r.d)).slice(0, sd)) {
-      n = n.slice(sd - 3, sd + 1);
-      if (n == "9999" || !rep && n == "4999") {
-        if (!rep) {
-          finalise(t, e + 1, 0);
-          if (t.times(t).times(t).eq(x2)) {
-            r = t;
-            break;
-          }
-        }
-        sd += 4;
-        rep = 1;
-      } else {
-        if (!+n || !+n.slice(1) && n.charAt(0) == "5") {
-          finalise(r, e + 1, 1);
-          m = !r.times(r).times(r).eq(x2);
-        }
-        break;
-      }
-    }
-  }
-  external = true;
-  return finalise(r, e, Ctor.rounding, m);
-};
-P.decimalPlaces = P.dp = function() {
-  var w, d = this.d, n = NaN;
-  if (d) {
-    w = d.length - 1;
-    n = (w - mathfloor(this.e / LOG_BASE)) * LOG_BASE;
-    w = d[w];
-    if (w) for (; w % 10 == 0; w /= 10) n--;
-    if (n < 0) n = 0;
-  }
-  return n;
-};
-P.dividedBy = P.div = function(y) {
-  return divide(this, new this.constructor(y));
-};
-P.dividedToIntegerBy = P.divToInt = function(y) {
-  var x2 = this, Ctor = x2.constructor;
-  return finalise(divide(x2, new Ctor(y), 0, 1, 1), Ctor.precision, Ctor.rounding);
-};
-P.equals = P.eq = function(y) {
-  return this.cmp(y) === 0;
-};
-P.floor = function() {
-  return finalise(new this.constructor(this), this.e + 1, 3);
-};
-P.greaterThan = P.gt = function(y) {
-  return this.cmp(y) > 0;
-};
-P.greaterThanOrEqualTo = P.gte = function(y) {
-  var k = this.cmp(y);
-  return k == 1 || k === 0;
-};
-P.hyperbolicCosine = P.cosh = function() {
-  var k, n, pr, rm, len, x2 = this, Ctor = x2.constructor, one = new Ctor(1);
-  if (!x2.isFinite()) return new Ctor(x2.s ? 1 / 0 : NaN);
-  if (x2.isZero()) return one;
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  Ctor.precision = pr + Math.max(x2.e, x2.sd()) + 4;
-  Ctor.rounding = 1;
-  len = x2.d.length;
-  if (len < 32) {
-    k = Math.ceil(len / 3);
-    n = (1 / tinyPow(4, k)).toString();
-  } else {
-    k = 16;
-    n = "2.3283064365386962890625e-10";
-  }
-  x2 = taylorSeries(Ctor, 1, x2.times(n), new Ctor(1), true);
-  var cosh2_x, i2 = k, d8 = new Ctor(8);
-  for (; i2--; ) {
-    cosh2_x = x2.times(x2);
-    x2 = one.minus(cosh2_x.times(d8.minus(cosh2_x.times(d8))));
-  }
-  return finalise(x2, Ctor.precision = pr, Ctor.rounding = rm, true);
-};
-P.hyperbolicSine = P.sinh = function() {
-  var k, pr, rm, len, x2 = this, Ctor = x2.constructor;
-  if (!x2.isFinite() || x2.isZero()) return new Ctor(x2);
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  Ctor.precision = pr + Math.max(x2.e, x2.sd()) + 4;
-  Ctor.rounding = 1;
-  len = x2.d.length;
-  if (len < 3) {
-    x2 = taylorSeries(Ctor, 2, x2, x2, true);
-  } else {
-    k = 1.4 * Math.sqrt(len);
-    k = k > 16 ? 16 : k | 0;
-    x2 = x2.times(1 / tinyPow(5, k));
-    x2 = taylorSeries(Ctor, 2, x2, x2, true);
-    var sinh2_x, d5 = new Ctor(5), d16 = new Ctor(16), d20 = new Ctor(20);
-    for (; k--; ) {
-      sinh2_x = x2.times(x2);
-      x2 = x2.times(d5.plus(sinh2_x.times(d16.times(sinh2_x).plus(d20))));
-    }
-  }
-  Ctor.precision = pr;
-  Ctor.rounding = rm;
-  return finalise(x2, pr, rm, true);
-};
-P.hyperbolicTangent = P.tanh = function() {
-  var pr, rm, x2 = this, Ctor = x2.constructor;
-  if (!x2.isFinite()) return new Ctor(x2.s);
-  if (x2.isZero()) return new Ctor(x2);
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  Ctor.precision = pr + 7;
-  Ctor.rounding = 1;
-  return divide(x2.sinh(), x2.cosh(), Ctor.precision = pr, Ctor.rounding = rm);
-};
-P.inverseCosine = P.acos = function() {
-  var x2 = this, Ctor = x2.constructor, k = x2.abs().cmp(1), pr = Ctor.precision, rm = Ctor.rounding;
-  if (k !== -1) {
-    return k === 0 ? x2.isNeg() ? getPi(Ctor, pr, rm) : new Ctor(0) : new Ctor(NaN);
-  }
-  if (x2.isZero()) return getPi(Ctor, pr + 4, rm).times(0.5);
-  Ctor.precision = pr + 6;
-  Ctor.rounding = 1;
-  x2 = new Ctor(1).minus(x2).div(x2.plus(1)).sqrt().atan();
-  Ctor.precision = pr;
-  Ctor.rounding = rm;
-  return x2.times(2);
-};
-P.inverseHyperbolicCosine = P.acosh = function() {
-  var pr, rm, x2 = this, Ctor = x2.constructor;
-  if (x2.lte(1)) return new Ctor(x2.eq(1) ? 0 : NaN);
-  if (!x2.isFinite()) return new Ctor(x2);
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  Ctor.precision = pr + Math.max(Math.abs(x2.e), x2.sd()) + 4;
-  Ctor.rounding = 1;
-  external = false;
-  x2 = x2.times(x2).minus(1).sqrt().plus(x2);
-  external = true;
-  Ctor.precision = pr;
-  Ctor.rounding = rm;
-  return x2.ln();
-};
-P.inverseHyperbolicSine = P.asinh = function() {
-  var pr, rm, x2 = this, Ctor = x2.constructor;
-  if (!x2.isFinite() || x2.isZero()) return new Ctor(x2);
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  Ctor.precision = pr + 2 * Math.max(Math.abs(x2.e), x2.sd()) + 6;
-  Ctor.rounding = 1;
-  external = false;
-  x2 = x2.times(x2).plus(1).sqrt().plus(x2);
-  external = true;
-  Ctor.precision = pr;
-  Ctor.rounding = rm;
-  return x2.ln();
-};
-P.inverseHyperbolicTangent = P.atanh = function() {
-  var pr, rm, wpr, xsd, x2 = this, Ctor = x2.constructor;
-  if (!x2.isFinite()) return new Ctor(NaN);
-  if (x2.e >= 0) return new Ctor(x2.abs().eq(1) ? x2.s / 0 : x2.isZero() ? x2 : NaN);
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  xsd = x2.sd();
-  if (Math.max(xsd, pr) < 2 * -x2.e - 1) return finalise(new Ctor(x2), pr, rm, true);
-  Ctor.precision = wpr = xsd - x2.e;
-  x2 = divide(x2.plus(1), new Ctor(1).minus(x2), wpr + pr, 1);
-  Ctor.precision = pr + 4;
-  Ctor.rounding = 1;
-  x2 = x2.ln();
-  Ctor.precision = pr;
-  Ctor.rounding = rm;
-  return x2.times(0.5);
-};
-P.inverseSine = P.asin = function() {
-  var halfPi, k, pr, rm, x2 = this, Ctor = x2.constructor;
-  if (x2.isZero()) return new Ctor(x2);
-  k = x2.abs().cmp(1);
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  if (k !== -1) {
-    if (k === 0) {
-      halfPi = getPi(Ctor, pr + 4, rm).times(0.5);
-      halfPi.s = x2.s;
-      return halfPi;
-    }
-    return new Ctor(NaN);
-  }
-  Ctor.precision = pr + 6;
-  Ctor.rounding = 1;
-  x2 = x2.div(new Ctor(1).minus(x2.times(x2)).sqrt().plus(1)).atan();
-  Ctor.precision = pr;
-  Ctor.rounding = rm;
-  return x2.times(2);
-};
-P.inverseTangent = P.atan = function() {
-  var i2, j, k, n, px, t, r, wpr, x2, x3 = this, Ctor = x3.constructor, pr = Ctor.precision, rm = Ctor.rounding;
-  if (!x3.isFinite()) {
-    if (!x3.s) return new Ctor(NaN);
-    if (pr + 4 <= PI_PRECISION) {
-      r = getPi(Ctor, pr + 4, rm).times(0.5);
-      r.s = x3.s;
-      return r;
-    }
-  } else if (x3.isZero()) {
-    return new Ctor(x3);
-  } else if (x3.abs().eq(1) && pr + 4 <= PI_PRECISION) {
-    r = getPi(Ctor, pr + 4, rm).times(0.25);
-    r.s = x3.s;
-    return r;
-  }
-  Ctor.precision = wpr = pr + 10;
-  Ctor.rounding = 1;
-  k = Math.min(28, wpr / LOG_BASE + 2 | 0);
-  for (i2 = k; i2; --i2) x3 = x3.div(x3.times(x3).plus(1).sqrt().plus(1));
-  external = false;
-  j = Math.ceil(wpr / LOG_BASE);
-  n = 1;
-  x2 = x3.times(x3);
-  r = new Ctor(x3);
-  px = x3;
-  for (; i2 !== -1; ) {
-    px = px.times(x2);
-    t = r.minus(px.div(n += 2));
-    px = px.times(x2);
-    r = t.plus(px.div(n += 2));
-    if (r.d[j] !== void 0) for (i2 = j; r.d[i2] === t.d[i2] && i2--; ) ;
-  }
-  if (k) r = r.times(2 << k - 1);
-  external = true;
-  return finalise(r, Ctor.precision = pr, Ctor.rounding = rm, true);
-};
-P.isFinite = function() {
-  return !!this.d;
-};
-P.isInteger = P.isInt = function() {
-  return !!this.d && mathfloor(this.e / LOG_BASE) > this.d.length - 2;
-};
-P.isNaN = function() {
-  return !this.s;
-};
-P.isNegative = P.isNeg = function() {
-  return this.s < 0;
-};
-P.isPositive = P.isPos = function() {
-  return this.s > 0;
-};
-P.isZero = function() {
-  return !!this.d && this.d[0] === 0;
-};
-P.lessThan = P.lt = function(y) {
-  return this.cmp(y) < 0;
-};
-P.lessThanOrEqualTo = P.lte = function(y) {
-  return this.cmp(y) < 1;
-};
-P.logarithm = P.log = function(base) {
-  var isBase10, d, denominator, k, inf, num, sd, r, arg = this, Ctor = arg.constructor, pr = Ctor.precision, rm = Ctor.rounding, guard = 5;
-  if (base == null) {
-    base = new Ctor(10);
-    isBase10 = true;
-  } else {
-    base = new Ctor(base);
-    d = base.d;
-    if (base.s < 0 || !d || !d[0] || base.eq(1)) return new Ctor(NaN);
-    isBase10 = base.eq(10);
-  }
-  d = arg.d;
-  if (arg.s < 0 || !d || !d[0] || arg.eq(1)) {
-    return new Ctor(d && !d[0] ? -1 / 0 : arg.s != 1 ? NaN : d ? 0 : 1 / 0);
-  }
-  if (isBase10) {
-    if (d.length > 1) {
-      inf = true;
-    } else {
-      for (k = d[0]; k % 10 === 0; ) k /= 10;
-      inf = k !== 1;
-    }
-  }
-  external = false;
-  sd = pr + guard;
-  num = naturalLogarithm(arg, sd);
-  denominator = isBase10 ? getLn10(Ctor, sd + 10) : naturalLogarithm(base, sd);
-  r = divide(num, denominator, sd, 1);
-  if (checkRoundingDigits(r.d, k = pr, rm)) {
-    do {
-      sd += 10;
-      num = naturalLogarithm(arg, sd);
-      denominator = isBase10 ? getLn10(Ctor, sd + 10) : naturalLogarithm(base, sd);
-      r = divide(num, denominator, sd, 1);
-      if (!inf) {
-        if (+digitsToString(r.d).slice(k + 1, k + 15) + 1 == 1e14) {
-          r = finalise(r, pr + 1, 0);
-        }
-        break;
-      }
-    } while (checkRoundingDigits(r.d, k += 10, rm));
-  }
-  external = true;
-  return finalise(r, pr, rm);
-};
-P.minus = P.sub = function(y) {
-  var d, e, i2, j, k, len, pr, rm, xd, xe, xLTy, yd, x2 = this, Ctor = x2.constructor;
-  y = new Ctor(y);
-  if (!x2.d || !y.d) {
-    if (!x2.s || !y.s) y = new Ctor(NaN);
-    else if (x2.d) y.s = -y.s;
-    else y = new Ctor(y.d || x2.s !== y.s ? x2 : NaN);
-    return y;
-  }
-  if (x2.s != y.s) {
-    y.s = -y.s;
-    return x2.plus(y);
-  }
-  xd = x2.d;
-  yd = y.d;
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  if (!xd[0] || !yd[0]) {
-    if (yd[0]) y.s = -y.s;
-    else if (xd[0]) y = new Ctor(x2);
-    else return new Ctor(rm === 3 ? -0 : 0);
-    return external ? finalise(y, pr, rm) : y;
-  }
-  e = mathfloor(y.e / LOG_BASE);
-  xe = mathfloor(x2.e / LOG_BASE);
-  xd = xd.slice();
-  k = xe - e;
-  if (k) {
-    xLTy = k < 0;
-    if (xLTy) {
-      d = xd;
-      k = -k;
-      len = yd.length;
-    } else {
-      d = yd;
-      e = xe;
-      len = xd.length;
-    }
-    i2 = Math.max(Math.ceil(pr / LOG_BASE), len) + 2;
-    if (k > i2) {
-      k = i2;
-      d.length = 1;
-    }
-    d.reverse();
-    for (i2 = k; i2--; ) d.push(0);
-    d.reverse();
-  } else {
-    i2 = xd.length;
-    len = yd.length;
-    xLTy = i2 < len;
-    if (xLTy) len = i2;
-    for (i2 = 0; i2 < len; i2++) {
-      if (xd[i2] != yd[i2]) {
-        xLTy = xd[i2] < yd[i2];
-        break;
-      }
-    }
-    k = 0;
-  }
-  if (xLTy) {
-    d = xd;
-    xd = yd;
-    yd = d;
-    y.s = -y.s;
-  }
-  len = xd.length;
-  for (i2 = yd.length - len; i2 > 0; --i2) xd[len++] = 0;
-  for (i2 = yd.length; i2 > k; ) {
-    if (xd[--i2] < yd[i2]) {
-      for (j = i2; j && xd[--j] === 0; ) xd[j] = BASE - 1;
-      --xd[j];
-      xd[i2] += BASE;
-    }
-    xd[i2] -= yd[i2];
-  }
-  for (; xd[--len] === 0; ) xd.pop();
-  for (; xd[0] === 0; xd.shift()) --e;
-  if (!xd[0]) return new Ctor(rm === 3 ? -0 : 0);
-  y.d = xd;
-  y.e = getBase10Exponent(xd, e);
-  return external ? finalise(y, pr, rm) : y;
-};
-P.modulo = P.mod = function(y) {
-  var q, x2 = this, Ctor = x2.constructor;
-  y = new Ctor(y);
-  if (!x2.d || !y.s || y.d && !y.d[0]) return new Ctor(NaN);
-  if (!y.d || x2.d && !x2.d[0]) {
-    return finalise(new Ctor(x2), Ctor.precision, Ctor.rounding);
-  }
-  external = false;
-  if (Ctor.modulo == 9) {
-    q = divide(x2, y.abs(), 0, 3, 1);
-    q.s *= y.s;
-  } else {
-    q = divide(x2, y, 0, Ctor.modulo, 1);
-  }
-  q = q.times(y);
-  external = true;
-  return x2.minus(q);
-};
-P.naturalExponential = P.exp = function() {
-  return naturalExponential(this);
-};
-P.naturalLogarithm = P.ln = function() {
-  return naturalLogarithm(this);
-};
-P.negated = P.neg = function() {
-  var x2 = new this.constructor(this);
-  x2.s = -x2.s;
-  return finalise(x2);
-};
-P.plus = P.add = function(y) {
-  var carry, d, e, i2, k, len, pr, rm, xd, yd, x2 = this, Ctor = x2.constructor;
-  y = new Ctor(y);
-  if (!x2.d || !y.d) {
-    if (!x2.s || !y.s) y = new Ctor(NaN);
-    else if (!x2.d) y = new Ctor(y.d || x2.s === y.s ? x2 : NaN);
-    return y;
-  }
-  if (x2.s != y.s) {
-    y.s = -y.s;
-    return x2.minus(y);
-  }
-  xd = x2.d;
-  yd = y.d;
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  if (!xd[0] || !yd[0]) {
-    if (!yd[0]) y = new Ctor(x2);
-    return external ? finalise(y, pr, rm) : y;
-  }
-  k = mathfloor(x2.e / LOG_BASE);
-  e = mathfloor(y.e / LOG_BASE);
-  xd = xd.slice();
-  i2 = k - e;
-  if (i2) {
-    if (i2 < 0) {
-      d = xd;
-      i2 = -i2;
-      len = yd.length;
-    } else {
-      d = yd;
-      e = k;
-      len = xd.length;
-    }
-    k = Math.ceil(pr / LOG_BASE);
-    len = k > len ? k + 1 : len + 1;
-    if (i2 > len) {
-      i2 = len;
-      d.length = 1;
-    }
-    d.reverse();
-    for (; i2--; ) d.push(0);
-    d.reverse();
-  }
-  len = xd.length;
-  i2 = yd.length;
-  if (len - i2 < 0) {
-    i2 = len;
-    d = yd;
-    yd = xd;
-    xd = d;
-  }
-  for (carry = 0; i2; ) {
-    carry = (xd[--i2] = xd[i2] + yd[i2] + carry) / BASE | 0;
-    xd[i2] %= BASE;
-  }
-  if (carry) {
-    xd.unshift(carry);
-    ++e;
-  }
-  for (len = xd.length; xd[--len] == 0; ) xd.pop();
-  y.d = xd;
-  y.e = getBase10Exponent(xd, e);
-  return external ? finalise(y, pr, rm) : y;
-};
-P.precision = P.sd = function(z) {
-  var k, x2 = this;
-  if (z !== void 0 && z !== !!z && z !== 1 && z !== 0) throw Error(invalidArgument + z);
-  if (x2.d) {
-    k = getPrecision(x2.d);
-    if (z && x2.e + 1 > k) k = x2.e + 1;
-  } else {
-    k = NaN;
-  }
-  return k;
-};
-P.round = function() {
-  var x2 = this, Ctor = x2.constructor;
-  return finalise(new Ctor(x2), x2.e + 1, Ctor.rounding);
-};
-P.sine = P.sin = function() {
-  var pr, rm, x2 = this, Ctor = x2.constructor;
-  if (!x2.isFinite()) return new Ctor(NaN);
-  if (x2.isZero()) return new Ctor(x2);
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  Ctor.precision = pr + Math.max(x2.e, x2.sd()) + LOG_BASE;
-  Ctor.rounding = 1;
-  x2 = sine(Ctor, toLessThanHalfPi(Ctor, x2));
-  Ctor.precision = pr;
-  Ctor.rounding = rm;
-  return finalise(quadrant > 2 ? x2.neg() : x2, pr, rm, true);
-};
-P.squareRoot = P.sqrt = function() {
-  var m, n, sd, r, rep, t, x2 = this, d = x2.d, e = x2.e, s = x2.s, Ctor = x2.constructor;
-  if (s !== 1 || !d || !d[0]) {
-    return new Ctor(!s || s < 0 && (!d || d[0]) ? NaN : d ? x2 : 1 / 0);
-  }
-  external = false;
-  s = Math.sqrt(+x2);
-  if (s == 0 || s == 1 / 0) {
-    n = digitsToString(d);
-    if ((n.length + e) % 2 == 0) n += "0";
-    s = Math.sqrt(n);
-    e = mathfloor((e + 1) / 2) - (e < 0 || e % 2);
-    if (s == 1 / 0) {
-      n = "5e" + e;
-    } else {
-      n = s.toExponential();
-      n = n.slice(0, n.indexOf("e") + 1) + e;
-    }
-    r = new Ctor(n);
-  } else {
-    r = new Ctor(s.toString());
-  }
-  sd = (e = Ctor.precision) + 3;
-  for (; ; ) {
-    t = r;
-    r = t.plus(divide(x2, t, sd + 2, 1)).times(0.5);
-    if (digitsToString(t.d).slice(0, sd) === (n = digitsToString(r.d)).slice(0, sd)) {
-      n = n.slice(sd - 3, sd + 1);
-      if (n == "9999" || !rep && n == "4999") {
-        if (!rep) {
-          finalise(t, e + 1, 0);
-          if (t.times(t).eq(x2)) {
-            r = t;
-            break;
-          }
-        }
-        sd += 4;
-        rep = 1;
-      } else {
-        if (!+n || !+n.slice(1) && n.charAt(0) == "5") {
-          finalise(r, e + 1, 1);
-          m = !r.times(r).eq(x2);
-        }
-        break;
-      }
-    }
-  }
-  external = true;
-  return finalise(r, e, Ctor.rounding, m);
-};
-P.tangent = P.tan = function() {
-  var pr, rm, x2 = this, Ctor = x2.constructor;
-  if (!x2.isFinite()) return new Ctor(NaN);
-  if (x2.isZero()) return new Ctor(x2);
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  Ctor.precision = pr + 10;
-  Ctor.rounding = 1;
-  x2 = x2.sin();
-  x2.s = 1;
-  x2 = divide(x2, new Ctor(1).minus(x2.times(x2)).sqrt(), pr + 10, 0);
-  Ctor.precision = pr;
-  Ctor.rounding = rm;
-  return finalise(quadrant == 2 || quadrant == 4 ? x2.neg() : x2, pr, rm, true);
-};
-P.times = P.mul = function(y) {
-  var carry, e, i2, k, r, rL, t, xdL, ydL, x2 = this, Ctor = x2.constructor, xd = x2.d, yd = (y = new Ctor(y)).d;
-  y.s *= x2.s;
-  if (!xd || !xd[0] || !yd || !yd[0]) {
-    return new Ctor(!y.s || xd && !xd[0] && !yd || yd && !yd[0] && !xd ? NaN : !xd || !yd ? y.s / 0 : y.s * 0);
-  }
-  e = mathfloor(x2.e / LOG_BASE) + mathfloor(y.e / LOG_BASE);
-  xdL = xd.length;
-  ydL = yd.length;
-  if (xdL < ydL) {
-    r = xd;
-    xd = yd;
-    yd = r;
-    rL = xdL;
-    xdL = ydL;
-    ydL = rL;
-  }
-  r = [];
-  rL = xdL + ydL;
-  for (i2 = rL; i2--; ) r.push(0);
-  for (i2 = ydL; --i2 >= 0; ) {
-    carry = 0;
-    for (k = xdL + i2; k > i2; ) {
-      t = r[k] + yd[i2] * xd[k - i2 - 1] + carry;
-      r[k--] = t % BASE | 0;
-      carry = t / BASE | 0;
-    }
-    r[k] = (r[k] + carry) % BASE | 0;
-  }
-  for (; !r[--rL]; ) r.pop();
-  if (carry) ++e;
-  else r.shift();
-  y.d = r;
-  y.e = getBase10Exponent(r, e);
-  return external ? finalise(y, Ctor.precision, Ctor.rounding) : y;
-};
-P.toBinary = function(sd, rm) {
-  return toStringBinary(this, 2, sd, rm);
-};
-P.toDecimalPlaces = P.toDP = function(dp, rm) {
-  var x2 = this, Ctor = x2.constructor;
-  x2 = new Ctor(x2);
-  if (dp === void 0) return x2;
-  checkInt32(dp, 0, MAX_DIGITS);
-  if (rm === void 0) rm = Ctor.rounding;
-  else checkInt32(rm, 0, 8);
-  return finalise(x2, dp + x2.e + 1, rm);
-};
-P.toExponential = function(dp, rm) {
-  var str, x2 = this, Ctor = x2.constructor;
-  if (dp === void 0) {
-    str = finiteToString(x2, true);
-  } else {
-    checkInt32(dp, 0, MAX_DIGITS);
-    if (rm === void 0) rm = Ctor.rounding;
-    else checkInt32(rm, 0, 8);
-    x2 = finalise(new Ctor(x2), dp + 1, rm);
-    str = finiteToString(x2, true, dp + 1);
-  }
-  return x2.isNeg() && !x2.isZero() ? "-" + str : str;
-};
-P.toFixed = function(dp, rm) {
-  var str, y, x2 = this, Ctor = x2.constructor;
-  if (dp === void 0) {
-    str = finiteToString(x2);
-  } else {
-    checkInt32(dp, 0, MAX_DIGITS);
-    if (rm === void 0) rm = Ctor.rounding;
-    else checkInt32(rm, 0, 8);
-    y = finalise(new Ctor(x2), dp + x2.e + 1, rm);
-    str = finiteToString(y, false, dp + y.e + 1);
-  }
-  return x2.isNeg() && !x2.isZero() ? "-" + str : str;
-};
-P.toFraction = function(maxD) {
-  var d, d0, d1, d2, e, k, n, n0, n1, pr, q, r, x2 = this, xd = x2.d, Ctor = x2.constructor;
-  if (!xd) return new Ctor(x2);
-  n1 = d0 = new Ctor(1);
-  d1 = n0 = new Ctor(0);
-  d = new Ctor(d1);
-  e = d.e = getPrecision(xd) - x2.e - 1;
-  k = e % LOG_BASE;
-  d.d[0] = mathpow(10, k < 0 ? LOG_BASE + k : k);
-  if (maxD == null) {
-    maxD = e > 0 ? d : n1;
-  } else {
-    n = new Ctor(maxD);
-    if (!n.isInt() || n.lt(n1)) throw Error(invalidArgument + n);
-    maxD = n.gt(d) ? e > 0 ? d : n1 : n;
-  }
-  external = false;
-  n = new Ctor(digitsToString(xd));
-  pr = Ctor.precision;
-  Ctor.precision = e = xd.length * LOG_BASE * 2;
-  for (; ; ) {
-    q = divide(n, d, 0, 1, 1);
-    d2 = d0.plus(q.times(d1));
-    if (d2.cmp(maxD) == 1) break;
-    d0 = d1;
-    d1 = d2;
-    d2 = n1;
-    n1 = n0.plus(q.times(d2));
-    n0 = d2;
-    d2 = d;
-    d = n.minus(q.times(d2));
-    n = d2;
-  }
-  d2 = divide(maxD.minus(d0), d1, 0, 1, 1);
-  n0 = n0.plus(d2.times(n1));
-  d0 = d0.plus(d2.times(d1));
-  n0.s = n1.s = x2.s;
-  r = divide(n1, d1, e, 1).minus(x2).abs().cmp(divide(n0, d0, e, 1).minus(x2).abs()) < 1 ? [n1, d1] : [n0, d0];
-  Ctor.precision = pr;
-  external = true;
-  return r;
-};
-P.toHexadecimal = P.toHex = function(sd, rm) {
-  return toStringBinary(this, 16, sd, rm);
-};
-P.toNearest = function(y, rm) {
-  var x2 = this, Ctor = x2.constructor;
-  x2 = new Ctor(x2);
-  if (y == null) {
-    if (!x2.d) return x2;
-    y = new Ctor(1);
-    rm = Ctor.rounding;
-  } else {
-    y = new Ctor(y);
-    if (rm === void 0) {
-      rm = Ctor.rounding;
-    } else {
-      checkInt32(rm, 0, 8);
-    }
-    if (!x2.d) return y.s ? x2 : y;
-    if (!y.d) {
-      if (y.s) y.s = x2.s;
-      return y;
-    }
-  }
-  if (y.d[0]) {
-    external = false;
-    x2 = divide(x2, y, 0, rm, 1).times(y);
-    external = true;
-    finalise(x2);
-  } else {
-    y.s = x2.s;
-    x2 = y;
-  }
-  return x2;
-};
-P.toNumber = function() {
-  return +this;
-};
-P.toOctal = function(sd, rm) {
-  return toStringBinary(this, 8, sd, rm);
-};
-P.toPower = P.pow = function(y) {
-  var e, k, pr, r, rm, s, x2 = this, Ctor = x2.constructor, yn = +(y = new Ctor(y));
-  if (!x2.d || !y.d || !x2.d[0] || !y.d[0]) return new Ctor(mathpow(+x2, yn));
-  x2 = new Ctor(x2);
-  if (x2.eq(1)) return x2;
-  pr = Ctor.precision;
-  rm = Ctor.rounding;
-  if (y.eq(1)) return finalise(x2, pr, rm);
-  e = mathfloor(y.e / LOG_BASE);
-  if (e >= y.d.length - 1 && (k = yn < 0 ? -yn : yn) <= MAX_SAFE_INTEGER) {
-    r = intPow(Ctor, x2, k, pr);
-    return y.s < 0 ? new Ctor(1).div(r) : finalise(r, pr, rm);
-  }
-  s = x2.s;
-  if (s < 0) {
-    if (e < y.d.length - 1) return new Ctor(NaN);
-    if ((y.d[e] & 1) == 0) s = 1;
-    if (x2.e == 0 && x2.d[0] == 1 && x2.d.length == 1) {
-      x2.s = s;
-      return x2;
-    }
-  }
-  k = mathpow(+x2, yn);
-  e = k == 0 || !isFinite(k) ? mathfloor(yn * (Math.log("0." + digitsToString(x2.d)) / Math.LN10 + x2.e + 1)) : new Ctor(k + "").e;
-  if (e > Ctor.maxE + 1 || e < Ctor.minE - 1) return new Ctor(e > 0 ? s / 0 : 0);
-  external = false;
-  Ctor.rounding = x2.s = 1;
-  k = Math.min(12, (e + "").length);
-  r = naturalExponential(y.times(naturalLogarithm(x2, pr + k)), pr);
-  if (r.d) {
-    r = finalise(r, pr + 5, 1);
-    if (checkRoundingDigits(r.d, pr, rm)) {
-      e = pr + 10;
-      r = finalise(naturalExponential(y.times(naturalLogarithm(x2, e + k)), e), e + 5, 1);
-      if (+digitsToString(r.d).slice(pr + 1, pr + 15) + 1 == 1e14) {
-        r = finalise(r, pr + 1, 0);
-      }
-    }
-  }
-  r.s = s;
-  external = true;
-  Ctor.rounding = rm;
-  return finalise(r, pr, rm);
-};
-P.toPrecision = function(sd, rm) {
-  var str, x2 = this, Ctor = x2.constructor;
-  if (sd === void 0) {
-    str = finiteToString(x2, x2.e <= Ctor.toExpNeg || x2.e >= Ctor.toExpPos);
-  } else {
-    checkInt32(sd, 1, MAX_DIGITS);
-    if (rm === void 0) rm = Ctor.rounding;
-    else checkInt32(rm, 0, 8);
-    x2 = finalise(new Ctor(x2), sd, rm);
-    str = finiteToString(x2, sd <= x2.e || x2.e <= Ctor.toExpNeg, sd);
-  }
-  return x2.isNeg() && !x2.isZero() ? "-" + str : str;
-};
-P.toSignificantDigits = P.toSD = function(sd, rm) {
-  var x2 = this, Ctor = x2.constructor;
-  if (sd === void 0) {
-    sd = Ctor.precision;
-    rm = Ctor.rounding;
-  } else {
-    checkInt32(sd, 1, MAX_DIGITS);
-    if (rm === void 0) rm = Ctor.rounding;
-    else checkInt32(rm, 0, 8);
-  }
-  return finalise(new Ctor(x2), sd, rm);
-};
-P.toString = function() {
-  var x2 = this, Ctor = x2.constructor, str = finiteToString(x2, x2.e <= Ctor.toExpNeg || x2.e >= Ctor.toExpPos);
-  return x2.isNeg() && !x2.isZero() ? "-" + str : str;
-};
-P.truncated = P.trunc = function() {
-  return finalise(new this.constructor(this), this.e + 1, 1);
-};
-P.valueOf = P.toJSON = function() {
-  var x2 = this, Ctor = x2.constructor, str = finiteToString(x2, x2.e <= Ctor.toExpNeg || x2.e >= Ctor.toExpPos);
-  return x2.isNeg() ? "-" + str : str;
-};
-function digitsToString(d) {
-  var i2, k, ws, indexOfLastWord = d.length - 1, str = "", w = d[0];
-  if (indexOfLastWord > 0) {
-    str += w;
-    for (i2 = 1; i2 < indexOfLastWord; i2++) {
-      ws = d[i2] + "";
-      k = LOG_BASE - ws.length;
-      if (k) str += getZeroString(k);
-      str += ws;
-    }
-    w = d[i2];
-    ws = w + "";
-    k = LOG_BASE - ws.length;
-    if (k) str += getZeroString(k);
-  } else if (w === 0) {
-    return "0";
-  }
-  for (; w % 10 === 0; ) w /= 10;
-  return str + w;
-}
-function checkInt32(i2, min2, max3) {
-  if (i2 !== ~~i2 || i2 < min2 || i2 > max3) {
-    throw Error(invalidArgument + i2);
-  }
-}
-function checkRoundingDigits(d, i2, rm, repeating) {
-  var di, k, r, rd;
-  for (k = d[0]; k >= 10; k /= 10) --i2;
-  if (--i2 < 0) {
-    i2 += LOG_BASE;
-    di = 0;
-  } else {
-    di = Math.ceil((i2 + 1) / LOG_BASE);
-    i2 %= LOG_BASE;
-  }
-  k = mathpow(10, LOG_BASE - i2);
-  rd = d[di] % k | 0;
-  if (repeating == null) {
-    if (i2 < 3) {
-      if (i2 == 0) rd = rd / 100 | 0;
-      else if (i2 == 1) rd = rd / 10 | 0;
-      r = rm < 4 && rd == 99999 || rm > 3 && rd == 49999 || rd == 5e4 || rd == 0;
-    } else {
-      r = (rm < 4 && rd + 1 == k || rm > 3 && rd + 1 == k / 2) && (d[di + 1] / k / 100 | 0) == mathpow(10, i2 - 2) - 1 || (rd == k / 2 || rd == 0) && (d[di + 1] / k / 100 | 0) == 0;
-    }
-  } else {
-    if (i2 < 4) {
-      if (i2 == 0) rd = rd / 1e3 | 0;
-      else if (i2 == 1) rd = rd / 100 | 0;
-      else if (i2 == 2) rd = rd / 10 | 0;
-      r = (repeating || rm < 4) && rd == 9999 || !repeating && rm > 3 && rd == 4999;
-    } else {
-      r = ((repeating || rm < 4) && rd + 1 == k || !repeating && rm > 3 && rd + 1 == k / 2) && (d[di + 1] / k / 1e3 | 0) == mathpow(10, i2 - 3) - 1;
-    }
-  }
-  return r;
-}
-function convertBase(str, baseIn, baseOut) {
-  var j, arr2 = [0], arrL, i2 = 0, strL = str.length;
-  for (; i2 < strL; ) {
-    for (arrL = arr2.length; arrL--; ) arr2[arrL] *= baseIn;
-    arr2[0] += NUMERALS.indexOf(str.charAt(i2++));
-    for (j = 0; j < arr2.length; j++) {
-      if (arr2[j] > baseOut - 1) {
-        if (arr2[j + 1] === void 0) arr2[j + 1] = 0;
-        arr2[j + 1] += arr2[j] / baseOut | 0;
-        arr2[j] %= baseOut;
-      }
-    }
-  }
-  return arr2.reverse();
-}
-function cosine(Ctor, x2) {
-  var k, len, y;
-  if (x2.isZero()) return x2;
-  len = x2.d.length;
-  if (len < 32) {
-    k = Math.ceil(len / 3);
-    y = (1 / tinyPow(4, k)).toString();
-  } else {
-    k = 16;
-    y = "2.3283064365386962890625e-10";
-  }
-  Ctor.precision += k;
-  x2 = taylorSeries(Ctor, 1, x2.times(y), new Ctor(1));
-  for (var i2 = k; i2--; ) {
-    var cos2x = x2.times(x2);
-    x2 = cos2x.times(cos2x).minus(cos2x).times(8).plus(1);
-  }
-  Ctor.precision -= k;
-  return x2;
-}
-var divide = /* @__PURE__ */ (function() {
-  function multiplyInteger(x2, k, base) {
-    var temp, carry = 0, i2 = x2.length;
-    for (x2 = x2.slice(); i2--; ) {
-      temp = x2[i2] * k + carry;
-      x2[i2] = temp % base | 0;
-      carry = temp / base | 0;
-    }
-    if (carry) x2.unshift(carry);
-    return x2;
-  }
-  function compare(a, b, aL, bL) {
-    var i2, r;
-    if (aL != bL) {
-      r = aL > bL ? 1 : -1;
-    } else {
-      for (i2 = r = 0; i2 < aL; i2++) {
-        if (a[i2] != b[i2]) {
-          r = a[i2] > b[i2] ? 1 : -1;
-          break;
-        }
-      }
-    }
-    return r;
-  }
-  function subtract(a, b, aL, base) {
-    var i2 = 0;
-    for (; aL--; ) {
-      a[aL] -= i2;
-      i2 = a[aL] < b[aL] ? 1 : 0;
-      a[aL] = i2 * base + a[aL] - b[aL];
-    }
-    for (; !a[0] && a.length > 1; ) a.shift();
-  }
-  return function(x2, y, pr, rm, dp, base) {
-    var cmp, e, i2, k, logBase, more, prod, prodL, q, qd, rem, remL, rem0, sd, t, xi, xL, yd0, yL, yz, Ctor = x2.constructor, sign2 = x2.s == y.s ? 1 : -1, xd = x2.d, yd = y.d;
-    if (!xd || !xd[0] || !yd || !yd[0]) {
-      return new Ctor(
-        // Return NaN if either NaN, or both Infinity or 0.
-        !x2.s || !y.s || (xd ? yd && xd[0] == yd[0] : !yd) ? NaN : (
-          // Return ±0 if x is 0 or y is ±Infinity, or return ±Infinity as y is 0.
-          xd && xd[0] == 0 || !yd ? sign2 * 0 : sign2 / 0
-        )
-      );
-    }
-    if (base) {
-      logBase = 1;
-      e = x2.e - y.e;
-    } else {
-      base = BASE;
-      logBase = LOG_BASE;
-      e = mathfloor(x2.e / logBase) - mathfloor(y.e / logBase);
-    }
-    yL = yd.length;
-    xL = xd.length;
-    q = new Ctor(sign2);
-    qd = q.d = [];
-    for (i2 = 0; yd[i2] == (xd[i2] || 0); i2++) ;
-    if (yd[i2] > (xd[i2] || 0)) e--;
-    if (pr == null) {
-      sd = pr = Ctor.precision;
-      rm = Ctor.rounding;
-    } else if (dp) {
-      sd = pr + (x2.e - y.e) + 1;
-    } else {
-      sd = pr;
-    }
-    if (sd < 0) {
-      qd.push(1);
-      more = true;
-    } else {
-      sd = sd / logBase + 2 | 0;
-      i2 = 0;
-      if (yL == 1) {
-        k = 0;
-        yd = yd[0];
-        sd++;
-        for (; (i2 < xL || k) && sd--; i2++) {
-          t = k * base + (xd[i2] || 0);
-          qd[i2] = t / yd | 0;
-          k = t % yd | 0;
-        }
-        more = k || i2 < xL;
-      } else {
-        k = base / (yd[0] + 1) | 0;
-        if (k > 1) {
-          yd = multiplyInteger(yd, k, base);
-          xd = multiplyInteger(xd, k, base);
-          yL = yd.length;
-          xL = xd.length;
-        }
-        xi = yL;
-        rem = xd.slice(0, yL);
-        remL = rem.length;
-        for (; remL < yL; ) rem[remL++] = 0;
-        yz = yd.slice();
-        yz.unshift(0);
-        yd0 = yd[0];
-        if (yd[1] >= base / 2) ++yd0;
-        do {
-          k = 0;
-          cmp = compare(yd, rem, yL, remL);
-          if (cmp < 0) {
-            rem0 = rem[0];
-            if (yL != remL) rem0 = rem0 * base + (rem[1] || 0);
-            k = rem0 / yd0 | 0;
-            if (k > 1) {
-              if (k >= base) k = base - 1;
-              prod = multiplyInteger(yd, k, base);
-              prodL = prod.length;
-              remL = rem.length;
-              cmp = compare(prod, rem, prodL, remL);
-              if (cmp == 1) {
-                k--;
-                subtract(prod, yL < prodL ? yz : yd, prodL, base);
-              }
-            } else {
-              if (k == 0) cmp = k = 1;
-              prod = yd.slice();
-            }
-            prodL = prod.length;
-            if (prodL < remL) prod.unshift(0);
-            subtract(rem, prod, remL, base);
-            if (cmp == -1) {
-              remL = rem.length;
-              cmp = compare(yd, rem, yL, remL);
-              if (cmp < 1) {
-                k++;
-                subtract(rem, yL < remL ? yz : yd, remL, base);
-              }
-            }
-            remL = rem.length;
-          } else if (cmp === 0) {
-            k++;
-            rem = [0];
-          }
-          qd[i2++] = k;
-          if (cmp && rem[0]) {
-            rem[remL++] = xd[xi] || 0;
-          } else {
-            rem = [xd[xi]];
-            remL = 1;
-          }
-        } while ((xi++ < xL || rem[0] !== void 0) && sd--);
-        more = rem[0] !== void 0;
-      }
-      if (!qd[0]) qd.shift();
-    }
-    if (logBase == 1) {
-      q.e = e;
-      inexact = more;
-    } else {
-      for (i2 = 1, k = qd[0]; k >= 10; k /= 10) i2++;
-      q.e = i2 + e * logBase - 1;
-      finalise(q, dp ? pr + q.e + 1 : pr, rm, more);
-    }
-    return q;
-  };
-})();
-function finalise(x2, sd, rm, isTruncated) {
-  var digits, i2, j, k, rd, roundUp, w, xd, xdi, Ctor = x2.constructor;
-  out: if (sd != null) {
-    xd = x2.d;
-    if (!xd) return x2;
-    for (digits = 1, k = xd[0]; k >= 10; k /= 10) digits++;
-    i2 = sd - digits;
-    if (i2 < 0) {
-      i2 += LOG_BASE;
-      j = sd;
-      w = xd[xdi = 0];
-      rd = w / mathpow(10, digits - j - 1) % 10 | 0;
-    } else {
-      xdi = Math.ceil((i2 + 1) / LOG_BASE);
-      k = xd.length;
-      if (xdi >= k) {
-        if (isTruncated) {
-          for (; k++ <= xdi; ) xd.push(0);
-          w = rd = 0;
-          digits = 1;
-          i2 %= LOG_BASE;
-          j = i2 - LOG_BASE + 1;
-        } else {
-          break out;
-        }
-      } else {
-        w = k = xd[xdi];
-        for (digits = 1; k >= 10; k /= 10) digits++;
-        i2 %= LOG_BASE;
-        j = i2 - LOG_BASE + digits;
-        rd = j < 0 ? 0 : w / mathpow(10, digits - j - 1) % 10 | 0;
-      }
-    }
-    isTruncated = isTruncated || sd < 0 || xd[xdi + 1] !== void 0 || (j < 0 ? w : w % mathpow(10, digits - j - 1));
-    roundUp = rm < 4 ? (rd || isTruncated) && (rm == 0 || rm == (x2.s < 0 ? 3 : 2)) : rd > 5 || rd == 5 && (rm == 4 || isTruncated || rm == 6 && // Check whether the digit to the left of the rounding digit is odd.
-    (i2 > 0 ? j > 0 ? w / mathpow(10, digits - j) : 0 : xd[xdi - 1]) % 10 & 1 || rm == (x2.s < 0 ? 8 : 7));
-    if (sd < 1 || !xd[0]) {
-      xd.length = 0;
-      if (roundUp) {
-        sd -= x2.e + 1;
-        xd[0] = mathpow(10, (LOG_BASE - sd % LOG_BASE) % LOG_BASE);
-        x2.e = -sd || 0;
-      } else {
-        xd[0] = x2.e = 0;
-      }
-      return x2;
-    }
-    if (i2 == 0) {
-      xd.length = xdi;
-      k = 1;
-      xdi--;
-    } else {
-      xd.length = xdi + 1;
-      k = mathpow(10, LOG_BASE - i2);
-      xd[xdi] = j > 0 ? (w / mathpow(10, digits - j) % mathpow(10, j) | 0) * k : 0;
-    }
-    if (roundUp) {
-      for (; ; ) {
-        if (xdi == 0) {
-          for (i2 = 1, j = xd[0]; j >= 10; j /= 10) i2++;
-          j = xd[0] += k;
-          for (k = 1; j >= 10; j /= 10) k++;
-          if (i2 != k) {
-            x2.e++;
-            if (xd[0] == BASE) xd[0] = 1;
-          }
-          break;
-        } else {
-          xd[xdi] += k;
-          if (xd[xdi] != BASE) break;
-          xd[xdi--] = 0;
-          k = 1;
-        }
-      }
-    }
-    for (i2 = xd.length; xd[--i2] === 0; ) xd.pop();
-  }
-  if (external) {
-    if (x2.e > Ctor.maxE) {
-      x2.d = null;
-      x2.e = NaN;
-    } else if (x2.e < Ctor.minE) {
-      x2.e = 0;
-      x2.d = [0];
-    }
-  }
-  return x2;
-}
-function finiteToString(x2, isExp, sd) {
-  if (!x2.isFinite()) return nonFiniteToString(x2);
-  var k, e = x2.e, str = digitsToString(x2.d), len = str.length;
-  if (isExp) {
-    if (sd && (k = sd - len) > 0) {
-      str = str.charAt(0) + "." + str.slice(1) + getZeroString(k);
-    } else if (len > 1) {
-      str = str.charAt(0) + "." + str.slice(1);
-    }
-    str = str + (x2.e < 0 ? "e" : "e+") + x2.e;
-  } else if (e < 0) {
-    str = "0." + getZeroString(-e - 1) + str;
-    if (sd && (k = sd - len) > 0) str += getZeroString(k);
-  } else if (e >= len) {
-    str += getZeroString(e + 1 - len);
-    if (sd && (k = sd - e - 1) > 0) str = str + "." + getZeroString(k);
-  } else {
-    if ((k = e + 1) < len) str = str.slice(0, k) + "." + str.slice(k);
-    if (sd && (k = sd - len) > 0) {
-      if (e + 1 === len) str += ".";
-      str += getZeroString(k);
-    }
-  }
-  return str;
-}
-function getBase10Exponent(digits, e) {
-  var w = digits[0];
-  for (e *= LOG_BASE; w >= 10; w /= 10) e++;
-  return e;
-}
-function getLn10(Ctor, sd, pr) {
-  if (sd > LN10_PRECISION) {
-    external = true;
-    if (pr) Ctor.precision = pr;
-    throw Error(precisionLimitExceeded);
-  }
-  return finalise(new Ctor(LN10), sd, 1, true);
-}
-function getPi(Ctor, sd, rm) {
-  if (sd > PI_PRECISION) throw Error(precisionLimitExceeded);
-  return finalise(new Ctor(PI), sd, rm, true);
-}
-function getPrecision(digits) {
-  var w = digits.length - 1, len = w * LOG_BASE + 1;
-  w = digits[w];
-  if (w) {
-    for (; w % 10 == 0; w /= 10) len--;
-    for (w = digits[0]; w >= 10; w /= 10) len++;
-  }
-  return len;
-}
-function getZeroString(k) {
-  var zs = "";
-  for (; k--; ) zs += "0";
-  return zs;
-}
-function intPow(Ctor, x2, n, pr) {
-  var isTruncated, r = new Ctor(1), k = Math.ceil(pr / LOG_BASE + 4);
-  external = false;
-  for (; ; ) {
-    if (n % 2) {
-      r = r.times(x2);
-      if (truncate(r.d, k)) isTruncated = true;
-    }
-    n = mathfloor(n / 2);
-    if (n === 0) {
-      n = r.d.length - 1;
-      if (isTruncated && r.d[n] === 0) ++r.d[n];
-      break;
-    }
-    x2 = x2.times(x2);
-    truncate(x2.d, k);
-  }
-  external = true;
-  return r;
-}
-function isOdd(n) {
-  return n.d[n.d.length - 1] & 1;
-}
-function maxOrMin(Ctor, args, n) {
-  var k, y, x2 = new Ctor(args[0]), i2 = 0;
-  for (; ++i2 < args.length; ) {
-    y = new Ctor(args[i2]);
-    if (!y.s) {
-      x2 = y;
-      break;
-    }
-    k = x2.cmp(y);
-    if (k === n || k === 0 && x2.s === n) {
-      x2 = y;
-    }
-  }
-  return x2;
-}
-function naturalExponential(x2, sd) {
-  var denominator, guard, j, pow2, sum3, t, wpr, rep = 0, i2 = 0, k = 0, Ctor = x2.constructor, rm = Ctor.rounding, pr = Ctor.precision;
-  if (!x2.d || !x2.d[0] || x2.e > 17) {
-    return new Ctor(x2.d ? !x2.d[0] ? 1 : x2.s < 0 ? 0 : 1 / 0 : x2.s ? x2.s < 0 ? 0 : x2 : 0 / 0);
-  }
-  if (sd == null) {
-    external = false;
-    wpr = pr;
-  } else {
-    wpr = sd;
-  }
-  t = new Ctor(0.03125);
-  while (x2.e > -2) {
-    x2 = x2.times(t);
-    k += 5;
-  }
-  guard = Math.log(mathpow(2, k)) / Math.LN10 * 2 + 5 | 0;
-  wpr += guard;
-  denominator = pow2 = sum3 = new Ctor(1);
-  Ctor.precision = wpr;
-  for (; ; ) {
-    pow2 = finalise(pow2.times(x2), wpr, 1);
-    denominator = denominator.times(++i2);
-    t = sum3.plus(divide(pow2, denominator, wpr, 1));
-    if (digitsToString(t.d).slice(0, wpr) === digitsToString(sum3.d).slice(0, wpr)) {
-      j = k;
-      while (j--) sum3 = finalise(sum3.times(sum3), wpr, 1);
-      if (sd == null) {
-        if (rep < 3 && checkRoundingDigits(sum3.d, wpr - guard, rm, rep)) {
-          Ctor.precision = wpr += 10;
-          denominator = pow2 = t = new Ctor(1);
-          i2 = 0;
-          rep++;
-        } else {
-          return finalise(sum3, Ctor.precision = pr, rm, external = true);
-        }
-      } else {
-        Ctor.precision = pr;
-        return sum3;
-      }
-    }
-    sum3 = t;
-  }
-}
-function naturalLogarithm(y, sd) {
-  var c, c0, denominator, e, numerator, rep, sum3, t, wpr, x1, x2, n = 1, guard = 10, x3 = y, xd = x3.d, Ctor = x3.constructor, rm = Ctor.rounding, pr = Ctor.precision;
-  if (x3.s < 0 || !xd || !xd[0] || !x3.e && xd[0] == 1 && xd.length == 1) {
-    return new Ctor(xd && !xd[0] ? -1 / 0 : x3.s != 1 ? NaN : xd ? 0 : x3);
-  }
-  if (sd == null) {
-    external = false;
-    wpr = pr;
-  } else {
-    wpr = sd;
-  }
-  Ctor.precision = wpr += guard;
-  c = digitsToString(xd);
-  c0 = c.charAt(0);
-  if (Math.abs(e = x3.e) < 15e14) {
-    while (c0 < 7 && c0 != 1 || c0 == 1 && c.charAt(1) > 3) {
-      x3 = x3.times(y);
-      c = digitsToString(x3.d);
-      c0 = c.charAt(0);
-      n++;
-    }
-    e = x3.e;
-    if (c0 > 1) {
-      x3 = new Ctor("0." + c);
-      e++;
-    } else {
-      x3 = new Ctor(c0 + "." + c.slice(1));
-    }
-  } else {
-    t = getLn10(Ctor, wpr + 2, pr).times(e + "");
-    x3 = naturalLogarithm(new Ctor(c0 + "." + c.slice(1)), wpr - guard).plus(t);
-    Ctor.precision = pr;
-    return sd == null ? finalise(x3, pr, rm, external = true) : x3;
-  }
-  x1 = x3;
-  sum3 = numerator = x3 = divide(x3.minus(1), x3.plus(1), wpr, 1);
-  x2 = finalise(x3.times(x3), wpr, 1);
-  denominator = 3;
-  for (; ; ) {
-    numerator = finalise(numerator.times(x2), wpr, 1);
-    t = sum3.plus(divide(numerator, new Ctor(denominator), wpr, 1));
-    if (digitsToString(t.d).slice(0, wpr) === digitsToString(sum3.d).slice(0, wpr)) {
-      sum3 = sum3.times(2);
-      if (e !== 0) sum3 = sum3.plus(getLn10(Ctor, wpr + 2, pr).times(e + ""));
-      sum3 = divide(sum3, new Ctor(n), wpr, 1);
-      if (sd == null) {
-        if (checkRoundingDigits(sum3.d, wpr - guard, rm, rep)) {
-          Ctor.precision = wpr += guard;
-          t = numerator = x3 = divide(x1.minus(1), x1.plus(1), wpr, 1);
-          x2 = finalise(x3.times(x3), wpr, 1);
-          denominator = rep = 1;
-        } else {
-          return finalise(sum3, Ctor.precision = pr, rm, external = true);
-        }
-      } else {
-        Ctor.precision = pr;
-        return sum3;
-      }
-    }
-    sum3 = t;
-    denominator += 2;
-  }
-}
-function nonFiniteToString(x2) {
-  return String(x2.s * x2.s / 0);
-}
-function parseDecimal(x2, str) {
-  var e, i2, len;
-  if ((e = str.indexOf(".")) > -1) str = str.replace(".", "");
-  if ((i2 = str.search(/e/i)) > 0) {
-    if (e < 0) e = i2;
-    e += +str.slice(i2 + 1);
-    str = str.substring(0, i2);
-  } else if (e < 0) {
-    e = str.length;
-  }
-  for (i2 = 0; str.charCodeAt(i2) === 48; i2++) ;
-  for (len = str.length; str.charCodeAt(len - 1) === 48; --len) ;
-  str = str.slice(i2, len);
-  if (str) {
-    len -= i2;
-    x2.e = e = e - i2 - 1;
-    x2.d = [];
-    i2 = (e + 1) % LOG_BASE;
-    if (e < 0) i2 += LOG_BASE;
-    if (i2 < len) {
-      if (i2) x2.d.push(+str.slice(0, i2));
-      for (len -= LOG_BASE; i2 < len; ) x2.d.push(+str.slice(i2, i2 += LOG_BASE));
-      str = str.slice(i2);
-      i2 = LOG_BASE - str.length;
-    } else {
-      i2 -= len;
-    }
-    for (; i2--; ) str += "0";
-    x2.d.push(+str);
-    if (external) {
-      if (x2.e > x2.constructor.maxE) {
-        x2.d = null;
-        x2.e = NaN;
-      } else if (x2.e < x2.constructor.minE) {
-        x2.e = 0;
-        x2.d = [0];
-      }
-    }
-  } else {
-    x2.e = 0;
-    x2.d = [0];
-  }
-  return x2;
-}
-function parseOther(x2, str) {
-  var base, Ctor, divisor, i2, isFloat, len, p, xd, xe;
-  if (str.indexOf("_") > -1) {
-    str = str.replace(/(\d)_(?=\d)/g, "$1");
-    if (isDecimal.test(str)) return parseDecimal(x2, str);
-  } else if (str === "Infinity" || str === "NaN") {
-    if (!+str) x2.s = NaN;
-    x2.e = NaN;
-    x2.d = null;
-    return x2;
-  }
-  if (isHex.test(str)) {
-    base = 16;
-    str = str.toLowerCase();
-  } else if (isBinary.test(str)) {
-    base = 2;
-  } else if (isOctal.test(str)) {
-    base = 8;
-  } else {
-    throw Error(invalidArgument + str);
-  }
-  i2 = str.search(/p/i);
-  if (i2 > 0) {
-    p = +str.slice(i2 + 1);
-    str = str.substring(2, i2);
-  } else {
-    str = str.slice(2);
-  }
-  i2 = str.indexOf(".");
-  isFloat = i2 >= 0;
-  Ctor = x2.constructor;
-  if (isFloat) {
-    str = str.replace(".", "");
-    len = str.length;
-    i2 = len - i2;
-    divisor = intPow(Ctor, new Ctor(base), i2, i2 * 2);
-  }
-  xd = convertBase(str, base, BASE);
-  xe = xd.length - 1;
-  for (i2 = xe; xd[i2] === 0; --i2) xd.pop();
-  if (i2 < 0) return new Ctor(x2.s * 0);
-  x2.e = getBase10Exponent(xd, xe);
-  x2.d = xd;
-  external = false;
-  if (isFloat) x2 = divide(x2, divisor, len * 4);
-  if (p) x2 = x2.times(Math.abs(p) < 54 ? mathpow(2, p) : Decimal.pow(2, p));
-  external = true;
-  return x2;
-}
-function sine(Ctor, x2) {
-  var k, len = x2.d.length;
-  if (len < 3) {
-    return x2.isZero() ? x2 : taylorSeries(Ctor, 2, x2, x2);
-  }
-  k = 1.4 * Math.sqrt(len);
-  k = k > 16 ? 16 : k | 0;
-  x2 = x2.times(1 / tinyPow(5, k));
-  x2 = taylorSeries(Ctor, 2, x2, x2);
-  var sin2_x, d5 = new Ctor(5), d16 = new Ctor(16), d20 = new Ctor(20);
-  for (; k--; ) {
-    sin2_x = x2.times(x2);
-    x2 = x2.times(d5.plus(sin2_x.times(d16.times(sin2_x).minus(d20))));
-  }
-  return x2;
-}
-function taylorSeries(Ctor, n, x2, y, isHyperbolic) {
-  var j, t, u, x22, i2 = 1, pr = Ctor.precision, k = Math.ceil(pr / LOG_BASE);
-  external = false;
-  x22 = x2.times(x2);
-  u = new Ctor(y);
-  for (; ; ) {
-    t = divide(u.times(x22), new Ctor(n++ * n++), pr, 1);
-    u = isHyperbolic ? y.plus(t) : y.minus(t);
-    y = divide(t.times(x22), new Ctor(n++ * n++), pr, 1);
-    t = u.plus(y);
-    if (t.d[k] !== void 0) {
-      for (j = k; t.d[j] === u.d[j] && j--; ) ;
-      if (j == -1) break;
-    }
-    j = u;
-    u = y;
-    y = t;
-    t = j;
-    i2++;
-  }
-  external = true;
-  t.d.length = k + 1;
-  return t;
-}
-function tinyPow(b, e) {
-  var n = b;
-  while (--e) n *= b;
-  return n;
-}
-function toLessThanHalfPi(Ctor, x2) {
-  var t, isNeg = x2.s < 0, pi = getPi(Ctor, Ctor.precision, 1), halfPi = pi.times(0.5);
-  x2 = x2.abs();
-  if (x2.lte(halfPi)) {
-    quadrant = isNeg ? 4 : 1;
-    return x2;
-  }
-  t = x2.divToInt(pi);
-  if (t.isZero()) {
-    quadrant = isNeg ? 3 : 2;
-  } else {
-    x2 = x2.minus(t.times(pi));
-    if (x2.lte(halfPi)) {
-      quadrant = isOdd(t) ? isNeg ? 2 : 3 : isNeg ? 4 : 1;
-      return x2;
-    }
-    quadrant = isOdd(t) ? isNeg ? 1 : 4 : isNeg ? 3 : 2;
-  }
-  return x2.minus(pi).abs();
-}
-function toStringBinary(x2, baseOut, sd, rm) {
-  var base, e, i2, k, len, roundUp, str, xd, y, Ctor = x2.constructor, isExp = sd !== void 0;
-  if (isExp) {
-    checkInt32(sd, 1, MAX_DIGITS);
-    if (rm === void 0) rm = Ctor.rounding;
-    else checkInt32(rm, 0, 8);
-  } else {
-    sd = Ctor.precision;
-    rm = Ctor.rounding;
-  }
-  if (!x2.isFinite()) {
-    str = nonFiniteToString(x2);
-  } else {
-    str = finiteToString(x2);
-    i2 = str.indexOf(".");
-    if (isExp) {
-      base = 2;
-      if (baseOut == 16) {
-        sd = sd * 4 - 3;
-      } else if (baseOut == 8) {
-        sd = sd * 3 - 2;
-      }
-    } else {
-      base = baseOut;
-    }
-    if (i2 >= 0) {
-      str = str.replace(".", "");
-      y = new Ctor(1);
-      y.e = str.length - i2;
-      y.d = convertBase(finiteToString(y), 10, base);
-      y.e = y.d.length;
-    }
-    xd = convertBase(str, 10, base);
-    e = len = xd.length;
-    for (; xd[--len] == 0; ) xd.pop();
-    if (!xd[0]) {
-      str = isExp ? "0p+0" : "0";
-    } else {
-      if (i2 < 0) {
-        e--;
-      } else {
-        x2 = new Ctor(x2);
-        x2.d = xd;
-        x2.e = e;
-        x2 = divide(x2, y, sd, rm, 0, base);
-        xd = x2.d;
-        e = x2.e;
-        roundUp = inexact;
-      }
-      i2 = xd[sd];
-      k = base / 2;
-      roundUp = roundUp || xd[sd + 1] !== void 0;
-      roundUp = rm < 4 ? (i2 !== void 0 || roundUp) && (rm === 0 || rm === (x2.s < 0 ? 3 : 2)) : i2 > k || i2 === k && (rm === 4 || roundUp || rm === 6 && xd[sd - 1] & 1 || rm === (x2.s < 0 ? 8 : 7));
-      xd.length = sd;
-      if (roundUp) {
-        for (; ++xd[--sd] > base - 1; ) {
-          xd[sd] = 0;
-          if (!sd) {
-            ++e;
-            xd.unshift(1);
-          }
-        }
-      }
-      for (len = xd.length; !xd[len - 1]; --len) ;
-      for (i2 = 0, str = ""; i2 < len; i2++) str += NUMERALS.charAt(xd[i2]);
-      if (isExp) {
-        if (len > 1) {
-          if (baseOut == 16 || baseOut == 8) {
-            i2 = baseOut == 16 ? 4 : 3;
-            for (--len; len % i2; len++) str += "0";
-            xd = convertBase(str, base, baseOut);
-            for (len = xd.length; !xd[len - 1]; --len) ;
-            for (i2 = 1, str = "1."; i2 < len; i2++) str += NUMERALS.charAt(xd[i2]);
-          } else {
-            str = str.charAt(0) + "." + str.slice(1);
-          }
-        }
-        str = str + (e < 0 ? "p" : "p+") + e;
-      } else if (e < 0) {
-        for (; ++e; ) str = "0" + str;
-        str = "0." + str;
-      } else {
-        if (++e > len) for (e -= len; e--; ) str += "0";
-        else if (e < len) str = str.slice(0, e) + "." + str.slice(e);
-      }
-    }
-    str = (baseOut == 16 ? "0x" : baseOut == 2 ? "0b" : baseOut == 8 ? "0o" : "") + str;
-  }
-  return x2.s < 0 ? "-" + str : str;
-}
-function truncate(arr2, len) {
-  if (arr2.length > len) {
-    arr2.length = len;
-    return true;
-  }
-}
-function abs(x2) {
-  return new this(x2).abs();
-}
-function acos(x2) {
-  return new this(x2).acos();
-}
-function acosh(x2) {
-  return new this(x2).acosh();
-}
-function add(x2, y) {
-  return new this(x2).plus(y);
-}
-function asin(x2) {
-  return new this(x2).asin();
-}
-function asinh(x2) {
-  return new this(x2).asinh();
-}
-function atan(x2) {
-  return new this(x2).atan();
-}
-function atanh(x2) {
-  return new this(x2).atanh();
-}
-function atan2(y, x2) {
-  y = new this(y);
-  x2 = new this(x2);
-  var r, pr = this.precision, rm = this.rounding, wpr = pr + 4;
-  if (!y.s || !x2.s) {
-    r = new this(NaN);
-  } else if (!y.d && !x2.d) {
-    r = getPi(this, wpr, 1).times(x2.s > 0 ? 0.25 : 0.75);
-    r.s = y.s;
-  } else if (!x2.d || y.isZero()) {
-    r = x2.s < 0 ? getPi(this, pr, rm) : new this(0);
-    r.s = y.s;
-  } else if (!y.d || x2.isZero()) {
-    r = getPi(this, wpr, 1).times(0.5);
-    r.s = y.s;
-  } else if (x2.s < 0) {
-    this.precision = wpr;
-    this.rounding = 1;
-    r = this.atan(divide(y, x2, wpr, 1));
-    x2 = getPi(this, wpr, 1);
-    this.precision = pr;
-    this.rounding = rm;
-    r = y.s < 0 ? r.minus(x2) : r.plus(x2);
-  } else {
-    r = this.atan(divide(y, x2, wpr, 1));
-  }
-  return r;
-}
-function cbrt(x2) {
-  return new this(x2).cbrt();
-}
-function ceil(x2) {
-  return finalise(x2 = new this(x2), x2.e + 1, 2);
-}
-function clamp(x2, min2, max3) {
-  return new this(x2).clamp(min2, max3);
-}
-function config(obj) {
-  if (!obj || typeof obj !== "object") throw Error(decimalError + "Object expected");
-  var i2, p, v, useDefaults = obj.defaults === true, ps = [
-    "precision",
-    1,
-    MAX_DIGITS,
-    "rounding",
-    0,
-    8,
-    "toExpNeg",
-    -EXP_LIMIT,
-    0,
-    "toExpPos",
-    0,
-    EXP_LIMIT,
-    "maxE",
-    0,
-    EXP_LIMIT,
-    "minE",
-    -EXP_LIMIT,
-    0,
-    "modulo",
-    0,
-    9
-  ];
-  for (i2 = 0; i2 < ps.length; i2 += 3) {
-    if (p = ps[i2], useDefaults) this[p] = DEFAULTS[p];
-    if ((v = obj[p]) !== void 0) {
-      if (mathfloor(v) === v && v >= ps[i2 + 1] && v <= ps[i2 + 2]) this[p] = v;
-      else throw Error(invalidArgument + p + ": " + v);
-    }
-  }
-  if (p = "crypto", useDefaults) this[p] = DEFAULTS[p];
-  if ((v = obj[p]) !== void 0) {
-    if (v === true || v === false || v === 0 || v === 1) {
-      if (v) {
-        if (typeof crypto != "undefined" && crypto && (crypto.getRandomValues || crypto.randomBytes)) {
-          this[p] = true;
-        } else {
-          throw Error(cryptoUnavailable);
-        }
-      } else {
-        this[p] = false;
-      }
-    } else {
-      throw Error(invalidArgument + p + ": " + v);
-    }
-  }
-  return this;
-}
-function cos(x2) {
-  return new this(x2).cos();
-}
-function cosh(x2) {
-  return new this(x2).cosh();
-}
-function clone(obj) {
-  var i2, p, ps;
-  function Decimal2(v) {
-    var e, i3, t, x2 = this;
-    if (!(x2 instanceof Decimal2)) return new Decimal2(v);
-    x2.constructor = Decimal2;
-    if (isDecimalInstance(v)) {
-      x2.s = v.s;
-      if (external) {
-        if (!v.d || v.e > Decimal2.maxE) {
-          x2.e = NaN;
-          x2.d = null;
-        } else if (v.e < Decimal2.minE) {
-          x2.e = 0;
-          x2.d = [0];
-        } else {
-          x2.e = v.e;
-          x2.d = v.d.slice();
-        }
-      } else {
-        x2.e = v.e;
-        x2.d = v.d ? v.d.slice() : v.d;
-      }
-      return;
-    }
-    t = typeof v;
-    if (t === "number") {
-      if (v === 0) {
-        x2.s = 1 / v < 0 ? -1 : 1;
-        x2.e = 0;
-        x2.d = [0];
-        return;
-      }
-      if (v < 0) {
-        v = -v;
-        x2.s = -1;
-      } else {
-        x2.s = 1;
-      }
-      if (v === ~~v && v < 1e7) {
-        for (e = 0, i3 = v; i3 >= 10; i3 /= 10) e++;
-        if (external) {
-          if (e > Decimal2.maxE) {
-            x2.e = NaN;
-            x2.d = null;
-          } else if (e < Decimal2.minE) {
-            x2.e = 0;
-            x2.d = [0];
-          } else {
-            x2.e = e;
-            x2.d = [v];
-          }
-        } else {
-          x2.e = e;
-          x2.d = [v];
-        }
-        return;
-      }
-      if (v * 0 !== 0) {
-        if (!v) x2.s = NaN;
-        x2.e = NaN;
-        x2.d = null;
-        return;
-      }
-      return parseDecimal(x2, v.toString());
-    }
-    if (t === "string") {
-      if ((i3 = v.charCodeAt(0)) === 45) {
-        v = v.slice(1);
-        x2.s = -1;
-      } else {
-        if (i3 === 43) v = v.slice(1);
-        x2.s = 1;
-      }
-      return isDecimal.test(v) ? parseDecimal(x2, v) : parseOther(x2, v);
-    }
-    if (t === "bigint") {
-      if (v < 0) {
-        v = -v;
-        x2.s = -1;
-      } else {
-        x2.s = 1;
-      }
-      return parseDecimal(x2, v.toString());
-    }
-    throw Error(invalidArgument + v);
-  }
-  Decimal2.prototype = P;
-  Decimal2.ROUND_UP = 0;
-  Decimal2.ROUND_DOWN = 1;
-  Decimal2.ROUND_CEIL = 2;
-  Decimal2.ROUND_FLOOR = 3;
-  Decimal2.ROUND_HALF_UP = 4;
-  Decimal2.ROUND_HALF_DOWN = 5;
-  Decimal2.ROUND_HALF_EVEN = 6;
-  Decimal2.ROUND_HALF_CEIL = 7;
-  Decimal2.ROUND_HALF_FLOOR = 8;
-  Decimal2.EUCLID = 9;
-  Decimal2.config = Decimal2.set = config;
-  Decimal2.clone = clone;
-  Decimal2.isDecimal = isDecimalInstance;
-  Decimal2.abs = abs;
-  Decimal2.acos = acos;
-  Decimal2.acosh = acosh;
-  Decimal2.add = add;
-  Decimal2.asin = asin;
-  Decimal2.asinh = asinh;
-  Decimal2.atan = atan;
-  Decimal2.atanh = atanh;
-  Decimal2.atan2 = atan2;
-  Decimal2.cbrt = cbrt;
-  Decimal2.ceil = ceil;
-  Decimal2.clamp = clamp;
-  Decimal2.cos = cos;
-  Decimal2.cosh = cosh;
-  Decimal2.div = div;
-  Decimal2.exp = exp;
-  Decimal2.floor = floor;
-  Decimal2.hypot = hypot;
-  Decimal2.ln = ln;
-  Decimal2.log = log;
-  Decimal2.log10 = log10;
-  Decimal2.log2 = log2;
-  Decimal2.max = max2;
-  Decimal2.min = min;
-  Decimal2.mod = mod;
-  Decimal2.mul = mul;
-  Decimal2.pow = pow;
-  Decimal2.random = random;
-  Decimal2.round = round;
-  Decimal2.sign = sign;
-  Decimal2.sin = sin;
-  Decimal2.sinh = sinh;
-  Decimal2.sqrt = sqrt;
-  Decimal2.sub = sub;
-  Decimal2.sum = sum;
-  Decimal2.tan = tan;
-  Decimal2.tanh = tanh;
-  Decimal2.trunc = trunc;
-  if (obj === void 0) obj = {};
-  if (obj) {
-    if (obj.defaults !== true) {
-      ps = ["precision", "rounding", "toExpNeg", "toExpPos", "maxE", "minE", "modulo", "crypto"];
-      for (i2 = 0; i2 < ps.length; ) if (!obj.hasOwnProperty(p = ps[i2++])) obj[p] = this[p];
-    }
-  }
-  Decimal2.config(obj);
-  return Decimal2;
-}
-function div(x2, y) {
-  return new this(x2).div(y);
-}
-function exp(x2) {
-  return new this(x2).exp();
-}
-function floor(x2) {
-  return finalise(x2 = new this(x2), x2.e + 1, 3);
-}
-function hypot() {
-  var i2, n, t = new this(0);
-  external = false;
-  for (i2 = 0; i2 < arguments.length; ) {
-    n = new this(arguments[i2++]);
-    if (!n.d) {
-      if (n.s) {
-        external = true;
-        return new this(1 / 0);
-      }
-      t = n;
-    } else if (t.d) {
-      t = t.plus(n.times(n));
-    }
-  }
-  external = true;
-  return t.sqrt();
-}
-function isDecimalInstance(obj) {
-  return obj instanceof Decimal || obj && obj.toStringTag === tag || false;
-}
-function ln(x2) {
-  return new this(x2).ln();
-}
-function log(x2, y) {
-  return new this(x2).log(y);
-}
-function log2(x2) {
-  return new this(x2).log(2);
-}
-function log10(x2) {
-  return new this(x2).log(10);
-}
-function max2() {
-  return maxOrMin(this, arguments, -1);
-}
-function min() {
-  return maxOrMin(this, arguments, 1);
-}
-function mod(x2, y) {
-  return new this(x2).mod(y);
-}
-function mul(x2, y) {
-  return new this(x2).mul(y);
-}
-function pow(x2, y) {
-  return new this(x2).pow(y);
-}
-function random(sd) {
-  var d, e, k, n, i2 = 0, r = new this(1), rd = [];
-  if (sd === void 0) sd = this.precision;
-  else checkInt32(sd, 1, MAX_DIGITS);
-  k = Math.ceil(sd / LOG_BASE);
-  if (!this.crypto) {
-    for (; i2 < k; ) rd[i2++] = Math.random() * 1e7 | 0;
-  } else if (crypto.getRandomValues) {
-    d = crypto.getRandomValues(new Uint32Array(k));
-    for (; i2 < k; ) {
-      n = d[i2];
-      if (n >= 429e7) {
-        d[i2] = crypto.getRandomValues(new Uint32Array(1))[0];
-      } else {
-        rd[i2++] = n % 1e7;
-      }
-    }
-  } else if (crypto.randomBytes) {
-    d = crypto.randomBytes(k *= 4);
-    for (; i2 < k; ) {
-      n = d[i2] + (d[i2 + 1] << 8) + (d[i2 + 2] << 16) + ((d[i2 + 3] & 127) << 24);
-      if (n >= 214e7) {
-        crypto.randomBytes(4).copy(d, i2);
-      } else {
-        rd.push(n % 1e7);
-        i2 += 4;
-      }
-    }
-    i2 = k / 4;
-  } else {
-    throw Error(cryptoUnavailable);
-  }
-  k = rd[--i2];
-  sd %= LOG_BASE;
-  if (k && sd) {
-    n = mathpow(10, LOG_BASE - sd);
-    rd[i2] = (k / n | 0) * n;
-  }
-  for (; rd[i2] === 0; i2--) rd.pop();
-  if (i2 < 0) {
-    e = 0;
-    rd = [0];
-  } else {
-    e = -1;
-    for (; rd[0] === 0; e -= LOG_BASE) rd.shift();
-    for (k = 1, n = rd[0]; n >= 10; n /= 10) k++;
-    if (k < LOG_BASE) e -= LOG_BASE - k;
-  }
-  r.e = e;
-  r.d = rd;
-  return r;
-}
-function round(x2) {
-  return finalise(x2 = new this(x2), x2.e + 1, this.rounding);
-}
-function sign(x2) {
-  x2 = new this(x2);
-  return x2.d ? x2.d[0] ? x2.s : 0 * x2.s : x2.s || NaN;
-}
-function sin(x2) {
-  return new this(x2).sin();
-}
-function sinh(x2) {
-  return new this(x2).sinh();
-}
-function sqrt(x2) {
-  return new this(x2).sqrt();
-}
-function sub(x2, y) {
-  return new this(x2).sub(y);
-}
-function sum() {
-  var i2 = 0, args = arguments, x2 = new this(args[i2]);
-  external = false;
-  for (; x2.s && ++i2 < args.length; ) x2 = x2.plus(args[i2]);
-  external = true;
-  return finalise(x2, this.precision, this.rounding);
-}
-function tan(x2) {
-  return new this(x2).tan();
-}
-function tanh(x2) {
-  return new this(x2).tanh();
-}
-function trunc(x2) {
-  return finalise(x2 = new this(x2), x2.e + 1, 1);
-}
-P[/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")] = P.toString;
-P[Symbol.toStringTag] = "Decimal";
-var Decimal = P.constructor = clone(DEFAULTS);
-LN10 = new Decimal(LN10);
-PI = new Decimal(PI);
-var decimal_default = Decimal;
-
-// server/import/validation.mjs
-function decimal(value) {
-  if (value === null || value === void 0 || String(value).trim() === "") return null;
-  const s = String(value).trim();
-  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(s)) throw new Error("必须是数值");
-  const d = new decimal_default(s);
-  if (!d.isFinite() || d.abs().gt("1e15") || d.isNegative()) throw new Error("数值必须非负且不超过10^15");
-  return d.toFixed();
-}
-function excelDate(value, epoch1904 = false, withTime = false) {
-  if (value === null || value === void 0 || value === "") throw new Error("日期缺失");
-  if (/^\d{4}-\d{2}-\d{2}/.test(String(value))) {
-    const s = String(value), m = s.match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|\+08:00)?)?$/);
-    if (!m || Number(m[2] ?? 0) > 23 || Number(m[3] ?? 0) > 59 || Number(m[4] ?? 0) > 59) throw new Error("日期或时间无效；时区须为+08:00");
-    const date = m[1];
-    if ((/* @__PURE__ */ new Date(date + "T00:00:00Z")).toISOString().slice(0, 10) !== date) throw new Error("日期无效");
-    if (withTime && m[5] === "Z") return new Date(Date.parse(s) + 8 * 36e5).toISOString().slice(0, 19) + "+08:00";
-    return withTime ? `${date}T${m[2] ?? "00"}:${m[3] ?? "00"}:${m[4] ?? "00"}+08:00` : date;
-  }
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0 || n > 2958465 || !epoch1904 && Math.floor(n) === 60) throw new Error("Excel日期无效");
-  const epoch = epoch1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, n < 60 ? 31 : 30);
-  const ms = epoch + Math.round(n * 86400) * 1e3;
-  const iso = new Date(ms).toISOString();
-  return withTime ? iso.slice(0, 19) + "+08:00" : iso.slice(0, 10);
-}
-function columnIndex(c) {
-  let n = 0;
-  for (const x2 of c) n = n * 26 + x2.charCodeAt(0) - 64;
-  return n;
-}
-function addDays(date, n) {
-  const d = /* @__PURE__ */ new Date(date + "T00:00:00Z");
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-// server/model.mjs
-var CATEGORIES = ["人工", "制造", "其他生产", "管理", "销售", "财务"];
-var STATUSES = ["已确认", "暂估", "缺失", "不适用", "模拟确认"];
-var SCHEMA_VERSION = "IMPORT-0.2";
 
 // server/import/normalize.mjs
 var FIX_HINTS = {
@@ -11113,606 +11995,15 @@ function normalizePair(costBook, dailyBook) {
   return { dataset, issues, summary: { orderId: order.id, lineId: order.lineId, baselineId: baseline.id, revisionId: revision.id, isDemo: order.isDemo, start: order.start, end: order.end, counts: { production: production.length, supplements: supplements.length, materials: materials.length, expenses: expenses.length } } };
 }
 
-// server/profit/decimal.mjs
-var D = decimal_default.clone({ precision: 40, rounding: decimal_default.ROUND_HALF_UP });
-var money = (x2) => x2 == null ? null : new D(x2).toDecimalPlaces(2).toFixed(2);
-var six = (x2) => new D(x2).toDecimalPlaces(6);
-var sum2 = (xs) => xs.some((x2) => x2 == null) ? null : xs.reduce((s, x2) => s.plus(x2), new D(0));
-var valid = (r) => ["已确认", "模拟确认", "暂估", "不适用"].includes(r.status);
-
-// server/profit/baseline.mjs
-function prepareBaseline(dataset) {
-  const { order: o, baseline: b } = dataset;
-  const p = b.params;
-  const q = sum2(b.recipe.map((m) => m.quantity));
-  const ref = sum2(b.recipe.map((m) => m.quantity == null || m.referencePrice == null ? null : new D(m.quantity).times(m.referencePrice)));
-  const available = q?.gt(0) && ref?.gt(0) && o.price != null && o.weight != null && new D(o.weight).gt(0) && p.material_pct != null;
-  const factor = available ? new D(o.price).times(p.material_pct).div(o.weight).div(ref.div(q)) : null;
-  const materials = b.recipe.map((m) => ({ ...m, share: available ? new D(m.quantity).div(q) : null, price: available ? six(new D(m.referencePrice).times(factor)) : null }));
-  function theoretical(quantity, mode = "ideal") {
-    const revenue = o.price == null || quantity == null ? null : new D(quantity).times(o.price);
-    const material = quantity == null ? null : sum2(materials.map((m) => m.price == null ? null : new D(money(six(new D(quantity).times(o.weight).times(m.share)).times(m.price)))));
-    const byQty = (k) => quantity == null || p[k] == null ? null : new D(money(new D(quantity).times(p[k])));
-    const byRevenue = (k) => revenue == null || p[k] == null ? null : new D(money(revenue.times(p[k])));
-    const labor = p.prep_piece == null || p.press_piece == null || quantity == null ? null : new D(money(new D(quantity).times(new D(p.prep_piece).plus(p.press_piece))));
-    const management = byRevenue("production_mgmt"), energy = byRevenue("energy_pct"), otherProduction = byQty("other_production_piece");
-    const reserve = mode === "budget" ? sum2([byRevenue("production_loss_budget"), byRevenue("defect_loss_budget")]) : new D(0);
-    const production = sum2([material, labor, management, energy, otherProduction, reserve]);
-    const gross = revenue != null && production != null ? revenue.minus(production) : null;
-    const operatingCosts = sum2([byRevenue("company_mgmt"), byRevenue("admin_pct"), byQty("logistics_piece"), byQty("finance_piece")]);
-    const operating = gross != null && operatingCosts != null ? gross.minus(operatingCosts) : null;
-    return { revenue: money(revenue), material: money(material), labor: money(labor), manufacturing: money(sum2([management, energy])), productionManagement: money(management), energy: money(energy), otherProduction: money(otherProduction), reserve: money(reserve), operatingCosts: money(operatingCosts), gross: money(gross), operating: money(operating) };
-  }
-  return { materials, theoretical };
-}
-
-// server/profit/diagnosis.mjs
-var DIAGNOSIS_RULE_VERSION = "DIAG-1.0";
-var REFERENCE_RULE_VERSION = "REF-1.0";
-var SEVERITY_RULE_VERSION = "SEV-1.0";
-var PRIMARY_SHARE_THRESHOLD = "0.60";
-var SEVERITY_THRESHOLDS = { normalMax: "0.10", attentionMax: "0.20", keyMax: "0.30" };
-var dec = (v) => v == null || v === "" ? null : new D(v);
-var amount = (d, places = 2) => d == null ? null : d.toFixed(places);
-var ratio = (d) => d == null ? null : d.toFixed(8);
-var pp = (d) => d == null ? null : d.times(100).toFixed(2);
-var COMPONENTS = {
-  materialPrice: {
-    label: "材料价格",
-    kind: "production",
-    increase: "实际采购单价合计高于理论基准，增加差距。",
-    offset: "实际采购单价合计低于理论基准，抵消差距。",
-    suggestion: "核对采购单价、供应商报价和调价生效日期，确认是否存在未同步到理论基准的涨价。",
-    evidence: "每日材料记录（净耗、单价）"
-  },
-  materialUsage: {
-    label: "材料耗用",
-    kind: "production",
-    increase: "实际材料净耗高于同进度标准，增加差距。",
-    offset: "实际材料净耗低于同进度标准，抵消差距。",
-    suggestion: "核对领退料、配方重量、计量口径和不良品耗料记录，确认净耗偏高的具体批次。",
-    evidence: "每日材料记录、原订单配方"
-  },
-  labor: {
-    label: "人工",
-    kind: "production",
-    increase: "实际人工费用高于同进度标准，增加差距。",
-    offset: "实际人工费用低于同进度标准，抵消差距。",
-    suggestion: "核对工价、计件量和人工归属期间，确认人工费用偏高的具体工序。",
-    evidence: "每日费用（人工）"
-  },
-  energy: {
-    label: "能源",
-    kind: "production",
-    increase: "实际能源费用高于同进度标准，增加差距。",
-    offset: "实际能源费用低于同进度标准，抵消差距。",
-    suggestion: "核对能源抄表、单价和分摊口径。",
-    evidence: "每日费用（制造·能源）"
-  },
-  otherManufacturing: {
-    label: "其他制造",
-    kind: "production",
-    increase: "实际其他制造费用高于同进度标准，增加差距。",
-    offset: "实际其他制造费用低于同进度标准，抵消差距。",
-    suggestion: "核对制造费用项目、分摊口径与归属期间。",
-    evidence: "每日费用（制造）"
-  },
-  otherProduction: {
-    label: "其他生产",
-    kind: "production",
-    increase: "实际其他生产费用高于同进度标准，增加差距。",
-    offset: "实际其他生产费用低于同进度标准，抵消差距。",
-    suggestion: "核对其他生产费用项目与归属期间。",
-    evidence: "每日费用（其他生产）"
-  },
-  budgetAdjustment: {
-    label: "预算允许损耗",
-    kind: "baseline",
-    increase: "预算允许损耗按基线计提，属于对照口径调整。",
-    offset: "预算允许损耗按基线计提，属于对照口径调整。",
-    suggestion: null,
-    evidence: "成本计算中的生产损耗与不良损耗预算"
-  },
-  rounding: {
-    label: "舍入调整",
-    kind: "rounding",
-    increase: "舍入调整，仅用于金额闭合。",
-    offset: "舍入调整，仅用于金额闭合。",
-    suggestion: null,
-    evidence: "逐日舍入后的差值"
-  }
-};
-function classify(component, value) {
-  if (value == null) return { effect: "unknown", fact: "该项资料待补齐，暂不判断。" };
-  if (value.isZero()) return { effect: "neutral", fact: "该项净影响为零。" };
-  const meta = COMPONENTS[component];
-  return { effect: value.gt(0) ? "increase" : "offset", fact: value.gt(0) ? meta.increase : meta.offset };
-}
-function referenceItem({ key, label, formula, unit, actual, threshold, actualKnown, thresholdKnown, reasons, basis, source, applicability, compare }) {
-  const known = actualKnown && thresholdKnown && actual != null && threshold != null;
-  const breached = known ? compare(actual, threshold) : null;
-  return {
-    key,
-    label,
-    status: known ? "known" : "unknown",
-    actualKnown,
-    thresholdKnown,
-    actual: ratio(actual),
-    threshold: ratio(threshold),
-    breached,
-    gapPp: known ? pp(actual.minus(threshold).abs()) : null,
-    relation: known ? breached ? key === "margin" ? "below" : "above" : key === "margin" ? "at_or_above" : "at_or_below" : null,
-    reasons,
-    formula,
-    unit,
-    basis,
-    source,
-    applicability
-  };
-}
-function buildReferenceThresholds({ order, cumulative, theoreticalBudget, baselineId, asOf } = {}) {
-  const revenue = dec(theoreticalBudget?.revenue);
-  const gross = dec(theoreticalBudget?.gross);
-  const actualMargin = dec(cumulative?.actual?.margin);
-  const marginReasons = [];
-  if (actualMargin == null) marginReasons.push("累计实际毛利率待补齐");
-  if (revenue == null) marginReasons.push("预算理论收入待补齐");
-  else if (revenue.lte(0)) marginReasons.push("预算理论收入为零，不能作为分母");
-  if (gross == null) marginReasons.push("预算理论毛利待补齐");
-  const marginThreshold = revenue != null && revenue.gt(0) && gross != null ? gross.div(revenue) : null;
-  const margin = referenceItem({
-    key: "margin",
-    label: "毛利率",
-    formula: "预算理论毛利 ÷ 预算理论收入",
-    unit: "比例",
-    actual: actualMargin,
-    threshold: marginThreshold,
-    actualKnown: actualMargin != null,
-    thresholdKnown: marginThreshold != null,
-    reasons: marginReasons,
-    basis: { revenue: amount(revenue), gross: amount(gross) },
-    source: "成本模型 · 含损耗预算基线",
-    applicability: "仅作预算模型参考，不是已核定的企业安全底线。",
-    compare: (a, t) => a.lt(t)
-  });
-  const quantity = dec(order?.quantity);
-  const reserve = dec(theoreticalBudget?.reserve);
-  const material = dec(theoreticalBudget?.material);
-  const labor = dec(theoreticalBudget?.labor);
-  const processed = dec(cumulative?.processed);
-  const defects = dec(cumulative?.defects);
-  const actualDefect = processed != null && processed.gt(0) && defects != null ? defects.div(processed) : null;
-  const defectReasons = [];
-  if (actualDefect == null) {
-    if (processed == null) defectReasons.push("累计加工量待补齐");
-    else if (processed.lte(0)) defectReasons.push("累计加工量为零，不能作为分母");
-    if (defects == null) defectReasons.push("累计不良量待补齐");
-  }
-  if (quantity == null) defectReasons.push("合同数量待补齐");
-  else if (quantity.lte(0)) defectReasons.push("合同数量为零，不能作为分母");
-  if (reserve == null) defectReasons.push("预算损耗准备金待补齐");
-  else if (reserve.lt(0)) defectReasons.push("预算损耗准备金为负，不能推导参考阈值");
-  if (material == null) defectReasons.push("预算材料成本待补齐");
-  else if (material.lt(0)) defectReasons.push("预算材料成本为负，不能推导参考阈值");
-  if (labor == null) defectReasons.push("预算人工成本待补齐");
-  else if (labor.lt(0)) defectReasons.push("预算人工成本为负，不能推导参考阈值");
-  const unitCost = material != null && labor != null && quantity != null && quantity.gt(0) ? material.plus(labor).div(quantity) : null;
-  if (unitCost != null && unitCost.lte(0)) defectReasons.push("预算材料及人工单位成本为零，不能换算参考阈值");
-  const allowed = reserve != null && reserve.gte(0) && unitCost != null && unitCost.gt(0) ? reserve.div(unitCost) : null;
-  const defectThreshold = allowed != null && quantity != null && quantity.gt(0) ? allowed.div(quantity.plus(allowed)) : null;
-  if (defectThreshold == null && defectReasons.length === 0) defectReasons.push("参考阈值所需参数不完整");
-  const defect = referenceItem({
-    key: "defect",
-    label: "产品不良率",
-    formula: "允许补产量 = 损耗准备金 ÷（（预算材料 + 预算人工）÷ 合同数量）；参考阈值 = 允许补产量 ÷（合同数量 + 允许补产量）",
-    unit: "比例",
-    actual: actualDefect,
-    threshold: defectThreshold,
-    actualKnown: actualDefect != null,
-    thresholdKnown: defectThreshold != null,
-    reasons: defectReasons,
-    basis: {
-      reserve: amount(reserve),
-      material: amount(material),
-      labor: amount(labor),
-      quantity: quantity == null ? null : quantity.toString(),
-      unitCost: amount(unitCost, 6),
-      allowedQuantity: amount(allowed, 6),
-      processed: processed == null ? null : processed.toString(),
-      defects: defects == null ? null : defects.toString()
-    },
-    source: "成本模型 · 含损耗预算基线中的生产损耗与不良损耗预算",
-    applicability: "仅作预算模型参考，不是质量检验标准；材料、人工、收入或数量缺失、为零时不推导。",
-    compare: (a, t) => a.gt(t)
-  });
-  const breaches = [margin, defect].filter((x2) => x2.breached).map((x2) => `${x2.label}${x2.key === "margin" ? "低于" : "高于"}参考阈值 ${x2.gapPp} 个百分点`);
-  const unknownItems = [margin, defect].filter((x2) => x2.status === "unknown").map((x2) => ({
-    key: x2.key,
-    label: x2.label,
-    actualKnown: x2.actualKnown,
-    thresholdKnown: x2.thresholdKnown,
-    reasons: x2.reasons
-  }));
-  const state = breaches.length ? "breach" : unknownItems.length === 2 ? "unknown" : unknownItems.length ? "partial" : "ok";
-  return {
-    state,
-    breaches,
-    unknownItems,
-    margin,
-    defect,
-    baselineId: baselineId ?? null,
-    asOf: asOf ?? null,
-    ruleVersion: REFERENCE_RULE_VERSION,
-    model: "预算模型参考阈值",
-    source: "成本模型 · 含损耗预算基线",
-    applicability: "仅作预算模型参考，不是企业质量检验标准或已核定的经营底线。",
-    note: "毛利率与不良率分别判断；任一未知时不作肯定判断。"
-  };
-}
-function buildSeverity(analysis = {}) {
-  const actual = dec(analysis.cumulative?.actual?.margin);
-  const expected = dec(analysis.cumulative?.expected?.margin);
-  const reasons = [];
-  if (actual == null) reasons.push("累计实际毛利率待补齐");
-  if (expected == null) reasons.push("同进度理论毛利率待补齐");
-  else if (expected.lte(0)) reasons.push("同进度理论毛利率为零或负，不能计算相对下降");
-  const base = {
-    actual: ratio(actual),
-    expected: ratio(expected),
-    decline: null,
-    declinePct: null,
-    declineAbsPct: null,
-    differencePp: null,
-    differenceAbsPp: null,
-    thresholds: {
-      normalMaxPct: new D(SEVERITY_THRESHOLDS.normalMax).times(100).toFixed(2),
-      attentionMaxPct: new D(SEVERITY_THRESHOLDS.attentionMax).times(100).toFixed(2),
-      keyMaxPct: new D(SEVERITY_THRESHOLDS.keyMax).times(100).toFixed(2)
-    },
-    ruleVersion: SEVERITY_RULE_VERSION,
-    source: "累计实际毛利率 vs 同进度理论毛利率（当前对照基线）",
-    note: "按相对下降分档：0–10% 可接受误差，10–20% 需关注，20–30% 重点注意，超过 30% 为大型偏差；该分级不是预算参考阈值越线判断。",
-    reasons
-  };
-  if (reasons.length) return { ...base, level: "not_applicable", label: "待核算", tone: "pending" };
-  const decline = expected.minus(actual).div(expected);
-  const difference = actual.minus(expected);
-  let level, label, tone;
-  if (decline.lt(0)) {
-    level = "better";
-    label = "优于同进度理论";
-    tone = "ok";
-  } else if (decline.isZero()) {
-    level = "normal";
-    label = "与同进度理论持平";
-    tone = "ok";
-  } else if (decline.lte(SEVERITY_THRESHOLDS.normalMax)) {
-    level = "normal";
-    label = "可接受误差";
-    tone = "ok";
-  } else if (decline.lte(SEVERITY_THRESHOLDS.attentionMax)) {
-    level = "attention";
-    label = "需要关注";
-    tone = "caution";
-  } else if (decline.lte(SEVERITY_THRESHOLDS.keyMax)) {
-    level = "key";
-    label = "重点注意";
-    tone = "caution";
-  } else {
-    level = "severe";
-    label = "大型偏差";
-    tone = "bad";
-  }
-  return {
-    ...base,
-    level,
-    label,
-    tone,
-    decline: ratio(decline),
-    declinePct: pp(decline),
-    declineAbsPct: pp(decline.abs()),
-    differencePp: pp(difference),
-    differenceAbsPp: pp(difference.abs())
-  };
-}
-function buildDiagnosis(analysis = {}) {
-  const raw = analysis.bridge?.components ?? {};
-  const total = dec(analysis.bridge?.total);
-  const components = Object.entries(COMPONENTS).map(([key, meta]) => {
-    const value = dec(raw[key]);
-    const stated = classify(key, value);
-    return {
-      key,
-      label: meta.label,
-      kind: meta.kind,
-      amount: amount(value),
-      effect: stated.effect,
-      fact: stated.fact,
-      shareOfIncrease: null,
-      evidence: meta.evidence
-    };
-  });
-  const production = components.filter((c) => c.kind === "production");
-  const increases = production.filter((c) => c.effect === "increase").sort((a, b) => Number(b.amount) - Number(a.amount));
-  const offsets = production.filter((c) => c.effect === "offset").sort((a, b) => Number(a.amount) - Number(b.amount));
-  const unknowns = components.filter((c) => c.effect === "unknown");
-  const productionComplete = production.every((c) => c.amount != null);
-  const closureComplete = components.every((c) => c.amount != null);
-  const knownIncreasesTotal = increases.reduce((s, c) => s.plus(c.amount), new D(0));
-  const knownOffsetsTotal = offsets.reduce((s, c) => s.plus(c.amount), new D(0));
-  const increasesTotal = productionComplete ? knownIncreasesTotal : null;
-  const offsetsTotal = productionComplete ? knownOffsetsTotal : null;
-  if (productionComplete && knownIncreasesTotal.gt(0)) {
-    for (const c of increases) c.shareOfIncrease = new D(c.amount).div(knownIncreasesTotal).toFixed(8);
-  }
-  const primary = productionComplete && increasesTotal != null && increasesTotal.gt(0) && increases.length && new D(increases[0].shareOfIncrease).gte(PRIMARY_SHARE_THRESHOLD) ? increases[0] : null;
-  const baseline = components.find((c) => c.key === "budgetAdjustment");
-  const rounding = components.find((c) => c.key === "rounding");
-  const top = increases[0] ?? null;
-  const missingLabels = unknowns.map((c) => c.label).join("、");
-  let state, title, sub2;
-  if (total == null) {
-    state = "pending";
-    title = "差距原因待补齐";
-    sub2 = `总差距或关键资料缺失，暂不判断主因${missingLabels ? `；待补齐：${missingLabels}` : ""}。`;
-  } else if (total.lte(0)) {
-    state = "at_target";
-    title = "当前没有少赚差距";
-    sub2 = total.isZero() ? "实际生产毛利与同进度理论持平。" : `实际生产毛利高于同进度理论 ¥${total.abs().toFixed(2)}，未形成少赚。`;
-    if (!closureComplete) sub2 += "部分归因资料待补齐，不影响已确认的总差距状态。";
-  } else if (!productionComplete) {
-    state = "gap";
-    title = "差距已确认，部分归因待补齐";
-    sub2 = `已确认少赚 ¥${total.toFixed(2)}；${missingLabels || "部分生产归因项"}资料不完整，暂不判断主因，也不计算完整占比。`;
-  } else if (primary) {
-    state = "gap";
-    title = `差距主要体现在${primary.label}`;
-    sub2 = `${primary.label}影响 ¥${new D(primary.amount).abs().toFixed(2)}，占增支 ${new D(primary.shareOfIncrease).times(100).toFixed(1)}%。`;
-    if (offsetsTotal != null && offsetsTotal.lt(0)) sub2 += `另有抵消项 ¥${offsetsTotal.abs().toFixed(2)}。`;
-  } else if (increasesTotal != null && increasesTotal.gt(0)) {
-    state = "gap";
-    title = "差距由多项成本共同造成";
-    sub2 = `增支合计 ¥${increasesTotal.toFixed(2)}；最大项为${top.label} ¥${new D(top.amount).toFixed(2)}（占增支 ${new D(top.shareOfIncrease).times(100).toFixed(1)}%）。`;
-    if (offsetsTotal != null && offsetsTotal.lt(0)) sub2 += `另有抵消项 ¥${offsetsTotal.abs().toFixed(2)}。`;
-  } else {
-    state = "gap";
-    title = "差距主要来自预算调整";
-    sub2 = "未发现生产成本增支项；差额来自预算允许损耗、舍入或其他调整，需结合基线口径核对。";
-  }
-  const suggestions = total != null && total.gt(0) ? increases.slice(0, 3).map((c) => ({
-    key: c.key,
-    label: c.label,
-    amount: c.amount,
-    shareOfIncrease: c.shareOfIncrease,
-    text: COMPONENTS[c.key].suggestion,
-    evidence: {
-      asOf: analysis.asOf ?? null,
-      revisionId: analysis.revisionId ?? null,
-      baselineId: analysis.baselineId ?? null,
-      source: COMPONENTS[c.key].evidence
-    }
-  })) : [];
-  return {
-    state,
-    severity: buildSeverity(analysis),
-    total: amount(total),
-    attributionComplete: productionComplete,
-    closureComplete,
-    increases,
-    offsets,
-    unknowns,
-    baseline,
-    rounding,
-    components,
-    increasesTotal: amount(increasesTotal),
-    offsetsTotal: amount(offsetsTotal),
-    knownIncreasesTotal: amount(knownIncreasesTotal),
-    knownOffsetsTotal: amount(knownOffsetsTotal),
-    primary: primary ? { key: primary.key, label: primary.label, amount: primary.amount, shareOfIncrease: primary.shareOfIncrease } : null,
-    summary: { title, sub: sub2 },
-    suggestions,
-    evidence: {
-      asOf: analysis.asOf ?? null,
-      revisionId: analysis.revisionId ?? null,
-      baselineId: analysis.baselineId ?? null
-    },
-    rule: {
-      version: DIAGNOSIS_RULE_VERSION,
-      primaryShareThreshold: PRIMARY_SHARE_THRESHOLD,
-      shareDenominator: "正向增支合计",
-      shareLabel: "占增支",
-      note: "主因仅在单一增支项占正向增支合计不低于60%时标识；否则按多项共同造成展示。该阈值是展示规则，不是企业已确认的风险标准。"
-    }
-  };
-}
-
-// server/profit/evaluate.mjs
-var amountSum = (xs) => money(sum2(xs));
-function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
-  const { order: o, baseline: b } = dataset;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf ?? "") || Number.isNaN(Date.parse(asOf)) || new Date(asOf).toISOString().slice(0, 10) !== asOf) throw new Error("请选择有效日期");
-  if (!["ideal", "budget"].includes(baselineMode)) throw new Error("理论基线模式无效");
-  const base = prepareBaseline(dataset), missing = [], cutoff = asOf + "T23:59:59+08:00";
-  const cutoffMs = Date.parse(cutoff);
-  const visible = (r) => r.availableAt && Date.parse(r.availableAt) <= cutoffMs;
-  const miss = (date, field, detail) => {
-    if (missing.length < 1e3) missing.push({ date, field, detail });
-  };
-  for (const k of ["quantity", "price", "weight", "opening"]) if (o[k] == null) miss(null, "order", `订单${k}待补齐`);
-  for (const [k, v] of Object.entries(b.params)) if (v == null) miss(null, "baseline", `基线参数${k}待补齐`);
-  for (const r of b.recipe) if (r.quantity == null || r.referencePrice == null) miss(null, "baseline", `${r.id}配方量或参考价格待补齐`);
-  const sizePlanComplete = b.sizePlan.length > 0 && b.sizePlan.every((s) => s.quantity != null);
-  if (!sizePlanComplete) miss(null, "production", "分码合同量待补齐");
-  const activeSizes = b.sizePlan.filter((s) => s.quantity != null && new D(s.quantity).gt(0));
-  const days = [];
-  for (let date = o.start; date <= o.end && date <= asOf; date = addDays(date, 1)) {
-    const allProduction = dataset.production.filter((r) => r.date === date);
-    const productions = allProduction.filter(visible);
-    const complete = sizePlanComplete && activeSizes.length > 0 && productions.every((r) => valid(r) && r.dayStatus !== "待补录" && r.processed != null && r.defects != null) && activeSizes.every((s) => {
-      const rs = productions.filter((r) => r.size === s.id);
-      return rs.length === 1 && valid(rs[0]) && rs[0].processed !== null && rs[0].defects !== null;
-    });
-    if (!complete) miss(date, "production", "日码数量缺失、待确认或尚不可见");
-    const processed = complete ? productions.reduce((s, r) => s + Number(r.processed), 0) : null, defects = complete ? productions.reduce((s, r) => s + Number(r.defects), 0) : null, quantity = complete ? processed - defects : null;
-    const revenue = quantity !== null && o.price !== null ? money(new D(quantity).times(o.price)) : null;
-    const allMaterials = dataset.materials.filter((r) => r.date === date), materials = allMaterials.filter(visible);
-    let materialCost = new D(0), priceImpact = new D(0), usageImpact = new D(0), materialComplete = true;
-    for (const m of base.materials) {
-      const all = allMaterials.filter((r) => r.materialId === m.id), rs = materials.filter((r) => r.materialId === m.id);
-      if (!rs.length || rs.length !== all.length || rs.some((r) => !valid(r) || r.net === null || r.price === null)) {
-        materialComplete = false;
-        miss(date, "material", `${m.id}净耗、单价或可见时间待补齐`);
-        continue;
-      }
-      materialCost = materialCost.plus(sum2(rs.map((r) => money(six(r.net).times(six(r.price))))));
-      if (quantity !== null && m.price !== null) {
-        const actualNet = sum2(rs.map((r) => six(r.net)));
-        const standard = six(new D(quantity).times(o.weight).times(m.share));
-        priceImpact = priceImpact.plus(sum2(rs.map((r) => money(six(r.net).times(six(r.price).minus(m.price))))));
-        usageImpact = usageImpact.plus(money(actualNet.minus(standard).times(m.price)));
-      }
-    }
-    const allExpenses = dataset.expenses.filter((r) => r.date === date), expenses = allExpenses.filter(visible), costs = {};
-    for (const cat of CATEGORIES) {
-      const all = allExpenses.filter((r) => r.category === cat), rs = expenses.filter((r) => r.category === cat);
-      const good = rs.length > 0 && all.length === rs.length && rs.every((r) => valid(r) && r.amount !== null);
-      costs[cat] = good ? amountSum(rs.map((r) => money(r.amount))) : null;
-      if (!good) miss(date, cat, "费用未完整归属、尚不可见或待补齐");
-    }
-    const actualCost = materialComplete ? sum2([money(materialCost), costs.人工, costs.制造, costs.其他生产]) : null;
-    const gross = revenue !== null && actualCost !== null ? money(new D(revenue).minus(actualCost)) : null;
-    const operatingCost = sum2([costs.管理, costs.销售, costs.财务]);
-    const operating = gross !== null && operatingCost !== null ? money(new D(gross).minus(operatingCost)) : null;
-    const expected = base.theoretical(quantity, baselineMode), gap = expected.gross !== null && gross !== null ? money(new D(expected.gross).minus(gross)) : null;
-    const diff = (a, e) => a !== null && e !== null ? money(new D(a).minus(e)) : null;
-    const energyRows = expenses.filter((r) => r.category === "制造" && /能源/.test(r.item));
-    const energyActual = costs.制造 === null ? null : amountSum(energyRows.map((r) => r.amount));
-    const energyDiff = diff(energyActual, expected.energy);
-    const otherManufacturing = costs.制造 !== null && expected.productionManagement !== null && energyActual !== null ? money(new D(costs.制造).minus(energyActual).minus(expected.productionManagement)) : null;
-    const components2 = { materialPrice: materialComplete && matsReady(base) && quantity !== null ? money(priceImpact) : null, materialUsage: materialComplete && matsReady(base) && quantity !== null ? money(usageImpact) : null, labor: diff(costs.人工, expected.labor), energy: energyDiff, otherManufacturing, otherProduction: diff(costs.其他生产, expected.otherProduction), budgetAdjustment: expected.reserve === null ? null : money(new D(expected.reserve).negated()) };
-    components2.rounding = gap !== null && Object.values(components2).every((v) => v !== null) ? money(new D(gap).minus(sum2(Object.values(components2)))) : null;
-    days.push({ date, quantity, processed, defects, revenue, actual: { material: materialComplete ? money(materialCost) : null, costs, productionCost: money(actualCost), gross, operating, margin: gross !== null && Number(revenue) > 0 ? new D(gross).div(revenue).toFixed(8) : null }, expected, gap, delta: gap === null ? null : money(new D(gap).negated()), components: components2, rows: { production: productions, materials, expenses, supplements: dataset.supplements.filter((s) => s.date === date && visible(s)) } });
-  }
-  const aggregate = (field, side) => amountSum(days.map((d) => side ? d[side][field] : d[field]));
-  const totalQuantity = days.some((d) => d.quantity === null) || o.opening === null ? null : days.reduce((s, d) => s + d.quantity, 0);
-  const dailySum = (fn) => amountSum(days.map(fn));
-  const cumulative = { quantity: totalQuantity, processed: days.some((d) => d.processed === null) ? null : days.reduce((s, d) => s + d.processed, 0), defects: days.some((d) => d.defects === null) ? null : days.reduce((s, d) => s + d.defects, 0), revenue: aggregate("revenue"), actual: { gross: aggregate("gross", "actual"), operating: aggregate("operating", "actual") }, expected: { gross: aggregate("gross", "expected"), operating: aggregate("operating", "expected") }, gap: aggregate("gap"), delta: aggregate("delta") };
-  cumulative.actual.material = dailySum((d) => d.actual.material);
-  cumulative.actual.costs = Object.fromEntries(CATEGORIES.map((c) => [c, dailySum((d) => d.actual.costs[c])]));
-  for (const k of ["material", "labor", "manufacturing", "otherProduction", "reserve", "operatingCosts"]) cumulative.expected[k] = dailySum((d) => d.expected[k]);
-  cumulative.actual.margin = cumulative.actual.gross !== null && Number(cumulative.revenue) > 0 ? new D(cumulative.actual.gross).div(cumulative.revenue).toFixed(8) : null;
-  cumulative.expected.margin = cumulative.expected.gross !== null && Number(cumulative.revenue) > 0 ? new D(cumulative.expected.gross).div(cumulative.revenue).toFixed(8) : null;
-  cumulative.progress = totalQuantity !== null && Number(o.quantity) > 0 ? new D(totalQuantity).div(o.quantity).toFixed(8) : null;
-  cumulative.remaining = totalQuantity === null ? null : Math.max(0, Number(o.quantity) - totalQuantity);
-  cumulative.overproduction = totalQuantity === null ? null : Math.max(0, totalQuantity - Number(o.quantity));
-  const components = Object.fromEntries(["materialPrice", "materialUsage", "labor", "energy", "otherManufacturing", "otherProduction", "budgetAdjustment", "rounding"].map((k) => [k, amountSum(days.map((d) => d.components[k]))]));
-  const state = asOf < o.start ? "not_started" : missing.some((m) => ["order", "baseline", "production", "material", "人工", "制造", "其他生产"].includes(m.field)) ? "incomplete" : dataset.production.concat(dataset.materials, dataset.expenses).some((r) => r.date <= asOf && visible(r) && r.status === "暂估") ? "provisional" : missing.length ? "operating_incomplete" : "complete";
-  const visibleSupplements = dataset.supplements.filter((r) => r.date <= asOf && visible(r));
-  const visibilityEnd = dataset.production.concat(dataset.materials, dataset.expenses, dataset.supplements).reduce((end, r) => r.availableAt?.slice(0, 10) > end ? r.availableAt.slice(0, 10) : end, o.end);
-  const sameQuantityTheory = base.theoretical(totalQuantity, baselineMode);
-  cumulative.expected.revenue = sameQuantityTheory.revenue;
-  const theoreticalRounding = sameQuantityTheory.gross !== null && cumulative.expected.gross !== null ? money(new D(sameQuantityTheory.gross).minus(cumulative.expected.gross)) : null;
-  const dimension = (items) => ({ state: items.length ? "incomplete" : "complete", missing: items });
-  const completeness = {
-    actual: dimension(missing.filter((m) => m.field !== "baseline" && m.field !== "production")),
-    baseline: dimension(missing.filter((m) => m.field === "baseline")),
-    progress: dimension(missing.filter((m) => m.field === "production" || m.field === "order"))
-  };
-  const profitScope = { grossProfit: cumulative.actual.gross, managementProfit: cumulative.actual.operating, forecastProfit: null, finalProfit: null, settlement: { state: "open", reason: "导入首版不包含正式结算资料；最终利润待结算后提供" } };
-  const daySummaries = days.map((d) => ({ date: d.date, quantity: d.quantity, revenue: d.revenue, actual: { material: d.actual.material, costs: d.actual.costs, gross: d.actual.gross, operating: d.actual.operating }, expected: { gross: d.expected.gross, revenue: d.expected.revenue }, gap: d.gap, components: d.components }));
-  const result = { visibilityEnd, theoreticalRounding, order: o, revisionId: dataset.revision.id, baselineId: b.id, baselineMode, asOf, daily: days.find((d) => d.date === asOf) ?? null, daySummaries, cumulative, theoreticalTotal: base.theoretical(o.quantity, baselineMode), bridge: { total: cumulative.gap, components }, profitScope, quality: { state, missing, completeness, isDemo: o.isDemo }, evidence: days.flatMap((d) => [...d.rows.production, ...d.rows.materials, ...d.rows.expenses].map((r) => r.source)), warnings: visibleSupplements.length ? [`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter((r) => r.date <= asOf && visible(r)).reduce((s, r) => s + Number(r.defects ?? 0), 0) - visibleSupplements.reduce((s, r) => s + Number(r.quantity ?? 0), 0)}双`] : [] };
-  result.referenceThresholds = buildReferenceThresholds({ order: o, cumulative, theoreticalBudget: base.theoretical(o.quantity, "budget"), baselineId: b.id, asOf });
-  result.diagnosis = buildDiagnosis(result);
-  return result;
-}
-function matsReady(base) {
-  return base.materials.every((m) => m.price !== null);
-}
-
 // server/profit/trend.mjs
-function trend(dataset, { start, end, baselineMode = "ideal" }) {
+function trend(dataset, { start, end, baselineMode = "ideal", knownAt }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start ?? "") || !/^\d{4}-\d{2}-\d{2}$/.test(end ?? "") || start > end || (new Date(end) - new Date(start)) / 864e5 > 3660) throw new Error("趋势日期范围无效");
   const points = [];
-  for (let date = start; date <= end; date = addDays(date, 1)) {
-    const a = evaluate(dataset, { asOf: date, baselineMode });
-    points.push({ date, actual: a.cumulative.actual.gross, expected: a.cumulative.expected.gross, gap: a.cumulative.gap, quantity: a.cumulative.quantity, state: a.quality.state });
+  for (let date2 = start; date2 <= end; date2 = addDays(date2, 1)) {
+    const a = evaluate(dataset, { asOf: date2, baselineMode, knownAt });
+    points.push({ date: date2, actual: a.cumulative.actual.gross, expected: a.cumulative.expected.gross, gap: a.cumulative.gap, quantity: a.cumulative.quantity, state: a.quality.state });
   }
   return points;
-}
-
-// server/storage/store.mjs
-import { mkdir, readdir, readFile, writeFile, rename, unlink } from "node:fs/promises";
-import { createHash as createHash2, randomUUID } from "node:crypto";
-import path2 from "node:path";
-function stable(v) {
-  if (Array.isArray(v)) {
-    const a = v.map(stable);
-    return a.every((x2) => x2 && typeof x2 === "object" && "id" in x2) ? a.sort((x2, y) => String(x2.id).localeCompare(String(y.id))) : a;
-  }
-  if (v && typeof v === "object") return Object.fromEntries(Object.keys(v).filter((k) => !["source", "sourceFiles"].includes(k)).sort().map((k) => [k, stable(v[k])]));
-  return v;
-}
-var digest = (v) => createHash2("sha256").update(JSON.stringify(stable(v))).digest("hex");
-var conflict = (message) => Object.assign(new Error(message), { status: 409 });
-function createStore(directory) {
-  let queue = Promise.resolve();
-  const readAll = async () => {
-    await mkdir(directory, { recursive: true });
-    const result = [];
-    for (const name of (await readdir(directory)).filter((n) => /^[a-f0-9]{64}\.json$/.test(n))) {
-      let v;
-      try {
-        v = JSON.parse(await readFile(path2.join(directory, name), "utf8"));
-      } catch {
-        throw new Error("本地导入数据损坏，请从备份恢复");
-      }
-      if (!v.dataset?.order?.id || !v.dataset?.revision?.id) throw new Error("本地导入版本无效");
-      result.push(v);
-    }
-    return result.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  };
-  const listRevisions = async (id) => (await readAll()).filter((x2) => x2.dataset.order.id === id).reverse().map((x2) => ({ revisionId: x2.dataset.revision.id, baselineId: x2.dataset.baseline.id, createdAt: x2.createdAt, hash: x2.hash }));
-  const get = async (id, revision) => {
-    const versions = (await readAll()).filter((x2) => x2.dataset.order.id === id && (!revision || x2.dataset.revision.id === revision));
-    if (!versions.length) throw Object.assign(new Error("未找到订单或数据版本"), { status: 404 });
-    return versions.at(-1).dataset;
-  };
-  const listOrders = async () => {
-    const latest = /* @__PURE__ */ new Map();
-    for (const v of await readAll()) {
-      const d = v.dataset;
-      latest.set(d.order.id, { ...d.order, revisionId: d.revision.id, baselineId: d.baseline.id, createdAt: v.createdAt, counts: { production: d.production.length, supplements: d.supplements.length, materials: d.materials.length, expenses: d.expenses.length } });
-    }
-    return [...latest.values()];
-  };
-  const commit = (dataset) => {
-    const job = queue.then(async () => {
-      const all = await readAll(), hash = digest(dataset), baseHash = digest(dataset.baseline), same = all.find((v) => v.dataset.order.id === dataset.order.id && v.dataset.revision.id === dataset.revision.id);
-      if (same) {
-        if (same.hash !== hash) throw conflict("同一修订号内容已改变，请使用新修订版本");
-        return { orderId: dataset.order.id, revisionId: dataset.revision.id, reused: true };
-      }
-      for (const v of all.filter((v2) => v2.dataset.order.id === dataset.order.id)) {
-        if (v.dataset.order.lineId !== dataset.order.lineId) throw conflict("首版同订单只支持一个核算子项，请使用独立订单标识");
-        if (v.dataset.baseline.id === dataset.baseline.id && (digest(v.dataset.baseline) !== baseHash || ["quantity", "price", "weight"].some((k) => v.dataset.order[k] !== dataset.order[k]))) throw conflict("冻结基线内容已改变，请使用新基线版本");
-      }
-      const key = createHash2("sha256").update(dataset.order.id + "\0" + dataset.revision.id).digest("hex"), target = path2.join(directory, key + ".json"), tmp = path2.join(directory, key + "." + randomUUID() + ".tmp");
-      const timestamp = Math.max(Date.now(), all.length ? Date.parse(all.at(-1).createdAt) + 1 : 0);
-      try {
-        await writeFile(tmp, JSON.stringify({ hash, createdAt: new Date(timestamp).toISOString(), dataset }), { flag: "wx" });
-        await rename(tmp, target);
-      } catch (e) {
-        await unlink(tmp).catch(() => {
-        });
-        throw e;
-      }
-      return { orderId: dataset.order.id, revisionId: dataset.revision.id, reused: false };
-    });
-    queue = job.catch(() => {
-    });
-    return job;
-  };
-  return { listOrders, listRevisions, get, commit };
 }
 
 // server/http/uploads.mjs
@@ -11722,7 +12013,7 @@ function readUpload(req) {
     let settled = false, total = 0;
     const files = {};
     let parser;
-    const fail = (message, status = 400) => {
+    const fail2 = (message, status = 400) => {
       if (settled) return;
       settled = true;
       req.unpipe(parser);
@@ -11732,19 +12023,19 @@ function readUpload(req) {
     try {
       parser = (0, import_busboy.default)({ headers: req.headers, limits: { files: 2, fields: 0, parts: 3, fileSize: 10 * 1024 * 1024 } });
     } catch {
-      fail("请选择两份.xlsx文件");
+      fail2("请选择两份.xlsx文件");
       return;
     }
     req.on("data", (b) => {
       total += b.length;
-      if (total > 25 * 1024 * 1024) fail("上传请求超过25MiB", 413);
+      if (total > 25 * 1024 * 1024) fail2("上传请求超过25MiB", 413);
     });
-    req.on("aborted", () => fail("上传已中断"));
-    req.on("error", () => fail("上传读取失败"));
+    req.on("aborted", () => fail2("上传已中断"));
+    req.on("error", () => fail2("上传读取失败"));
     parser.on("file", (name, stream, info) => {
       if (!["costFile", "dailyFile"].includes(name) || files[name] || !info.filename.toLowerCase().endsWith(".xlsx")) {
         stream.resume();
-        fail("文件字段重复、无效或不是.xlsx");
+        fail2("文件字段重复、无效或不是.xlsx");
         return;
       }
       const chunks = [];
@@ -11752,18 +12043,18 @@ function readUpload(req) {
       stream.on("data", (b) => {
         if (!settled) chunks.push(b);
       });
-      stream.on("limit", () => fail("单个Excel文件超过10MiB", 413));
-      stream.on("error", () => fail("文件上传失败"));
+      stream.on("limit", () => fail2("单个Excel文件超过10MiB", 413));
+      stream.on("error", () => fail2("文件上传失败"));
       stream.on("end", () => {
         if (!settled) files[name].buffer = Buffer.concat(chunks);
       });
     });
-    for (const ev of ["filesLimit", "fieldsLimit", "partsLimit"]) parser.on(ev, () => fail("只允许上传成本和每日两份Excel"));
-    parser.on("error", () => fail("上传格式损坏"));
+    for (const ev of ["filesLimit", "fieldsLimit", "partsLimit"]) parser.on(ev, () => fail2("只允许上传成本和每日两份Excel"));
+    parser.on("error", () => fail2("上传格式损坏"));
     parser.on("close", () => {
       if (settled) return;
       if (!files.costFile?.buffer || !files.dailyFile?.buffer) {
-        fail("请同时选择成本Excel和每日Excel");
+        fail2("请同时选择成本Excel和每日Excel");
         return;
       }
       settled = true;
@@ -11798,6 +12089,8 @@ function previewStats(ds) {
 function createRoutes({ dataDir, clock = Date.now }) {
   const store = createStore(dataDir), token = randomBytes(24).toString("hex"), previews = /* @__PURE__ */ new Map();
   let busy = false;
+  const repository = createMonitorRepository(path4.join(dataDir, "monitor-state"));
+  const monitor = createMonitorService({ store, repository, clock });
   const send = (res, status, obj) => {
     res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
     res.end(JSON.stringify(obj));
@@ -11810,7 +12103,19 @@ function createRoutes({ dataDir, clock = Date.now }) {
       if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw Object.assign(new Error("只允许本机访问"), { status: 403 });
       if (req.method === "POST" && (req.headers.origin !== `http://${host}` || req.headers["x-qiying-token"] !== token)) throw Object.assign(new Error("请从本站页面提交，或刷新页面后重试"), { status: 403 });
       if (req.method === "GET" && route === "/session") {
-        send(res, 200, { token, version: "import-v1", templateVersion: "A-ORDER-0.2" });
+        send(res, 200, { token, version: "import-v1", templateVersion: "A-ORDER-0.2", capabilities: ["monitor-scope-v3"] });
+        return true;
+      }
+      if (req.method === "GET" && route === "/monitor") {
+        send(res, 200, await monitor.create({ asOf: url.searchParams.get("asOf") || void 0, period: Number(url.searchParams.get("period") ?? 7), baselineMode: url.searchParams.get("baselineMode") ?? "ideal", knownAt: url.searchParams.get("knownAt") || void 0, customer: url.searchParams.get("customer") ?? "", status: url.searchParams.get("status") ?? "", risk: url.searchParams.get("risk") ?? "", search: url.searchParams.get("search") ?? "" }));
+        return true;
+      }
+      if (req.method === "GET" && parts[0] === "monitor" && parts[1] === "views" && parts.length === 3) {
+        send(res, 200, await monitor.get(parts[2]));
+        return true;
+      }
+      if (req.method === "GET" && parts[0] === "monitor" && parts[1] === "views" && parts[3] === "snapshots" && parts[5] === "evidence" && parts.length === 6) {
+        send(res, 200, await monitor.evidence(parts[2], parts[4]));
         return true;
       }
       if (req.method === "POST" && route === "/previews") {
@@ -11830,9 +12135,9 @@ function createRoutes({ dataDir, clock = Date.now }) {
             const a = evaluate(result.dataset, { asOf: result.dataset.order.end });
             for (const m of a.quality.missing) result.issues.push({ severity: "missing", code: "SCOPE_INCOMPLETE", fileRole: "daily", sheet: m.field === "material" ? "每日材料" : m.field === "production" ? "每日生产" : "每日费用", cell: null, field: m.field, recordId: null, message: `${m.date} ${m.detail}`, hint: FIX_HINTS.SCOPE_INCOMPLETE });
           }
-          const previewId = randomUUID2(), hash = digest(result.dataset);
-          previews.set(previewId, { at: clock(), result, digest: hash });
-          send(res, 200, { previewId, digest: hash, summary: result.summary, issues: result.issues, previewStats: previewStats(result.dataset), canCommit: !result.issues.some((i2) => i2.severity === "error"), requiresIncomplete: result.issues.some((i2) => i2.severity === "missing"), preview: Object.fromEntries(["production", "materials", "expenses", "supplements"].map((k) => [k, result.dataset[k].slice(0, 200)])) });
+          const previewId = randomUUID5(), hash2 = digest(result.dataset);
+          previews.set(previewId, { at: clock(), result, digest: hash2 });
+          send(res, 200, { previewId, digest: hash2, summary: result.summary, issues: result.issues, previewStats: previewStats(result.dataset), canCommit: !result.issues.some((i2) => i2.severity === "error"), requiresIncomplete: result.issues.some((i2) => i2.severity === "missing"), preview: Object.fromEntries(["production", "materials", "expenses", "supplements"].map((k) => [k, result.dataset[k].slice(0, 200)])) });
         } finally {
           busy = false;
         }
@@ -11853,10 +12158,18 @@ function createRoutes({ dataDir, clock = Date.now }) {
         return true;
       }
       if (req.method === "GET" && route === "/portfolio") {
-        const orders = await store.listOrders(), asOf = url.searchParams.get("asOf") ?? orders[0]?.start ?? (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), baselineMode = url.searchParams.get("baselineMode") ?? "ideal";
+        const knownAt = url.searchParams.get("knownAt") || void 0;
+        if (knownAt !== void 0 && (!Number.isFinite(Date.parse(knownAt)) || Date.parse(knownAt) > clock())) throw new Error("信息截止时间无效或晚于当前时间");
+        let orders = await store.listOrders();
+        if (knownAt) {
+          const latest = /* @__PURE__ */ new Map();
+          for (const v of await store.listVersions()) if (Date.parse(v.createdAt) <= Date.parse(knownAt)) latest.set(v.dataset.order.id, { ...v.dataset.order, revisionId: v.dataset.revision.id });
+          orders = [...latest.values()];
+        }
+        const asOf = url.searchParams.get("asOf") ?? orders[0]?.start ?? (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), baselineMode = url.searchParams.get("baselineMode") ?? "ideal";
         const rows = [];
         for (const order of orders) {
-          const a = evaluate(await store.get(order.id, order.revisionId), { asOf, baselineMode });
+          const a = evaluate(await store.get(order.id, order.revisionId), { asOf, baselineMode, knownAt });
           rows.push({ order, cumulative: a.cumulative, quality: a.quality });
         }
         const known = rows.filter((r) => r.quality.state !== "not_started" && r.cumulative.actual.gross !== null), comparable = known.filter((r) => r.cumulative.expected.gross !== null);
@@ -11870,12 +12183,14 @@ function createRoutes({ dataDir, clock = Date.now }) {
           return true;
         }
         const dataset = await store.get(id, url.searchParams.get("revision"));
+        const knownAt = url.searchParams.get("knownAt") || void 0;
+        if (knownAt !== void 0 && (!Number.isFinite(Date.parse(knownAt)) || Date.parse(knownAt) > clock())) throw new Error("信息截止时间无效或晚于当前时间");
         if (action === "analysis") {
-          send(res, 200, evaluate(dataset, { asOf: url.searchParams.get("asOf") ?? dataset.order.start, baselineMode: url.searchParams.get("baselineMode") ?? "ideal" }));
+          send(res, 200, evaluate(dataset, { asOf: url.searchParams.get("asOf") ?? dataset.order.start, baselineMode: url.searchParams.get("baselineMode") ?? "ideal", knownAt }));
           return true;
         }
         if (action === "trend") {
-          send(res, 200, { points: trend(dataset, { start: url.searchParams.get("start") ?? dataset.order.start, end: url.searchParams.get("end") ?? dataset.order.end, baselineMode: url.searchParams.get("baselineMode") ?? "ideal" }) });
+          send(res, 200, { points: trend(dataset, { start: url.searchParams.get("start") ?? dataset.order.start, end: url.searchParams.get("end") ?? dataset.order.end, baselineMode: url.searchParams.get("baselineMode") ?? "ideal", knownAt }) });
           return true;
         }
       }
@@ -11889,8 +12204,8 @@ function createRoutes({ dataDir, clock = Date.now }) {
 }
 
 // server/http/app.mjs
-function createApp({ root, dataDir = path3.join(root, "data", "imports"), clock = Date.now }) {
-  const dist = path3.join(root, "dist"), api = createRoutes({ dataDir, clock }), types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json" };
+function createApp({ root, dataDir = path5.join(root, "data", "imports"), clock = Date.now }) {
+  const dist = path5.join(root, "dist"), api = createRoutes({ dataDir, clock }), types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json" };
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, "http://127.0.0.1");
@@ -11900,14 +12215,14 @@ function createApp({ root, dataDir = path3.join(root, "data", "imports"), clock 
         res.end();
         return;
       }
-      const name = decodeURIComponent(url.pathname) === "/" ? "/index.html" : decodeURIComponent(url.pathname), file = path3.resolve(dist, "." + name), relative = path3.relative(dist, file);
-      if (relative.startsWith("..") || path3.isAbsolute(relative)) {
+      const name = decodeURIComponent(url.pathname) === "/" ? "/index.html" : decodeURIComponent(url.pathname), file = path5.resolve(dist, "." + name), relative = path5.relative(dist, file);
+      if (relative.startsWith("..") || path5.isAbsolute(relative)) {
         res.writeHead(403);
         res.end("Forbidden");
         return;
       }
-      const content = await readFile2(file);
-      res.writeHead(200, { "Content-Type": types[path3.extname(file)] || "application/octet-stream", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+      const content = await readFile3(file);
+      res.writeHead(200, { "Content-Type": types[path5.extname(file)] || "application/octet-stream", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
       res.end(req.method === "HEAD" ? void 0 : content);
     } catch (e) {
       res.writeHead(e.code === "ENOENT" || e.code === "EISDIR" ? 404 : 400, { "Content-Type": "text/plain; charset=utf-8" });

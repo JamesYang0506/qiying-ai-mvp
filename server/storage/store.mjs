@@ -21,5 +21,5 @@ export function createStore(directory){
   try{await writeFile(tmp,JSON.stringify({hash,createdAt:new Date(timestamp).toISOString(),dataset}),{flag:'wx'});await rename(tmp,target);}catch(e){await unlink(tmp).catch(()=>{});throw e;}
   return {orderId:dataset.order.id,revisionId:dataset.revision.id,reused:false};
  });queue=job.catch(()=>{});return job;};
- return {listOrders,listRevisions,get,commit};
+ return {listOrders,listRevisions,get,commit,listVersions:readAll};
 }
