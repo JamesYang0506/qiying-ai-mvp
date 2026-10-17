@@ -2,6 +2,9 @@ import {mkdir,readFile,open,rename,unlink} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {hash,fail} from '../orders/repository.mjs';
+import {gunzip} from 'node:zlib';
+import {promisify} from 'node:util';
+const unzip=promisify(gunzip);
 
 const idPattern=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const digestPattern=/^[a-f0-9]{64}$/;
@@ -14,8 +17,14 @@ function enqueue(directory,job){
  const key=queue(directory),prior=settle(key),next=prior.then(job,job);
  queues.set(key,next.catch(()=>{}));return next;
 }
+async function readStoredJson(file){
+ let content;
+ try{content=await readFile(file);}
+ catch(e){if(e.code!=='ENOENT')throw e;content=await unzip(await readFile(file+'.gz'));}
+ return JSON.parse(content.toString('utf8'));
+}
 async function readJson(file,code,message,status=404){
- try{return JSON.parse(await readFile(file,'utf8'));}
+ try{return await readStoredJson(file);}
  catch(e){if(e.code==='ENOENT')throw missing(code,message,status);throw missing('STORAGE_INVALID','监测历史文件损坏，请从备份恢复',503);}
 }
 async function atomicWrite(file,text){
@@ -24,11 +33,11 @@ async function atomicWrite(file,text){
  try{handle=await open(temp,'wx');await handle.writeFile(text);await handle.sync();await handle.close();handle=null;await rename(temp,file);}
  catch(e){await handle?.close();await unlink(temp).catch(()=>{});throw e;}
 }
-async function exists(file){try{await readFile(file);return true;}catch(e){if(e.code==='ENOENT')return false;throw e;}}
+async function exists(file){try{await readStoredJson(file);return true;}catch(e){if(e.code==='ENOENT')return false;throw e;}}
 const identity=value=>{const {recorded_at,...rest}=value??{};return rest;};
 async function immutable(file,value,label,code){
  let existing;
- try{existing=JSON.parse(await readFile(file,'utf8'));}
+ try{existing=await readStoredJson(file);}
  catch(e){
   if(e.code==='ENOENT'){await atomicWrite(file,JSON.stringify(value));return;}
   throw missing('STORAGE_INVALID','监测历史文件损坏，请从备份恢复',503);
@@ -45,7 +54,7 @@ export function createMonitorRepository(directory){
  async function saveInput(inputHash,dataset){
   if(hash(dataset)!==inputHash)throw missing('STORAGE_INVALID','快照输入摘要与内容不一致',503);
   const file=inputFile(inputHash),record={hash:inputHash,dataset};
-  try{const existing=JSON.parse(await readFile(file,'utf8'));if(hash(existing.dataset)!==inputHash)throw missing('STORAGE_INVALID','共享输入文件损坏',503);return;}
+  try{const existing=await readStoredJson(file);if(hash(existing.dataset)!==inputHash)throw missing('STORAGE_INVALID','共享输入文件损坏',503);return;}
   catch(e){if(e.code!=='ENOENT')throw e;}
   await atomicWrite(file,JSON.stringify(record));
  }

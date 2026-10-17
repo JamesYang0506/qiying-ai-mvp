@@ -8751,7 +8751,7 @@ function readXlsx(buffer, { limits = {} } = {}) {
   if (buffer[0] !== 80 || buffer[1] !== 75) throw new Error("无效Excel ZIP文件");
   const entries = /* @__PURE__ */ new Map();
   let total2 = 0, count = 0;
-  const unzip = new Unzip((file) => {
+  const unzip2 = new Unzip((file) => {
     const name = file.name;
     if (++count > 2e4 || entries.has(name) || name.startsWith("/") || name.includes("\\") || name.split("/").includes("..")) throw new Error("ZIP条目无效或重复");
     if (file.originalSize > max3 - total2) throw new Error("Excel解压数据超过限制");
@@ -8774,9 +8774,9 @@ function readXlsx(buffer, { limits = {} } = {}) {
     };
     file.start();
   });
-  unzip.register(UnzipInflate);
+  unzip2.register(UnzipInflate);
   try {
-    for (let i2 = 0; i2 < buffer.length; i2 += 65536) unzip.push(buffer.subarray(i2, i2 + 65536), i2 + 65536 >= buffer.length);
+    for (let i2 = 0; i2 < buffer.length; i2 += 65536) unzip2.push(buffer.subarray(i2, i2 + 65536), i2 + 65536 >= buffer.length);
   } catch (e) {
     throw new Error(e.message.includes("限制") ? e.message : `Excel ZIP解析失败：${e.message}`);
   }
@@ -18957,6 +18957,9 @@ function createOrderRoutes({ service, token }) {
 import { mkdir as mkdir4, readFile as readFile4, open as open2, rename as rename4, unlink as unlink4 } from "node:fs/promises";
 import path5 from "node:path";
 import { randomUUID as randomUUID7 } from "node:crypto";
+import { gunzip } from "node:zlib";
+import { promisify as promisify2 } from "node:util";
+var unzip = promisify2(gunzip);
 var idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 var digestPattern = /^[a-f0-9]{64}$/;
 var missing = (code, message, status = 404) => fail(code, message, status);
@@ -18973,9 +18976,19 @@ function enqueue2(directory, job) {
   }));
   return next;
 }
+async function readStoredJson(file) {
+  let content;
+  try {
+    content = await readFile4(file);
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+    content = await unzip(await readFile4(file + ".gz"));
+  }
+  return JSON.parse(content.toString("utf8"));
+}
 async function readJson2(file, code, message, status = 404) {
   try {
-    return JSON.parse(await readFile4(file, "utf8"));
+    return await readStoredJson(file);
   } catch (e) {
     if (e.code === "ENOENT") throw missing(code, message, status);
     throw missing("STORAGE_INVALID", "监测历史文件损坏，请从备份恢复", 503);
@@ -19001,7 +19014,7 @@ async function atomicWrite(file, text2) {
 }
 async function exists(file) {
   try {
-    await readFile4(file);
+    await readStoredJson(file);
     return true;
   } catch (e) {
     if (e.code === "ENOENT") return false;
@@ -19015,7 +19028,7 @@ var identity = (value) => {
 async function immutable(file, value, label, code) {
   let existing;
   try {
-    existing = JSON.parse(await readFile4(file, "utf8"));
+    existing = await readStoredJson(file);
   } catch (e) {
     if (e.code === "ENOENT") {
       await atomicWrite(file, JSON.stringify(value));
@@ -19037,7 +19050,7 @@ function createMonitorRepository(directory) {
     if (hash2(dataset) !== inputHash) throw missing("STORAGE_INVALID", "快照输入摘要与内容不一致", 503);
     const file = inputFile(inputHash), record = { hash: inputHash, dataset };
     try {
-      const existing = JSON.parse(await readFile4(file, "utf8"));
+      const existing = await readStoredJson(file);
       if (hash2(existing.dataset) !== inputHash) throw missing("STORAGE_INVALID", "共享输入文件损坏", 503);
       return;
     } catch (e) {
