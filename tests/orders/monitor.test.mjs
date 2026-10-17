@@ -6,7 +6,7 @@ import {pair} from '../import/fixture.mjs';
 import {normalizePair} from '../../server/import/normalize.mjs';
 import {buildOverview,createMonitorService,distributionKey} from '../../server/monitor/overview.mjs';
 import {createStore} from '../../server/storage/store.mjs';
-import {createRepository} from '../../server/orders/repository.mjs';
+import {createMonitorRepository} from '../../server/monitor/storage.mjs';
 import {D} from '../../server/profit/decimal.mjs';
 
 export function dataset(id='ORDER-A',prices=[17.2,17.2],quantities=[100,100]){
@@ -61,10 +61,10 @@ test('late recording uses Shanghai midnight even when the source timestamp is UT
 });
 test('persisted view and evidence remain unchanged after an import revision and restart',async t=>{
  const dir=await mkdtemp(path.join(os.tmpdir(),'b-monitor-'));t.after(()=>rm(dir,{recursive:true,force:true}));
- const store=createStore(dir),repo=createRepository(path.join(dir,'b-module'));await store.commit(dataset());
+ const store=createStore(dir),repo=createMonitorRepository(path.join(dir,'monitor-state'));await store.commit(dataset());
  const service=createMonitorService({store,repository:repo}),v=await service.create({...options,knownAt:undefined});
  const d=dataset();d.revision.id='REV-2';d.materials[0].price='19';await store.commit(d);
- const restarted=createMonitorService({store:createStore(dir),repository:createRepository(path.join(dir,'b-module'))});
+ const restarted=createMonitorService({store:createStore(dir),repository:createMonitorRepository(path.join(dir,'monitor-state'))});
  assert.deepEqual(await restarted.get(v.viewId),v);
  const e=await restarted.evidence(v.viewId,v.orders[0].snapshotId);assert.equal(e.revisionId,'REV-1');
  await assert.rejects(restarted.evidence(v.viewId,'wrong'),{code:'SCOPE_MISMATCH'});

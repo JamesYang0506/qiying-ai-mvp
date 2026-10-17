@@ -408,19 +408,19 @@ var require_utils = __commonJS({
       if (decode)
         return decode(data, hint);
     }
-    function basename(path6) {
-      if (typeof path6 !== "string")
+    function basename(path7) {
+      if (typeof path7 !== "string")
         return "";
-      for (let i2 = path6.length - 1; i2 >= 0; --i2) {
-        switch (path6.charCodeAt(i2)) {
+      for (let i2 = path7.length - 1; i2 >= 0; --i2) {
+        switch (path7.charCodeAt(i2)) {
           case 47:
           // '/'
           case 92:
-            path6 = path6.slice(i2 + 1);
-            return path6 === ".." || path6 === "." ? "" : path6;
+            path7 = path7.slice(i2 + 1);
+            return path7 === ".." || path7 === "." ? "" : path7;
         }
       }
-      return path6 === ".." || path6 === "." ? "" : path6;
+      return path7 === ".." || path7 === "." ? "" : path7;
     }
     var TOKEN = [
       0,
@@ -3767,11 +3767,11 @@ var require_lib = __commonJS({
 
 // server/http/app.mjs
 import http from "node:http";
-import { readFile as readFile3 } from "node:fs/promises";
-import path5 from "node:path";
+import { readFile as readFile4 } from "node:fs/promises";
+import path6 from "node:path";
 
 // server/http/routes.mjs
-import { randomUUID as randomUUID6, randomBytes } from "node:crypto";
+import { randomUUID as randomUUID7, randomBytes } from "node:crypto";
 
 // node_modules/fflate/esm/index.mjs
 import { createRequire } from "module";
@@ -6519,16 +6519,16 @@ var MatcherView = class {
    * @returns {string|undefined}
    */
   getCurrentTag() {
-    const path6 = this._matcher.path;
-    return path6.length > 0 ? path6[path6.length - 1].tag : void 0;
+    const path7 = this._matcher.path;
+    return path7.length > 0 ? path7[path7.length - 1].tag : void 0;
   }
   /**
    * Get current namespace.
    * @returns {string|undefined}
    */
   getCurrentNamespace() {
-    const path6 = this._matcher.path;
-    return path6.length > 0 ? path6[path6.length - 1].namespace : void 0;
+    const path7 = this._matcher.path;
+    return path7.length > 0 ? path7[path7.length - 1].namespace : void 0;
   }
   /**
    * Get current node's attribute value.
@@ -6536,9 +6536,9 @@ var MatcherView = class {
    * @returns {*}
    */
   getAttrValue(attrName) {
-    const path6 = this._matcher.path;
-    if (path6.length === 0) return void 0;
-    return path6[path6.length - 1].values?.[attrName];
+    const path7 = this._matcher.path;
+    if (path7.length === 0) return void 0;
+    return path7[path7.length - 1].values?.[attrName];
   }
   /**
    * Check if current node has an attribute.
@@ -6546,9 +6546,9 @@ var MatcherView = class {
    * @returns {boolean}
    */
   hasAttr(attrName) {
-    const path6 = this._matcher.path;
-    if (path6.length === 0) return false;
-    const current = path6[path6.length - 1];
+    const path7 = this._matcher.path;
+    if (path7.length === 0) return false;
+    const current = path7[path7.length - 1];
     return current.values !== void 0 && attrName in current.values;
   }
   /**
@@ -6574,18 +6574,18 @@ var MatcherView = class {
    * @returns {number}
    */
   getPosition() {
-    const path6 = this._matcher.path;
-    if (path6.length === 0) return -1;
-    return path6[path6.length - 1].position ?? 0;
+    const path7 = this._matcher.path;
+    if (path7.length === 0) return -1;
+    return path7[path7.length - 1].position ?? 0;
   }
   /**
    * Get current node's repeat counter (occurrence count of this tag name).
    * @returns {number}
    */
   getCounter() {
-    const path6 = this._matcher.path;
-    if (path6.length === 0) return -1;
-    return path6[path6.length - 1].counter ?? 0;
+    const path7 = this._matcher.path;
+    if (path7.length === 0) return -1;
+    return path7[path7.length - 1].counter ?? 0;
   }
   /**
    * Get current node's sibling index (alias for getPosition).
@@ -10976,7 +10976,7 @@ function normalizePair(costBook, dailyBook) {
   if (order.start && order.end && (order.start > order.end || (new Date(order.end) - new Date(order.start)) / 864e5 > 3660)) issue("error", "DATE_RANGE", info.name, null, null, "日期范围须有序且不超过3660天", "cost");
   if (order.weight !== null && new decimal_default(order.weight).lte(0)) issue("error", "WEIGHT_INVALID", info.name, meta["模拟标准重量"], null, "标准重量必须大于0", "cost");
   const baseline = { id: mv("预期基线版本"), params: {}, recipe: [], sizePlan: [] }, revision = { id: mv("数据修订版本") };
-  const source = (s, ref, role, id2) => ({ fileRole: role, sheet: s.name, cell: ref, recordId: id2, fileHash: (role === "cost" ? costBook : dailyBook).hash });
+  const source = (s, ref, role, id3) => ({ fileRole: role, sheet: s.name, cell: ref, recordId: id3, fileHash: (role === "cost" ? costBook : dailyBook).hash });
   const tableRows = (sheet, tableName, headerRow = 5, firstColumn = "A") => {
     const tb = sheet.tables?.find((t) => t.name === tableName);
     let last = 0, lo = 0, hi = 16384;
@@ -11010,28 +11010,28 @@ function normalizePair(costBook, dailyBook) {
     });
   };
   for (const r of tableRows(cost, "CostParameters", 34)) {
-    const id2 = r.get("参数ID");
-    if (!id2) continue;
-    if (id2 in baseline.params) issue("error", "PARAM_DUPLICATE", cost.name, r.ref("参数ID"), id2, "参数ID重复", "cost");
-    baseline.params[id2] = id2 === "price_change_date" ? r.get("输入值") : num(cost, r.ref("输入值"), { role: "cost" });
+    const id3 = r.get("参数ID");
+    if (!id3) continue;
+    if (id3 in baseline.params) issue("error", "PARAM_DUPLICATE", cost.name, r.ref("参数ID"), id3, "参数ID重复", "cost");
+    baseline.params[id3] = id3 === "price_change_date" ? r.get("输入值") : num(cost, r.ref("输入值"), { role: "cost" });
   }
   const needed = ["material_pct", "prep_piece", "press_piece", "production_mgmt", "energy_pct", "company_mgmt", "admin_pct", "logistics_piece", "production_loss_budget", "defect_loss_budget", "other_production_piece", "finance_piece"];
-  for (const id2 of needed) if (!(id2 in baseline.params)) {
-    baseline.params[id2] = null;
-    issue("missing", "PARAM_MISSING", cost.name, null, id2, `缺少参数${id2}`, "cost");
+  for (const id3 of needed) if (!(id3 in baseline.params)) {
+    baseline.params[id3] = null;
+    issue("missing", "PARAM_MISSING", cost.name, null, id3, `缺少参数${id3}`, "cost");
   }
-  for (const [id2, value] of Object.entries(baseline.params)) if (id2.endsWith("_pct") || ["production_mgmt", "company_mgmt", "production_loss_budget", "defect_loss_budget"].includes(id2)) {
-    if (value !== null && new decimal_default(value).gt(1)) issue("error", "RATE_INVALID", cost.name, null, id2, "比例应在0到1之间", "cost");
+  for (const [id3, value] of Object.entries(baseline.params)) if (id3.endsWith("_pct") || ["production_mgmt", "company_mgmt", "production_loss_budget", "defect_loss_budget"].includes(id3)) {
+    if (value !== null && new decimal_default(value).gt(1)) issue("error", "RATE_INVALID", cost.name, null, id3, "比例应在0到1之间", "cost");
   }
   for (const r of tableRows(orig, "OriginalRecipe")) {
-    const id2 = r.get("材料编号");
-    if (!id2) continue;
-    baseline.recipe.push({ id: id2, quantity: num(orig, r.ref("原表配方量kg"), { role: "cost" }), referencePrice: num(orig, r.ref("原表参考单价元/kg"), { role: "cost" }), source: source(orig, r.ref("材料编号"), "cost", id2) });
+    const id3 = r.get("材料编号");
+    if (!id3) continue;
+    baseline.recipe.push({ id: id3, quantity: num(orig, r.ref("原表配方量kg"), { role: "cost" }), referencePrice: num(orig, r.ref("原表参考单价元/kg"), { role: "cost" }), source: source(orig, r.ref("材料编号"), "cost", id3) });
   }
   for (const r of tableRows(orig, "OriginalSizePlan", 5, "K")) {
-    const id2 = r.get("码号");
-    if (!id2) continue;
-    baseline.sizePlan.push({ id: id2, quantity: num(orig, r.ref("分码合同量 双"), { role: "cost", integer: true }), source: source(orig, r.ref("码号"), "cost", id2) });
+    const id3 = r.get("码号");
+    if (!id3) continue;
+    baseline.sizePlan.push({ id: id3, quantity: num(orig, r.ref("分码合同量 双"), { role: "cost", integer: true }), source: source(orig, r.ref("码号"), "cost", id3) });
   }
   if (!baseline.recipe.length || baseline.recipe.every((m) => m.quantity === "0")) issue("error", "RECIPE_INVALID", orig.name, null, null, "配方总量必须大于0", "cost");
   for (const [items, key] of [[baseline.recipe, "材料编号"], [baseline.sizePlan, "码号"]]) if (new Set(items.map((x2) => x2.id)).size !== items.length) issue("error", "KEY_DUPLICATE", orig.name, null, key, `${key}重复`, "cost");
@@ -11532,11 +11532,11 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
   const { order: o, baseline: b } = dataset;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf ?? "") || Number.isNaN(Date.parse(asOf)) || new Date(asOf).toISOString().slice(0, 10) !== asOf) throw new Error("请选择有效日期");
   if (!["ideal", "budget"].includes(baselineMode)) throw new Error("理论基线模式无效");
-  const base = prepareBaseline(dataset), missing = [], cutoff = asOf + "T23:59:59+08:00";
+  const base = prepareBaseline(dataset), missing2 = [], cutoff = asOf + "T23:59:59+08:00";
   const cutoffMs = Date.parse(cutoff);
   const visible = (r) => r.availableAt && Date.parse(r.availableAt) <= cutoffMs;
   const miss = (date2, field, detail) => {
-    if (missing.length < 1e3) missing.push({ date: date2, field, detail });
+    if (missing2.length < 1e3) missing2.push({ date: date2, field, detail });
   };
   for (const k of ["quantity", "price", "weight", "opening"]) if (o[k] == null) miss(null, "order", `订单${k}待补齐`);
   for (const [k, v] of Object.entries(b.params)) if (v == null) miss(null, "baseline", `基线参数${k}待补齐`);
@@ -11606,7 +11606,7 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
   cumulative.remaining = totalQuantity === null ? null : Math.max(0, Number(o.quantity) - totalQuantity);
   cumulative.overproduction = totalQuantity === null ? null : Math.max(0, totalQuantity - Number(o.quantity));
   const components = Object.fromEntries(["materialPrice", "materialUsage", "labor", "energy", "otherManufacturing", "otherProduction", "budgetAdjustment", "rounding"].map((k) => [k, amountSum(days.map((d) => d.components[k]))]));
-  const state = asOf < o.start ? "not_started" : missing.some((m) => ["order", "baseline", "production", "material", "人工", "制造", "其他生产"].includes(m.field)) ? "incomplete" : dataset.production.concat(dataset.materials, dataset.expenses).some((r) => r.date <= asOf && visible(r) && r.status === "暂估") ? "provisional" : missing.length ? "operating_incomplete" : "complete";
+  const state = asOf < o.start ? "not_started" : missing2.some((m) => ["order", "baseline", "production", "material", "人工", "制造", "其他生产"].includes(m.field)) ? "incomplete" : dataset.production.concat(dataset.materials, dataset.expenses).some((r) => r.date <= asOf && visible(r) && r.status === "暂估") ? "provisional" : missing2.length ? "operating_incomplete" : "complete";
   const visibleSupplements = dataset.supplements.filter((r) => r.date <= asOf && visible(r));
   const visibilityEnd = dataset.production.concat(dataset.materials, dataset.expenses, dataset.supplements).reduce((end, r) => r.availableAt?.slice(0, 10) > end ? r.availableAt.slice(0, 10) : end, o.end);
   const sameQuantityTheory = base.theoretical(totalQuantity, baselineMode);
@@ -11614,13 +11614,13 @@ function evaluate(dataset, { asOf, baselineMode = "ideal" } = {}) {
   const theoreticalRounding = sameQuantityTheory.gross !== null && cumulative.expected.gross !== null ? money(new D(sameQuantityTheory.gross).minus(cumulative.expected.gross)) : null;
   const dimension = (items) => ({ state: items.length ? "incomplete" : "complete", missing: items });
   const completeness = {
-    actual: dimension(missing.filter((m) => m.field !== "baseline" && m.field !== "production")),
-    baseline: dimension(missing.filter((m) => m.field === "baseline")),
-    progress: dimension(missing.filter((m) => m.field === "production" || m.field === "order"))
+    actual: dimension(missing2.filter((m) => m.field !== "baseline" && m.field !== "production")),
+    baseline: dimension(missing2.filter((m) => m.field === "baseline")),
+    progress: dimension(missing2.filter((m) => m.field === "production" || m.field === "order"))
   };
   const profitScope = { grossProfit: cumulative.actual.gross, managementProfit: cumulative.actual.operating, forecastProfit: null, finalProfit: null, settlement: { state: "open", reason: "导入首版不包含正式结算资料；最终利润待结算后提供" } };
   const daySummaries = days.map((d) => ({ date: d.date, quantity: d.quantity, revenue: d.revenue, actual: { material: d.actual.material, costs: d.actual.costs, gross: d.actual.gross, operating: d.actual.operating }, expected: { gross: d.expected.gross, revenue: d.expected.revenue }, gap: d.gap, components: d.components }));
-  const result = { visibilityEnd, theoreticalRounding, order: o, revisionId: dataset.revision.id, baselineId: b.id, baselineMode, asOf, daily: days.find((d) => d.date === asOf) ?? null, daySummaries, cumulative, theoreticalTotal: base.theoretical(o.quantity, baselineMode), bridge: { total: cumulative.gap, components }, profitScope, quality: { state, missing, completeness, isDemo: o.isDemo }, evidence: days.flatMap((d) => [...d.rows.production, ...d.rows.materials, ...d.rows.expenses].map((r) => r.source)), warnings: visibleSupplements.length ? [`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter((r) => r.date <= asOf && visible(r)).reduce((s, r) => s + Number(r.defects ?? 0), 0) - visibleSupplements.reduce((s, r) => s + Number(r.quantity ?? 0), 0)}双`] : [] };
+  const result = { visibilityEnd, theoreticalRounding, order: o, revisionId: dataset.revision.id, baselineId: b.id, baselineMode, asOf, daily: days.find((d) => d.date === asOf) ?? null, daySummaries, cumulative, theoreticalTotal: base.theoretical(o.quantity, baselineMode), bridge: { total: cumulative.gap, components }, profitScope, quality: { state, missing: missing2, completeness, isDemo: o.isDemo }, evidence: days.flatMap((d) => [...d.rows.production, ...d.rows.materials, ...d.rows.expenses].map((r) => r.source)), warnings: visibleSupplements.length ? [`补单为已含记录，不额外增加产量和成本；不良与补单差异${dataset.production.filter((r) => r.date <= asOf && visible(r)).reduce((s, r) => s + Number(r.defects ?? 0), 0) - visibleSupplements.reduce((s, r) => s + Number(r.quantity ?? 0), 0)}双`] : [] };
   result.referenceThresholds = buildReferenceThresholds({ order: o, cumulative, theoreticalBudget: base.theoretical(o.quantity, "budget"), baselineId: b.id, asOf });
   result.diagnosis = buildDiagnosis(result);
   return result;
@@ -11655,7 +11655,7 @@ function stable(v) {
 var digest = (v) => createHash2("sha256").update(JSON.stringify(stable(v))).digest("hex");
 var conflict = (message) => Object.assign(new Error(message), { status: 409 });
 function createStore(directory) {
-  let queue = Promise.resolve();
+  let queue2 = Promise.resolve();
   const readAll = async () => {
     await mkdir(directory, { recursive: true });
     const result = [];
@@ -11671,9 +11671,9 @@ function createStore(directory) {
     }
     return result.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   };
-  const listRevisions = async (id2) => (await readAll()).filter((x2) => x2.dataset.order.id === id2).reverse().map((x2) => ({ revisionId: x2.dataset.revision.id, baselineId: x2.dataset.baseline.id, createdAt: x2.createdAt, hash: x2.hash }));
-  const get = async (id2, revision) => {
-    const versions = (await readAll()).filter((x2) => x2.dataset.order.id === id2 && (!revision || x2.dataset.revision.id === revision));
+  const listRevisions = async (id3) => (await readAll()).filter((x2) => x2.dataset.order.id === id3).reverse().map((x2) => ({ revisionId: x2.dataset.revision.id, baselineId: x2.dataset.baseline.id, createdAt: x2.createdAt, hash: x2.hash }));
+  const get = async (id3, revision) => {
+    const versions = (await readAll()).filter((x2) => x2.dataset.order.id === id3 && (!revision || x2.dataset.revision.id === revision));
     if (!versions.length) throw Object.assign(new Error("未找到订单或数据版本"), { status: 404 });
     return versions.at(-1).dataset;
   };
@@ -11686,7 +11686,7 @@ function createStore(directory) {
     return [...latest2.values()];
   };
   const commit = (dataset) => {
-    const job = queue.then(async () => {
+    const job = queue2.then(async () => {
       const all = await readAll(), hash2 = digest(dataset), baseHash = digest(dataset.baseline), same = all.find((v) => v.dataset.order.id === dataset.order.id && v.dataset.revision.id === dataset.revision.id);
       if (same) {
         if (same.hash !== hash2) throw conflict("同一修订号内容已改变，请使用新修订版本");
@@ -11708,7 +11708,7 @@ function createStore(directory) {
       }
       return { orderId: dataset.order.id, revisionId: dataset.revision.id, reused: false };
     });
-    queue = job.catch(() => {
+    queue2 = job.catch(() => {
     });
     return job;
   };
@@ -11788,7 +11788,7 @@ async function readJson(req) {
 }
 
 // server/http/routes.mjs
-import path4 from "node:path";
+import path5 from "node:path";
 
 // server/orders/repository.mjs
 import { mkdir as mkdir2, readFile as readFile2, open, rename as rename2, unlink as unlink2 } from "node:fs/promises";
@@ -17986,13 +17986,13 @@ function recommendations({ today, previous, comparison, orderId, revisionId, bas
   }
   const tq = today.quantity, pq = previous.quantity;
   const materialIds = [...new Set(today.rows.materials.map((r) => r.materialId))];
-  for (const id2 of materialIds) {
-    const now = today.rows.materials.filter((r) => r.materialId === id2), before = previous.rows.materials.filter((r) => r.materialId === id2);
+  for (const id3 of materialIds) {
+    const now = today.rows.materials.filter((r) => r.materialId === id3), before = previous.rows.materials.filter((r) => r.materialId === id3);
     if (!before.length || [...now, ...before].some((r) => r.net == null || r.price == null)) continue;
     const net = (rs) => rs.reduce((s, r) => s.plus(r.net), new D(0)), cost = (rs) => rs.reduce((s, r) => s.plus(new D(r.net).times(r.price)), new D(0));
     const n = net(now), b = net(before), price = n.gt(0) ? cost(now).div(n) : null, oldPrice = b.gt(0) ? cost(before).div(b) : null;
-    if (positive(price, oldPrice) && positive(unit(today.components.materialPrice, tq), unit(previous.components.materialPrice, pq))) add2("MATERIAL_PRICE", `材料 ${id2} 加权单价 ${oldPrice.toFixed(6)} → ${price.toFixed(6)} 元/kg`, "核对采购批次、供应商报价、入库单价和录入值。", [...before, ...now]);
-    if (positive(unit(n, tq), unit(b, pq))) add2("MATERIAL_USAGE", `材料 ${id2} 单位合格品净耗 ${unit(b, pq).toFixed(6)} → ${unit(n, tq).toFixed(6)} kg/双`, "核对领退料、标准重量、不良数量及净耗口径；耗用增加原因待核实。", [...before, ...now]);
+    if (positive(price, oldPrice) && positive(unit(today.components.materialPrice, tq), unit(previous.components.materialPrice, pq))) add2("MATERIAL_PRICE", `材料 ${id3} 加权单价 ${oldPrice.toFixed(6)} → ${price.toFixed(6)} 元/kg`, "核对采购批次、供应商报价、入库单价和录入值。", [...before, ...now]);
+    if (positive(unit(n, tq), unit(b, pq))) add2("MATERIAL_USAGE", `材料 ${id3} 单位合格品净耗 ${unit(b, pq).toFixed(6)} → ${unit(n, tq).toFixed(6)} kg/双`, "核对领退料、标准重量、不良数量及净耗口径；耗用增加原因待核实。", [...before, ...now]);
   }
   for (const [category, ruleId, advice] of [["人工", "LABOR", "核对工价、计件量、合格产量与费用归属。"], ["制造", "MANUFACTURING", "核对费用所属日期、订单及分摊依据；现有资料不足以认定停机低效。"]]) {
     const now = unit(today.actual.costs[category], tq), before = unit(previous.actual.costs[category], pq);
@@ -18083,7 +18083,7 @@ async function buildOverview(entries, { asOf, period = 7, baselineMode = "ideal"
   const overview = { viewId, filterOptions, filters: { customer, status, risk, search }, scope: { asOf, knownAt, periodStart: displayStart, baselineMode, source: "imported", currency: "CNY", versionSet: orders.map((r) => ({ orderId: r.order.id, revisionId: r.revisionId, baselineId: r.baselineId, snapshotId: r.snapshotId })), note: "本地标准导入口径：CNY、生产等价收入、模拟报价不拆税。迟录和整套修订不纳入纯经营恶化判断。" }, coverage: { total: orders.length, known: orders.filter((r) => r.cumulative.actual.gross != null && asOf >= r.order.start).length, comparable: comparable.length, dayComparable: orders.filter((r) => r.comparison.status === "comparable").length, incomplete: orders.filter((r) => r.quality.missing.length > 0).length, exclusions: orders.filter((r) => !r.comparable || r.comparison.status !== "comparable").map((r) => ({ orderId: r.order.id, reasons: [...r.comparison.reasons, ...r.quality.missing.map((m) => `${m.date ?? ""} ${m.detail}`)] })) }, summary: { actualGross: sum3(comparable, (r) => r.cumulative.actual.gross), expectedGross: sum3(comparable, (r) => r.cumulative.expected.gross), gap: sum3(comparable, (r) => r.cumulative.gap), deteriorated: orders.filter((r) => r.comparison.deteriorated).length }, trend: { includedCount: intersection.length, excludedCount: orders.length - intersection.length, points: trend2 }, distribution: buckets, attention: orders.filter((r) => r.comparison.deteriorated).slice(0, 5).map((r) => r.order.id), reminders: orders.filter((r) => r.loss || r.cumulativeDeviation || r.quality.missing.length).map((r) => ({ orderId: r.order.id, loss: r.loss, cumulativeDeviation: r.cumulativeDeviation, incomplete: r.quality.missing.length > 0 })), orders };
   return { overview, snapshots };
 }
-function createMonitorService({ store, repository, clock = Date.now }) {
+function createMonitorService({ store, repository, clock = Date.now, compute = evaluate }) {
   return {
     async create(options = {}) {
       const knownAt = timestamp(options.knownAt ?? new Date(clock()).toISOString());
@@ -18095,23 +18095,18 @@ function createMonitorService({ store, repository, clock = Date.now }) {
         selected.set(v.dataset.order.id, { ...v, revisionCount: (old?.revisionCount ?? 0) + 1 });
       }
       const entries = [...selected.values()], asOf = options.asOf ?? (entries.length ? entries.reduce((s, v) => v.dataset.order.end > s ? v.dataset.order.end : s, entries[0].dataset.order.end) : new Date(clock() + 8 * 36e5).toISOString().slice(0, 10));
-      const built = await buildOverview(entries, { ...options, asOf, knownAt });
+      const built = await buildOverview(entries, { ...options, asOf, knownAt, compute });
       built.overview.coverage.unfilteredTotal = entries.length;
-      await repository.transact((s) => {
-        s.snapshots.push(...built.snapshots);
-        s.views.push({ view_id: built.overview.viewId, kind: "import-monitor", overview: built.overview, recorded_at: new Date(clock()).toISOString() });
-      });
+      await repository.saveView({ overview: built.overview, snapshots: built.snapshots, recordedAt: new Date(clock()).toISOString() });
       return built.overview;
     },
     async get(viewId) {
-      const s = await repository.read(), v = s.views.find((v2) => v2.view_id === viewId && v2.kind === "import-monitor");
-      if (!v) throw fail("VIEW_NOT_FOUND", "未找到固定监测视图", 404);
-      return v.overview;
+      return repository.getView(viewId);
     },
     async evidence(viewId, snapshotId) {
       const v = await this.get(viewId);
       if (!v.scope.versionSet.some((r) => r.snapshotId === snapshotId)) throw fail("SCOPE_MISMATCH", "快照不属于此视图", 409);
-      const s = await repository.read(), snapshot = s.snapshots.find((x2) => x2.snapshot_id === snapshotId);
+      const snapshot = await repository.getSnapshot(snapshotId);
       return { viewId, snapshotId, revisionId: snapshot.revision_id, baselineMode: snapshot.baseline_mode, asOf: snapshot.as_of, knownAt: snapshot.known_at, daily: snapshot.evaluation.daily, previous: snapshot.previous, evidence: snapshot.evidence };
     }
   };
@@ -18651,6 +18646,143 @@ function createOrderRoutes({ service, token }) {
   };
 }
 
+// server/monitor/storage.mjs
+import { mkdir as mkdir3, readFile as readFile3, open as open2, rename as rename3, unlink as unlink3 } from "node:fs/promises";
+import path4 from "node:path";
+import { randomUUID as randomUUID6 } from "node:crypto";
+var idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+var digestPattern = /^[a-f0-9]{64}$/;
+var missing = (code, message, status = 404) => fail(code, message, status);
+var queues2 = /* @__PURE__ */ new Map();
+var id2 = (value, label = "ID") => {
+  if (typeof value !== "string" || !idPattern.test(value)) throw missing("INVALID_REQUEST", `${label}无效`, 400);
+  return value;
+};
+var queue = (directory) => path4.resolve(directory);
+var settle = (key) => queues2.get(key) ?? Promise.resolve();
+function enqueue2(directory, job) {
+  const key = queue(directory), prior = settle(key), next = prior.then(job, job);
+  queues2.set(key, next.catch(() => {
+  }));
+  return next;
+}
+async function readJson2(file, code, message, status = 404) {
+  try {
+    return JSON.parse(await readFile3(file, "utf8"));
+  } catch (e) {
+    if (e.code === "ENOENT") throw missing(code, message, status);
+    throw missing("STORAGE_INVALID", "监测历史文件损坏，请从备份恢复", 503);
+  }
+}
+async function atomicWrite(file, text2) {
+  await mkdir3(path4.dirname(file), { recursive: true });
+  const temp = file + "." + randomUUID6() + ".tmp";
+  let handle;
+  try {
+    handle = await open2(temp, "wx");
+    await handle.writeFile(text2);
+    await handle.sync();
+    await handle.close();
+    handle = null;
+    await rename3(temp, file);
+  } catch (e) {
+    await handle?.close();
+    await unlink3(temp).catch(() => {
+    });
+    throw e;
+  }
+}
+async function exists(file) {
+  try {
+    await readFile3(file);
+    return true;
+  } catch (e) {
+    if (e.code === "ENOENT") return false;
+    throw e;
+  }
+}
+var identity = (value) => {
+  const { recorded_at, ...rest } = value ?? {};
+  return rest;
+};
+async function immutable(file, value, label, code) {
+  let existing;
+  try {
+    existing = JSON.parse(await readFile3(file, "utf8"));
+  } catch (e) {
+    if (e.code === "ENOENT") {
+      await atomicWrite(file, JSON.stringify(value));
+      return;
+    }
+    throw missing("STORAGE_INVALID", "监测历史文件损坏，请从备份恢复", 503);
+  }
+  if (hash(identity(existing)) !== hash(identity(value))) throw missing(code, `${label}已存在且内容不可变`, 409);
+}
+function createMonitorRepository(directory) {
+  const root = path4.resolve(directory), views = path4.join(root, "views"), snapshots = path4.join(root, "snapshots"), inputs = path4.join(root, "inputs");
+  const viewFile = (viewId) => path4.join(views, id2(viewId, "视图 ID") + ".json");
+  const snapshotFile = (snapshotId) => path4.join(snapshots, id2(snapshotId, "快照 ID") + ".json");
+  const inputFile = (inputHash) => {
+    if (!digestPattern.test(inputHash ?? "")) throw missing("INVALID_REQUEST", "输入摘要无效", 400);
+    return path4.join(inputs, inputHash + ".json");
+  };
+  async function saveInput(inputHash, dataset) {
+    if (hash(dataset) !== inputHash) throw missing("STORAGE_INVALID", "快照输入摘要与内容不一致", 503);
+    const file = inputFile(inputHash), record = { hash: inputHash, dataset };
+    try {
+      const existing = JSON.parse(await readFile3(file, "utf8"));
+      if (hash(existing.dataset) !== inputHash) throw missing("STORAGE_INVALID", "共享输入文件损坏", 503);
+      return;
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+    }
+    await atomicWrite(file, JSON.stringify(record));
+  }
+  async function saveView({ overview, snapshots: incoming = [], recordedAt } = {}) {
+    return enqueue2(root, async () => {
+      const viewId = id2(overview?.viewId, "视图 ID");
+      if (!Array.isArray(incoming)) throw missing("INVALID_REQUEST", "快照集合无效", 400);
+      if (!Array.isArray(overview?.scope?.versionSet)) throw missing("INVALID_REQUEST", "固定监测视图缺少版本集合", 400);
+      for (const snapshot of incoming) {
+        const snapshotId = id2(snapshot?.snapshot_id, "快照 ID");
+        if (!snapshot.input_hash) throw missing("INVALID_REQUEST", `快照 ${snapshotId} 缺少输入摘要`, 400);
+        if (snapshot.inputs) {
+          const inputHash = hash(snapshot.inputs);
+          if (inputHash !== snapshot.input_hash) throw missing("STORAGE_INVALID", "快照输入摘要与内容不一致", 503);
+          await saveInput(inputHash, snapshot.inputs);
+          const { inputs: ignored, ...record2 } = snapshot;
+          await immutable(snapshotFile(snapshotId), { ...record2, inputRef: inputHash }, `快照 ${snapshotId}`, "SNAPSHOT_IMMUTABLE");
+        } else if (!await exists(snapshotFile(snapshotId))) {
+          throw missing("STORAGE_INVALID", `快照 ${snapshotId} 尚未保存`, 503);
+        }
+      }
+      for (const entry of overview.scope.versionSet) {
+        const snapshotId = id2(entry?.snapshotId, "快照 ID");
+        if (!await exists(snapshotFile(snapshotId))) throw missing("STORAGE_INVALID", `视图引用的快照 ${snapshotId} 不存在`, 503);
+      }
+      const record = { view_id: viewId, kind: "import-monitor", overview, recorded_at: recordedAt ?? (/* @__PURE__ */ new Date()).toISOString() };
+      await immutable(viewFile(viewId), record, `视图 ${viewId}`, "VIEW_IMMUTABLE");
+      return overview;
+    });
+  }
+  async function getView(viewId) {
+    await settle(queue(root));
+    const record = await readJson2(viewFile(viewId), "VIEW_NOT_FOUND", "未找到固定监测视图");
+    if (record.kind !== "import-monitor" || !record.overview) throw missing("STORAGE_INVALID", "监测视图文件无效", 503);
+    return record.overview;
+  }
+  async function getSnapshot(snapshotId) {
+    await settle(queue(root));
+    const record = await readJson2(snapshotFile(snapshotId), "SNAPSHOT_NOT_FOUND", "未找到固定监测快照");
+    if (!record.inputRef) throw missing("STORAGE_INVALID", "快照缺少共享输入引用", 503);
+    const input = await readJson2(inputFile(record.inputRef), "STORAGE_INVALID", "快照输入文件不存在", 503);
+    if (!input?.dataset || hash(input.dataset) !== record.inputRef) throw missing("STORAGE_INVALID", "快照输入文件损坏", 503);
+    const { inputRef, ...snapshot } = record;
+    return { ...snapshot, inputs: input.dataset };
+  }
+  return { saveView, getView, getSnapshot };
+}
+
 // server/http/routes.mjs
 var decTotal = (rows, key) => !rows.length ? null : rows.some((r) => r[key] == null) ? null : rows.reduce((s, r) => s.plus(r[key]), new D(0)).toString();
 function previewStats(ds) {
@@ -18659,12 +18791,12 @@ function previewStats(ds) {
   const prices = ds.materials.map((r) => r.price).filter((v) => v != null);
   return { production: { count: ds.production.length, processed, defects, good }, supplements: { count: ds.supplements.length, quantity: decTotal(ds.supplements, "quantity") }, materials: { count: ds.materials.length, net: decTotal(ds.materials, "net"), priceMin: prices.length ? prices.reduce((a, b) => new D(b).lt(a) ? b : a) : null, priceMax: prices.length ? prices.reduce((a, b) => new D(b).gt(a) ? b : a) : null }, expenses: { count: ds.expenses.length, amount: decTotal(ds.expenses, "amount"), byCategory: Object.fromEntries(CATEGORIES.map((c) => [c, decTotal(ds.expenses.filter((r) => r.category === c), "amount")]).filter(([, v]) => v !== null)) } };
 }
-function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManufacturing }) {
+function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManufacturing, monitorCompute }) {
   const store = createStore(dataDir), token = randomBytes(24).toString("hex"), previews = /* @__PURE__ */ new Map();
   let busy = false;
-  const repository = createRepository(path4.join(dataDir, "b-module"));
+  const repository = createRepository(path5.join(dataDir, "b-module")), monitorRepository = createMonitorRepository(path5.join(dataDir, "monitor-state"));
   const service = createOrderService({ repository, clock, calculateOrder, allocateManufacturing });
-  const formal = createOrderRoutes({ service, token }), monitor = createMonitorService({ store, repository, clock });
+  const formal = createOrderRoutes({ service, token }), monitor = createMonitorService({ store, repository: monitorRepository, clock, compute: monitorCompute });
   service.drain().catch(() => {
   });
   const send = (res, status, obj) => {
@@ -18699,7 +18831,7 @@ function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManuf
         if (busy) throw Object.assign(new Error("正在解析另一份文件，请稍后重试"), { status: 429 });
         busy = true;
         try {
-          for (const [id2, p] of previews) if (clock() - p.at >= 6e5) previews.delete(id2);
+          for (const [id3, p] of previews) if (clock() - p.at >= 6e5) previews.delete(id3);
           if (previews.size >= 20) throw Object.assign(new Error("预览数量过多，请等待旧预览过期"), { status: 429 });
           const files = await readUpload(req);
           let result;
@@ -18712,7 +18844,7 @@ function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManuf
             const a = evaluate(result.dataset, { asOf: result.dataset.order.end });
             for (const m of a.quality.missing) result.issues.push({ severity: "missing", code: "SCOPE_INCOMPLETE", fileRole: "daily", sheet: m.field === "material" ? "每日材料" : m.field === "production" ? "每日生产" : "每日费用", cell: null, field: m.field, recordId: null, message: `${m.date} ${m.detail}`, hint: FIX_HINTS.SCOPE_INCOMPLETE });
           }
-          const previewId = randomUUID6(), hash2 = digest(result.dataset);
+          const previewId = randomUUID7(), hash2 = digest(result.dataset);
           previews.set(previewId, { at: clock(), result, digest: hash2 });
           send(res, 200, { previewId, digest: hash2, summary: result.summary, issues: result.issues, previewStats: previewStats(result.dataset), canCommit: !result.issues.some((i2) => i2.severity === "error"), requiresIncomplete: result.issues.some((i2) => i2.severity === "missing"), preview: Object.fromEntries(["production", "materials", "expenses", "supplements"].map((k) => [k, result.dataset[k].slice(0, 200)])) });
         } finally {
@@ -18746,12 +18878,12 @@ function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManuf
         return true;
       }
       if (req.method === "GET" && parts[0] === "orders" && parts.length === 3) {
-        const id2 = parts[1], action = parts[2];
+        const id3 = parts[1], action = parts[2];
         if (action === "revisions") {
-          send(res, 200, { revisions: await store.listRevisions(id2) });
+          send(res, 200, { revisions: await store.listRevisions(id3) });
           return true;
         }
-        const dataset = await store.get(id2, url.searchParams.get("revision"));
+        const dataset = await store.get(id3, url.searchParams.get("revision"));
         if (action === "analysis") {
           send(res, 200, evaluate(dataset, { asOf: url.searchParams.get("asOf") ?? dataset.order.start, baselineMode: url.searchParams.get("baselineMode") ?? "ideal" }));
           return true;
@@ -18771,8 +18903,8 @@ function createRoutes({ dataDir, clock = Date.now, calculateOrder, allocateManuf
 }
 
 // server/http/app.mjs
-function createApp({ root, dataDir = path5.join(root, "data", "imports"), clock = Date.now, calculateOrder, allocateManufacturing }) {
-  const dist = path5.join(root, "dist"), api = createRoutes({ dataDir, clock, calculateOrder, allocateManufacturing }), types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json" };
+function createApp({ root, dataDir = path6.join(root, "data", "imports"), clock = Date.now, calculateOrder, allocateManufacturing, monitorCompute }) {
+  const dist = path6.join(root, "dist"), api = createRoutes({ dataDir, clock, calculateOrder, allocateManufacturing, monitorCompute }), types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json" };
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, "http://127.0.0.1");
@@ -18782,14 +18914,14 @@ function createApp({ root, dataDir = path5.join(root, "data", "imports"), clock 
         res.end();
         return;
       }
-      const name = decodeURIComponent(url.pathname) === "/" ? "/index.html" : decodeURIComponent(url.pathname), file = path5.resolve(dist, "." + name), relative = path5.relative(dist, file);
-      if (relative.startsWith("..") || path5.isAbsolute(relative)) {
+      const name = decodeURIComponent(url.pathname) === "/" ? "/index.html" : decodeURIComponent(url.pathname), file = path6.resolve(dist, "." + name), relative = path6.relative(dist, file);
+      if (relative.startsWith("..") || path6.isAbsolute(relative)) {
         res.writeHead(403);
         res.end("Forbidden");
         return;
       }
-      const content = await readFile3(file);
-      res.writeHead(200, { "Content-Type": types[path5.extname(file)] || "application/octet-stream", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+      const content = await readFile4(file);
+      res.writeHead(200, { "Content-Type": types[path6.extname(file)] || "application/octet-stream", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
       res.end(req.method === "HEAD" ? void 0 : content);
     } catch (e) {
       res.writeHead(e.code === "ENOENT" || e.code === "EISDIR" ? 404 : 400, { "Content-Type": "text/plain; charset=utf-8" });

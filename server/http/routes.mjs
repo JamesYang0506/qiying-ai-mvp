@@ -6,6 +6,7 @@ import {createRepository} from '../orders/repository.mjs';
 import {createOrderService} from '../orders/service.mjs';
 import {createOrderRoutes} from '../orders/routes.mjs';
 import {createMonitorService} from '../monitor/overview.mjs';
+import {createMonitorRepository} from '../monitor/storage.mjs';
 const decTotal=(rows,key)=>!rows.length?null:rows.some(r=>r[key]==null)?null:rows.reduce((s,r)=>s.plus(r[key]),new D(0)).toString();
 function previewStats(ds){
  const processed=decTotal(ds.production,'processed'),defects=decTotal(ds.production,'defects');
@@ -13,11 +14,11 @@ function previewStats(ds){
  const prices=ds.materials.map(r=>r.price).filter(v=>v!=null);
  return {production:{count:ds.production.length,processed,defects,good},supplements:{count:ds.supplements.length,quantity:decTotal(ds.supplements,'quantity')},materials:{count:ds.materials.length,net:decTotal(ds.materials,'net'),priceMin:prices.length?prices.reduce((a,b)=>new D(b).lt(a)?b:a):null,priceMax:prices.length?prices.reduce((a,b)=>new D(b).gt(a)?b:a):null},expenses:{count:ds.expenses.length,amount:decTotal(ds.expenses,'amount'),byCategory:Object.fromEntries(CATEGORIES.map(c=>[c,decTotal(ds.expenses.filter(r=>r.category===c),'amount')]).filter(([,v])=>v!==null))}};
 }
-export function createRoutes({dataDir,clock=Date.now,calculateOrder,allocateManufacturing}){
+export function createRoutes({dataDir,clock=Date.now,calculateOrder,allocateManufacturing,monitorCompute}){
  const store=createStore(dataDir),token=randomBytes(24).toString('hex'),previews=new Map();let busy=false;
- const repository=createRepository(path.join(dataDir,'b-module'));
+ const repository=createRepository(path.join(dataDir,'b-module')),monitorRepository=createMonitorRepository(path.join(dataDir,'monitor-state'));
  const service=createOrderService({repository,clock,calculateOrder,allocateManufacturing});
- const formal=createOrderRoutes({service,token}),monitor=createMonitorService({store,repository,clock});
+ const formal=createOrderRoutes({service,token}),monitor=createMonitorService({store,repository:monitorRepository,clock,compute:monitorCompute});
  service.drain().catch(()=>{});
  const send=(res,status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(obj));};
  return async(req,res,url)=>{

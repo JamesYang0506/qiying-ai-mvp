@@ -63,19 +63,19 @@ export async function buildOverview(entries,{asOf,period=7,baselineMode='ideal',
  return {overview,snapshots};
 }
 
-export function createMonitorService({store,repository,clock=Date.now}){
+export function createMonitorService({store,repository,clock=Date.now,compute=evaluate}){
  return {
   async create(options={}){
    const knownAt=timestamp(options.knownAt??new Date(clock()).toISOString());if(Date.parse(knownAt)>clock())throw fail('INVALID_REQUEST','信息截止时间不能晚于服务端当前时间');
    const versions=await store.listVersions();
    const selected=new Map();for(const v of versions)if(Date.parse(v.createdAt)<=Date.parse(knownAt)){const old=selected.get(v.dataset.order.id);selected.set(v.dataset.order.id,{...v,revisionCount:(old?.revisionCount??0)+1});}
    const entries=[...selected.values()],asOf=options.asOf??(entries.length?entries.reduce((s,v)=>v.dataset.order.end>s?v.dataset.order.end:s,entries[0].dataset.order.end):new Date(clock()+8*3600000).toISOString().slice(0,10));
-   const built=await buildOverview(entries,{...options,asOf,knownAt});
+   const built=await buildOverview(entries,{...options,asOf,knownAt,compute});
    built.overview.coverage.unfilteredTotal=entries.length;
-   await repository.transact(s=>{s.snapshots.push(...built.snapshots);s.views.push({view_id:built.overview.viewId,kind:'import-monitor',overview:built.overview,recorded_at:new Date(clock()).toISOString()});});
+   await repository.saveView({overview:built.overview,snapshots:built.snapshots,recordedAt:new Date(clock()).toISOString()});
    return built.overview;
   },
-  async get(viewId){const s=await repository.read(),v=s.views.find(v=>v.view_id===viewId&&v.kind==='import-monitor');if(!v)throw fail('VIEW_NOT_FOUND','未找到固定监测视图',404);return v.overview;},
-  async evidence(viewId,snapshotId){const v=await this.get(viewId);if(!v.scope.versionSet.some(r=>r.snapshotId===snapshotId))throw fail('SCOPE_MISMATCH','快照不属于此视图',409);const s=await repository.read(),snapshot=s.snapshots.find(x=>x.snapshot_id===snapshotId);return {viewId,snapshotId,revisionId:snapshot.revision_id,baselineMode:snapshot.baseline_mode,asOf:snapshot.as_of,knownAt:snapshot.known_at,daily:snapshot.evaluation.daily,previous:snapshot.previous,evidence:snapshot.evidence};}
+  async get(viewId){return repository.getView(viewId);},
+  async evidence(viewId,snapshotId){const v=await this.get(viewId);if(!v.scope.versionSet.some(r=>r.snapshotId===snapshotId))throw fail('SCOPE_MISMATCH','快照不属于此视图',409);const snapshot=await repository.getSnapshot(snapshotId);return {viewId,snapshotId,revisionId:snapshot.revision_id,baselineMode:snapshot.baseline_mode,asOf:snapshot.as_of,knownAt:snapshot.known_at,daily:snapshot.evaluation.daily,previous:snapshot.previous,evidence:snapshot.evidence};}
  };
 }
