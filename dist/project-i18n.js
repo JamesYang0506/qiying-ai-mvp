@@ -24,6 +24,39 @@ const entries=`
 AI 订单助手|AI order assistant
 围绕订单利润与成本提问。|Ask questions about order profit and costs.
 AI 对话|AI assistant
+分析上下文|Analysis context
+按业务日期读取已导入订单，使用网站统一核算口径。|Use imported orders and the app's calculations for the selected business date.
+业务日期|Business date
+订单范围|Order scope
+全部已导入订单|All imported orders
+服务状态|Service status
+检测中…|Checking…
+已接入|Connected
+模型服务未启动|Model service is offline
+连不上本地大模型服务|Cannot connect to the local model service
+请先启动「企盈 AI」。|Start the Qiying AI service first.
+当前模型|Current model
+重新检测|Check again
+AI按所选范围解释利润与成本差异。改变范围会开始新对话。|AI explains profit and cost differences for the selected scope. Changing scope starts a new conversation.
+摘要过长时会明确提示截断，可选择单个订单核查。AI回复尚未逐条核验证据，关键结论请与订单明细核对。|Long summaries show a truncation notice; select one order for detail. AI citations are not individually verified; check key conclusions against order records.
+让订单数据更容易理解|Make order data easier to understand
+选择日期和订单，再提问利润变化与成本偏差。|Select a date and order, then ask about profit and cost changes.
+哪些订单需要优先关注？|Which orders need attention first?
+查看订单利润偏差|Review order profit differences
+与预期相比少赚了多少？|How far is profit below expectations?
+比较同进度理论毛利|Compare theoretical gross profit at the same progress
+利润差距体现在哪些成本？|Which costs explain the profit gap?
+核查材料、人工与能耗|Review materials, labor and energy
+还需要补充哪些数据？|What data is still missing?
+识别缺失记录与待核查信息|Identify missing records and items to review
+向 AI 提问|Ask AI
+输入关于订单利润或生产数据的问题…|Ask about order profit or production data…
+AI服务在线|AI service is online
+AI接口已整合，等待模型服务启动|AI integration is ready; waiting for the model service
+回答中…|Answering…
+发送|Send
+已完成|Completed
+回答基于本地模型与核算摘要，原因判断仍需结合明细核查。|Answers use the local model and calculation summaries. Verify causes against detailed records.
 AI 服务尚未接入|AI service is not connected
 当前核查建议由已验证的数据和规则提供。模型服务接入前，可以在订单监测页查看建议和原始依据。|Current suggestions use verified data and rules. View recommendations and source records in Order monitoring.
 查看订单监测|Open order monitoring

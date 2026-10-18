@@ -24,7 +24,7 @@ export function createAuth({directory,clock=Date.now,required=true}){
   if(!url.pathname.startsWith('/api/auth/'))return false;
   try{
    const host=req.headers.host??'';if(!/^(127\.0\.0\.1|localhost):\d+$/.test(host))throw failure('FORBIDDEN',403);
-   if(req.method==='GET'&&url.pathname==='/api/auth/session'){const user=userFor(req);send(res,200,{required,authenticated:!!user,user,version:'auth-v1',capabilities:['account-login-v1','monitor-scope-v2','order-diagnosis-v3','optimized-runtime-v1']});return true;}
+   if(req.method==='GET'&&url.pathname==='/api/auth/session'){const user=userFor(req);send(res,200,{required,authenticated:!!user,user,version:'auth-v1',capabilities:['account-login-v1','monitor-scope-v2','order-diagnosis-v3','optimized-runtime-v1','ai-chat-v1']});return true;}
    if(req.method==='GET'&&url.pathname==='/api/auth/captcha'){send(res,200,captcha(req));return true;}
    if(req.method!=='POST')throw failure('NOT_FOUND',404);
    if(req.headers.origin!==`http://${host}`)throw failure('FORBIDDEN',403);

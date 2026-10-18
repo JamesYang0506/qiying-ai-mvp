@@ -1,0 +1,23 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm,readdir,readFile} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createStore} from '../server/storage/store.mjs';
+import {createProjectContext} from '../server/ai/context.mjs';
+import {normalizePair} from '../server/import/normalize.mjs';
+import {pair} from './import/fixture.mjs';
+test('AI context selects latest revisions across orders, invalidates cache and never creates history',async t=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'qiying-context-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const store=createStore(dir),a=normalizePair(...pair()).dataset,b=structuredClone(a);b.order.id='SECOND-ORDER';await store.commit(a);await store.commit(b);
+ const context=createProjectContext({dataDir:dir,clock:()=>Date.now()+1000});
+ const first=await context({asOf:'2026-08-03'});assert.match(first,/SIM-TEST/);assert.match(first,/SECOND-ORDER/);assert.match(first,/2\/2/);
+ const revision=structuredClone(a);revision.revision.id='REV-2';revision.materials[0].price='20';await store.commit(revision);
+ const second=await context({asOf:'2026-08-03',orderId:a.order.id});assert.match(second,/REV-2/);assert.doesNotMatch(second,/SECOND-ORDER|REV-1/);
+ assert.match(await context({asOf:'2026-08-03'}),/REV-2/);
+ await assert.rejects(context({orderId:'missing'}),{status:404});
+ const partial=structuredClone(revision);partial.revision.id='REV-3';partial.materials[0].net=null;await store.commit(partial);
+ const before=await Promise.all((await readdir(dir)).map(async n=>[n,await readFile(path.join(dir,n),'utf8')]));
+ const unknown=await context({asOf:'2026-08-03',orderId:a.order.id});assert.match(unknown,/累计实际毛利 未知/);
+ assert.deepEqual(await Promise.all((await readdir(dir)).map(async n=>[n,await readFile(path.join(dir,n),'utf8')])),before);
+});

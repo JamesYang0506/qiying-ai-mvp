@@ -6,6 +6,7 @@ import {mountImported} from './imported-workspace.js';
 import {mountMonitor} from './monitor-workspace.js';
 import {monitorMasthead} from './monitor-dashboard.js';
 import {icon,esc} from './ui.js';
+import {mountAi} from './ai-page.js';
 
 const app=document.querySelector('#app');let cleanup=null;
 const titles={monitor:['订单动态监测','持续跟踪生产变化，让每一笔订单的利润可见。'],import:['标准数据导入','导入成本表与每日表，核对后生成订单。'],imported:['订单分析','按日期推进，比较实际利润与同进度理论利润。'],data:['订单详细数据','按订单与业务日期核查 Excel 中的生产、成本来源及补单记录。'],ai:['AI 订单助手','围绕订单利润与成本提问。']};
@@ -17,7 +18,7 @@ function renderBusiness(){document.body.classList.remove('auth-page');cleanup?.(
  else if(page==='import')cleanup=mountImport(root,{onSaved:result=>{toast(result.reused?'已有相同版本，未重复追加':'订单资料已保存');location.hash='#imported/'+encodeURIComponent(result.orderId);}});
  else if(page==='data')cleanup=mountDailyData(root,{orderId:id,initialDate:query.get('asOf')??'',initialRevision:query.get('revision')??''});
  else if(page==='imported')cleanup=mountImported(root,{orderId:id,initialView:page==='data'?'detail':'overview',initialDate:query.get('asOf')??'',initialRevision:query.get('revision')??'',initialMode:query.get('baselineMode')??'ideal'});
- else root.innerHTML='<section class="panel import-intro"><h2>AI 服务尚未接入</h2><p>当前核查建议由已验证的数据和规则提供。模型服务接入前，可以在订单监测页查看建议和原始依据。</p><a class="button primary" href="#monitor">查看订单监测</a></section>';
+ else if(page==='ai')cleanup=mountAi(root);
  app.insertAdjacentHTML('beforeend','<div class="project-tools">'+languageControl()+'</div>');
  applyProjectLanguage();
 }

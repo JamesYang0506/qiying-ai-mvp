@@ -1,0 +1,21 @@
+/* ============ AI 对话（本地大模型接入） ============ */
+.chat-stream{display:flex;flex-direction:column;gap:14px;padding:20px;max-height:52vh;overflow-y:auto;flex:1}
+.chat-stream .msg{display:flex}
+.chat-stream .msg-user{justify-content:flex-end}
+.chat-stream .msg-ai{justify-content:flex-start}
+.chat-stream .bubble{max-width:78%;padding:11px 15px;border-radius:14px;font-size:14px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+.chat-stream .msg-user .bubble{background:#2563eb;color:#fff;border-bottom-right-radius:4px}
+.chat-stream .msg-ai .bubble{background:#eef2f7;color:#1f2937;border-bottom-left-radius:4px}
+.context-line strong.ai-on{color:#16a34a}
+.context-line strong.ai-off{color:#dc2626}
+.cursor{display:inline-block;width:8px;height:16px;background:#2563eb;vertical-align:text-bottom;margin-left:2px;animation:blink 1s steps(2) infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.chat-panel{display:flex;flex-direction:column}
+.chat-panel .composer{border-top:1px solid #e5e7eb}
+.chat-stream:empty{display:none}
+.ai-scope-label{display:block;margin-top:16px;color:#65778f;font-size:12px}
+.ai-recheck{margin-top:16px;width:100%}
+.ai-scope-note{margin-top:18px!important;font-size:11px;line-height:1.8}
+.chat-panel{min-width:0}
+.chat-stream .bubble{overflow-wrap:anywhere}
+@media(max-width:700px){.chat-layout{grid-template-columns:1fr;min-height:0}.chat-context{padding:16px}.chat-context .help-block,.ai-scope-note{margin-top:12px}.chat-center{padding:30px 18px}.prompts{grid-template-columns:1fr}.composer{padding:16px}.composer-actions{gap:12px}.chat-stream .bubble{max-width:90%}}
