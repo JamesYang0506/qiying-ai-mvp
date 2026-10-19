@@ -20,23 +20,23 @@ jobs:
         with:
           node-version: '20'
       - name: Install locked dependencies
-        run: npm ci
+        run: npm run setup
       - name: Build bundled server
         run: npm run build
       - name: Verify JavaScript syntax
         run: |
-          node --check dist/app.js
-          node --check dist/charts.js
-          node --check dist/import-page.js
-          node --check dist/imported-workspace.js
-          node --check serve.mjs
-          node --check start-website.mjs
+          node --check 运行文件/dist/app.js
+          node --check 运行文件/dist/charts.js
+          node --check 运行文件/dist/import-page.js
+          node --check 运行文件/dist/imported-workspace.js
+          node --check 运行文件/serve.mjs
+          node --check 运行文件/start-website.mjs
       - name: Verify business calculations
         run: npm test
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install contract validator
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -r 开发文件/requirements-dev.txt
       - name: Verify contracts and examples
-        run: python contracts/validate_examples.py
+        run: python 开发文件/contracts/validate_examples.py
