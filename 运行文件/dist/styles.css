@@ -89,8 +89,6 @@ button.variance-row:focus-visible{outline:2px solid #2868ed;outline-offset:1px}
 .gap-row .gap-name{font-size:12px;font-weight:600;color:#244c7b}
 .gap-row strong{font-size:13px;font-variant-numeric:tabular-nums;color:#dd5965}
 .gap-row em{font-style:normal;font-size:10px;color:#9aa6b7}
-.gap-row p{margin:0;font-size:11px;color:#8491a5}
-.gap-row .cause-link{justify-self:start;font-size:11px}
 .op-list{display:grid;gap:8px}
 .op-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}
 .op-row .op-name{font-size:12px;font-weight:600;color:#244c7b}
