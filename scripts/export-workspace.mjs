@@ -1,4 +1,4 @@
-import {mkdir,readFile,writeFile,readdir,lstat,copyFile,realpath} from 'node:fs/promises';
+import {mkdir,writeFile,readdir,lstat,copyFile,realpath} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -11,7 +11,6 @@ const git=(root,args)=>execFileSync('git',args,{cwd:root,windowsHide:true,maxBuf
 const sha=buffer=>createHash('sha256').update(buffer).digest('hex');
 async function fileHash(file){const h=createHash('sha256');for await(const part of createReadStream(file))h.update(part);return h.digest('hex');}
 const forbidden=rel=>/^(data|node_modules|output|outputs|reports|\.git|\.venv|\.superpowers|\.openai)(\/|$)/i.test(rel)||/^\.env($|\.)/i.test(rel)&&rel!=='.env.example'||/\.(gguf|safetensors|zip|log)$/i.test(rel);
-const runtimeFile=rel=>/^(dist|runtime)\//.test(rel)||['serve.mjs','start-website.mjs','启动网站.cmd','package.json','THIRD_PARTY_NOTICES.md'].includes(rel);
 
 async function dataFiles(root,relative=''){
  const folder=path.join(root,relative);let info;
@@ -39,17 +38,16 @@ export async function exportWorkspace({root=projectRoot,destination,includeData=
  if(git(root,['ls-tree','-r',commit]).toString().split('\n').some(line=>line.startsWith('120000 ')))throw new Error('源码包含链接，请先确认分发范围');
  await mkdir(path.dirname(destination),{recursive:true});
  try{await mkdir(destination);}catch(e){if(e.code==='EEXIST')throw new Error('导出目录已存在，不会覆盖：'+destination);throw e;}
- const manifest={commit,createdAt:new Date().toISOString(),verified:false,runtime:{folder:'01_干净运行版',files:0,bytes:0},source:{folder:'02_开发源码',files:0,bytes:0},data:{folder:includeData?'03_数据备份':null,files:0,bytes:0},sourceFiles:[],dataFiles:[]};
+ const manifest={commit,createdAt:new Date().toISOString(),verified:false,code:{folder:'01_代码包',files:0,bytes:0},data:{folder:includeData?'02_数据备份':null,files:0,bytes:0},sourceFiles:[],dataFiles:[]};
  for(const name of names){
   const content=Buffer.from(archive[name]);
-  for(const bucket of [manifest.source,...runtimeFile(name)?[manifest.runtime]:[]]){
-   const target=path.join(destination,bucket.folder,name);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,content,{flag:'wx'});
-   if(await fileHash(target)!==sha(content))throw new Error('代码复制校验失败：'+name);
-   bucket.files++;bucket.bytes+=content.length;
-  }
+  const bucket=manifest.code;
+  const target=path.join(destination,bucket.folder,name);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,content,{flag:'wx'});
+  if(await fileHash(target)!==sha(content))throw new Error('代码复制校验失败：'+name);
+  bucket.files++;bucket.bytes+=content.length;
   manifest.sourceFiles.push({file:name,sha256:sha(content),bytes:content.length});
  }
- await writeFile(path.join(destination,manifest.runtime.folder,'运行说明.md'),'# 干净运行版\n\n需要Node.js 20或以上，双击“启动网站.cmd”。不需要安装开发依赖。\n\n本包不带账号、订单或模型权重。首次使用需注册并导入数据；AI仍需独立服务。修改源码请使用开发源码版。默认数据保存在本目录data/imports中，升级前先备份该目录。\n');
+ await writeFile(path.join(destination,manifest.code.folder,'运行与开发说明.md'),'# 代码包：运行与开发\n\n需要Node.js 20或以上，双击“启动网站.cmd”。不需要安装开发依赖。\n\n本包不带账号、订单或模型权重。首次使用需注册并导入数据；AI仍需独立服务。本包同时包含完整源码、文档和测试。开发前执行npm ci，修改后端后执行npm run build，再重启网站。默认数据保存在本目录data/imports中，升级前先备份该目录。\n');
  if(includeData){
   const dataRoot=path.join(root,'data'),files=await dataFiles(dataRoot);
   for(const name of files){
@@ -62,10 +60,10 @@ export async function exportWorkspace({root=projectRoot,destination,includeData=
   if(JSON.stringify(await dataFiles(dataRoot))!==JSON.stringify(files))throw new Error('备份期间数据清单变化，请重新导出');
   for(const entry of manifest.dataFiles)if(await fileHash(path.join(dataRoot,entry.file))!==entry.sha256)throw new Error('备份期间原数据发生变化，请重新导出：'+entry.file);
  }
- const readme=`# 企盈智擎：代码、开发资料与数据分离\n\n源码提交：${commit}\n\n- 01_干净运行版：只给使用者运行，不含旧账号、订单或开发环境。\n- 02_开发源码：当前已提交的完整源码、运行包、文档和测试；交给组员或用GitHub协作。开发时执行npm ci；改后端后执行npm run build。\n${includeData?'- 03_数据备份：私有备份，包含订单、账号密码哈希和压缩历史。不要作为公开代码包上传或直接发给其他人。\n':''}\n开发依赖node_modules、Python虚拟环境、Git历史、截图和日志仍留在原开发目录，不复制到分发包。原开发目录和数据路径未移动，也未清理任何原文件。\n\n恢复数据：先关闭网站；备份目标已有data目录，再把03_数据备份中的data复制到运行版目录。不能在网站写入时覆盖数据，也不要把旧版本运行包与新数据混用。\n\nmanifest.json记录版本、文件数量和SHA-256。只有verified为true的导出完成；中途失败的目录不可当完整备份，保留原数据，另选新目录重试。\n`;
+ const readme=`# 企盈智擎：代码、开发资料与数据分离\n\n源码提交：${commit}\n\n- 01_代码包：包含已提交的完整源码、运行包、启动入口、文档和测试。可直接双击启动；开发时执行npm ci，改后端后执行npm run build。\n${includeData?'- 02_数据备份：私有备份，包含订单、账号密码哈希和压缩历史。不要作为公开代码包上传或直接发给其他人。\n':''}\n开发依赖node_modules、Python虚拟环境、Git历史、截图和日志仍留在原开发目录，不复制到分发包。原开发目录和数据路径未移动，也未清理任何原文件。\n\n恢复数据：先关闭网站；备份目标已有data目录，再把02_数据备份中的data复制到01_代码包目录。不能在网站写入时覆盖数据，也不要把旧版本运行包与新数据混用。\n\nmanifest.json记录版本、文件数量和SHA-256。只有verified为true的导出完成；中途失败的目录不可当完整备份，保留原数据，另选新目录重试。\n`;
  await writeFile(path.join(destination,'分离说明.md'),readme);
  manifest.verified=true;await writeFile(path.join(destination,'manifest.json'),JSON.stringify(manifest,null,2));
- return {destination,commit,verified:true,runtime:manifest.runtime,source:manifest.source,data:manifest.data};
+ return {destination,commit,verified:true,code:manifest.code,data:manifest.data};
 }
 
 if(process.argv[1]&&pathToFileURL(path.resolve(process.argv[1])).href===import.meta.url){
