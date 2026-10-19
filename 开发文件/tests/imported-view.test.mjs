@@ -8,3 +8,21 @@ test('diagnosis states the data fact, uses the increase share and shows referenc
 test('diagnosis uses amber for a slight decline instead of always showing red',()=>{const html=renderImportedDiagnosis(sample('100',{materialUsage:'100'},{expected:'0.12000000'}));assert.ok(html.includes('diagnosis-verdict caution'));assert.ok(html.includes('毛利率需要关注'));assert.ok(html.includes('下降 16.7%'));assert.ok(html.includes('占增支 100.0%'));assert.ok(!html.includes('diagnosis-verdict bad'));});
 test('diagnosis lists offsets separately and describes a negative price impact as a saving',()=>{const html=renderImportedDiagnosis(sample('100',{materialUsage:'200',materialPrice:'-100'},{expected:'0.20000000'}));assert.ok(html.includes('diagnosis-verdict bad'));assert.ok(html.includes('毛利率出现大型偏差'));assert.ok(html.includes('抵消差距的项目'));assert.ok(html.includes('−¥100.00'));assert.ok(html.includes('低于理论基准'));assert.ok(html.includes('占增支 100.0%'));assert.ok(!html.includes('实际采购单价高于理论报价单价'));assert.ok(!html.includes('占差距 200.0%'));});
 test('unknown diagnosis uses a neutral pending marker and never renders normal or a green check',()=>{const html=renderImportedDiagnosis(sample(null,{materialUsage:null,labor:null,materialPrice:null}));assert.ok(html.includes('diagnosis-verdict pending'));assert.ok(html.includes('verdict-mark">…'));assert.ok(html.includes('待补齐'));assert.ok(!html.includes('diagnosis-verdict ok'));assert.ok(!html.includes('verdict-mark">✓'));assert.ok(!html.includes('正常'));assert.ok(!html.includes('达标'));});
+test('diagnosis maps causes to departments and explains an operating loss without a gross gap',()=>{
+ const gap=renderImportedDiagnosis(sample('100',{materialUsage:'200',materialPrice:'-100'},{expected:'0.20000000'}));
+ assert.ok(gap.includes('部门归因'));
+ assert.ok(gap.includes('按成本项目归口'));
+ assert.ok(gap.includes('归口部门'));
+ assert.ok(gap.includes('生产部'));
+ assert.ok(gap.includes('采购部'));
+ assert.ok(gap.includes('质量部协查'));
+ const a=sample('0',{});
+ a.cumulative.actual.operating='-40.00';
+ a.cumulative.actual.costs={'管理':'25','销售':'10','财务':'5'};
+ a.diagnosis=buildDiagnosis(a);
+ const html=renderImportedDiagnosis(a);
+ assert.ok(html.includes('经营利润为负'));
+ assert.ok(html.includes('生产毛利未少赚'));
+ assert.ok(html.includes('−¥40.00'));
+ for(const label of ['管理层','销售部','财务部'])assert.ok(html.includes(label));
+});

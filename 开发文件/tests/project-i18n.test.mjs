@@ -27,3 +27,12 @@ test('new monitor evidence and precise margin changes have English labels withou
  assert.equal(translateText('已完工 4 笔已隐藏，点击上方“已完工”查看。'),'4 completed orders hidden; select "Completed" above to view.');
  assert.equal(translateText('未开工 6 笔、已完工 4 笔已隐藏，点击上方状态筛选查看。'),'6 not-started and 4 completed orders hidden; use the status filter above to view.');
 });
+test('DEPT-1.0 department attribution labels translate',()=>{
+ assert.equal(translateText('部门归因'),'Department attribution');
+ assert.equal(translateText('采购部'),'Procurement');
+ assert.equal(translateText('生产部'),'Production');
+ assert.equal(translateText('质量部'),'Quality');
+ assert.equal(translateText('财务部'),'Finance');
+ assert.equal(translateText('经营利润为负'),'Operating profit is negative');
+ assert.equal(translateText('生产毛利未少赚'),'Gross profit is not below target');
+});

@@ -10,6 +10,7 @@ import {createMonitorRepository} from '../../server/monitor/storage.mjs';
 import {D,money} from '../../server/profit/decimal.mjs';
 import {evaluate} from '../../server/profit/evaluate.mjs';
 import {calculateSeries} from '../../server/profit/series.mjs';
+import {renderOrdersTable} from '../../../运行文件/dist/monitor-table.js';
 
 export function dataset(id='ORDER-A',prices=[17.2,17.2],quantities=[100,100]){
  const d=normalizePair(...pair()).dataset;d.order.id=id;d.order.start='2026-10-11';d.order.end='2026-10-12';
@@ -130,4 +131,22 @@ test('scope filters keep cards, trends, distribution and attention on the same f
  const spaced=await buildOverview([{dataset:a},{dataset:b}],{...options,search:' 恒远   a '}),so=spaced.overview;assert.deepEqual(so.orders.map(r=>r.order.id),['A']);
  const blank=await buildOverview([{dataset:a},{dataset:b}],{...options,search:'   '});assert.equal(blank.overview.coverage.total,2);
  const noMatches=await buildOverview([{dataset:a}],{...options,customer:'不存在'});assert.equal(noMatches.overview.coverage.total,0);assert.equal(noMatches.overview.summary.actualGross,null);
+});
+test('monitor rows attribute a price-driven loss to procurement and render the cause in the list',async()=>{
+ const {overview:o}=await buildOverview([{dataset:dataset('ORDER-A',[30,30])}],options);
+ const row=o.orders[0];
+ assert.equal(row.attribution.state,'gap');
+ assert.equal(row.attribution.primary.department.label,'采购部');
+ assert.equal(row.attribution.department.label,'采购部');
+ assert.equal(row.attribution.departments[0].label,'采购部');
+ assert.equal(row.operatingLoss,true);
+ const html=renderOrdersTable(o,[row],[row],1,{page:1,filter:null,sort:'risk'},0,0);
+ assert.ok(html.includes('主因 材料价格 · 采购部 100%'));
+ const pendingRow={...row,attribution:null,loss:false,cumulativeDeviation:false,operatingLoss:true};
+ const pending=renderOrdersTable(o,[pendingRow],[pendingRow],1,{page:1,filter:null,sort:'risk'},0,0);
+ assert.ok(pending.includes('经营利润为负 · 查经营费用'));
+ const incompleteRow={...row,attribution:{state:'gap',primary:null,department:null,departments:[]},loss:false,cumulativeDeviation:true,operatingLoss:true};
+ const incomplete=renderOrdersTable(o,[incompleteRow],[incompleteRow],1,{page:1,filter:null,sort:'risk'},0,0);
+ assert.ok(incomplete.includes('原因待补齐'));
+ assert.ok(!incomplete.includes('经营利润为负'));
 });

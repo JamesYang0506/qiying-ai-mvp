@@ -5,6 +5,7 @@ import {
   buildReferenceThresholds,
   buildSeverity,
   DIAGNOSIS_RULE_VERSION,
+  DEPARTMENT_RULE_VERSION,
   REFERENCE_RULE_VERSION,
   SEVERITY_RULE_VERSION,
   PRIMARY_SHARE_THRESHOLD
@@ -276,4 +277,64 @@ test('SEV-1.0: better, flat and unknown margins are handled without a false warn
   assert.equal(missing.tone, 'pending');
   assert.equal(missing.actual, null);
   assert.equal(missing.expected, null);
+});
+
+test('DEPT-1.0: cost components roll up to an owning department and keep quality as support', () => {
+  const d = buildDiagnosis(analysis('100', components({materialUsage: '200', materialPrice: '-100'})));
+  const production = d.departments.find(x => x.key === 'production');
+  const purchase = d.departments.find(x => x.key === 'purchase');
+  assert.equal(d.rule.departmentVersion, DEPARTMENT_RULE_VERSION);
+  assert.equal(d.components.find(c => c.key === 'materialUsage').department.label, '生产部');
+  assert.equal(d.components.find(c => c.key === 'materialUsage').support.label, '质量部');
+  assert.equal(d.components.find(c => c.key === 'materialPrice').department.label, '采购部');
+  assert.equal(production.amount, '200.00');
+  assert.equal(production.shareOfIncrease, '1.00000000');
+  assert.deepEqual(production.support, ['质量部']);
+  assert.equal(production.complete, true);
+  assert.equal(purchase.amount, '-100.00');
+  assert.equal(purchase.offset, '-100.00');
+  assert.equal(purchase.shareOfIncrease, null);
+  assert.deepEqual(d.departments.map(x => x.key), ['production', 'purchase']);
+  assert.equal(d.primaryDepartment.label, '生产部');
+  assert.equal(d.primary.department.label, '生产部');
+  assert.equal(d.suggestions[0].department.label, '生产部');
+  assert.equal(d.suggestions[0].support.label, '质量部');
+});
+
+test('DEPT-1.0: the lead department follows the primary cost item even when offsets net it to zero', () => {
+  const d = buildDiagnosis(analysis('100', components({materialUsage: '60', labor: '40', energy: '-100'})));
+  assert.equal(d.primary.key, 'materialUsage');
+  assert.equal(d.primary.department.label, '生产部');
+  assert.equal(d.primaryDepartment.key, 'production');
+  assert.equal(d.departments.find(x => x.key === 'production').amount, '0.00');
+});
+
+test('DEPT-1.0: a missing cost item keeps department shares and the lead department pending', () => {
+  const d = buildDiagnosis(analysis('100', components({materialUsage: '200', labor: null})));
+  assert.equal(d.attributionComplete, false);
+  assert.equal(d.primary, null);
+  assert.equal(d.primaryDepartment, null);
+  const production = d.departments.find(x => x.key === 'production');
+  assert.equal(production.amount, '200.00');
+  assert.equal(production.shareOfIncrease, null);
+  assert.equal(production.complete, false);
+  assert.equal(production.items[0].key, 'materialUsage');
+});
+
+test('DEPT-1.0: reference thresholds carry their review departments', () => {
+  const r = reference();
+  assert.equal(r.margin.department.label, '财务部');
+  assert.equal(r.defect.department.label, '质量部');
+});
+
+test('DEPT-1.0: operating loss exposes actual expense departments without inventing a gross gap', () => {
+  const d = buildDiagnosis(analysis('0', components({}), {
+    cumulative: {processed: 108, defects: 8, actual: {margin: '0.10000000', operating: '-40.00', costs: {'管理': '25', '销售': '10', '财务': '5'}}}
+  }));
+  assert.equal(d.state, 'at_target');
+  assert.equal(d.operating.loss, true);
+  assert.equal(d.operating.profit, '-40.00');
+  assert.deepEqual(d.operating.expenses.map(x => x.department.label), ['管理层', '销售部', '财务部']);
+  assert.deepEqual(d.operating.expenses.map(x => x.amount), ['25.00', '10.00', '5.00']);
+  assert.ok(d.operating.note.includes('经营费用为实际发生额'));
 });
