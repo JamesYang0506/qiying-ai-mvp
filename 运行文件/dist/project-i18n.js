@@ -308,23 +308,16 @@ Excel 来源|Excel source
 不适用|Not applicable
 利润概览|Profit overview
 差距归因|Variance analysis
-部门归因|Department attribution
-责任部门|Owning department
-归口部门|Owning department
-采购部|Procurement
-生产部|Production
-质量部|Quality
-财务部|Finance
-销售部|Sales
-管理层|Management
-协查|support
+差距原因|Variance causes
 主因|Main cause
 查经营费用|Review operating expenses
-按成本项目归口|Mapped from cost items
-按成本项目归口，用于确定核查牵头方，不替代企业正式责任认定；部门金额为已知归因项净额。|Departments are mapped from cost items to set the review lead. This does not replace a formal responsibility decision; amounts are the net of known items.
+按成本项归因|Mapped from cost items
+累计差距原因|Cumulative shortfall causes
+占比待补齐|Share pending
+差距已确认 · 归因待补齐|Shortfall confirmed · Attribution pending
+差距来自预算调整/舍入|Shortfall from budget adjustment or rounding
 经营利润为负|Operating profit is negative
 生产毛利未少赚|Gross profit is not below target
-累计差距归口|Cumulative shortfall by department
 经营费用为实际发生额，未做同进度理论分解，仅用于说明经营亏损构成。|Operating expenses are actual amounts without a same-progress theoretical split; they only explain the operating loss.
 明细数据|Detailed records
 整单理论最大生产毛利|Full-order theoretical maximum gross profit
@@ -349,6 +342,7 @@ Excel 来源|Excel source
 毛利率需要关注|Gross margin needs attention
 建议核查|Suggested checks
 可能原因，需进一步核实|Possible causes require verification
+针对上述原因，需进一步核实|Verify the causes above
 增加差距的项目|Items increasing the shortfall
 抵消差距的项目|Items offsetting the shortfall
 待补齐项目|Missing inputs

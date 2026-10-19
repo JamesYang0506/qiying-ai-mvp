@@ -27,23 +27,30 @@ export function renderImportedDiagnosis(a){
  }
  const signed=v=>v==null?'待补齐':(Number(v)>0?'+¥':Number(v)<0?'−¥':'¥')+fmt(Math.abs(Number(v)));
  const share=c=>c.shareOfIncrease==null?'':`占增支 ${(Number(c.shareOfIncrease)*100).toFixed(1)}%`;
- const deptTag=(d,support)=>d?`<span class="dept-tag">${esc(d.label)}${support?` · ${esc(support.label)}协查`:''}</span>`:'';
- const cause=c=>`<article class="cause ${c.effect==='increase'?'bad':c.effect==='offset'?'ok':'pending'}"><span>${esc(c.label)}${deptTag(c.department,c.support)}</span><strong>${signed(c.amount)}</strong><em>${c.effect==='increase'?(share(c)||'增支项'):c.effect==='offset'?'抵消差距':c.effect==='neutral'?'无净影响':'待补齐'}</em><p>${esc(c.fact)}</p>${c.kind==='production'&&c.amount!=null?`<button class="link cause-link" data-variance="${esc(c.key)}">查看逐日来源</button>`:''}</article>`;
+ const cause=c=>`<article class="cause ${c.effect==='increase'?'bad':c.effect==='offset'?'ok':'pending'}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${c.effect==='increase'?(share(c)||'增支项'):c.effect==='offset'?'抵消差距':c.effect==='neutral'?'无净影响':'待补齐'}</em><p>${esc(c.fact)}</p>${c.kind==='production'&&c.amount!=null?`<button class="link cause-link" data-variance="${esc(c.key)}">查看逐日来源</button>`:''}</article>`;
  const causeGrid=list=>`<div class="cause-grid">${list.map(cause).join('')}</div>`;
  const incNote=d.increasesTotal!=null?`增支合计 ¥${fmt(d.increasesTotal)}`:`已知增支合计 ¥${fmt(d.knownIncreasesTotal)}，归因不完整`;
  const offNote=d.offsetsTotal!=null?`抵消合计 ${signed(d.offsetsTotal)}`:`已知抵消合计 ${signed(d.knownOffsetsTotal)}，归因不完整`;
- const advice=d.suggestions?.length?`<section class="panel diagnosis-advice"><div class="panel-head"><h2>建议核查</h2><span class="muted">可能原因，需进一步核实</span></div><div class="panel-body"><ol>${d.suggestions.map(s=>`<li><strong>${esc(s.label)}</strong>${s.department?`<span class="dept-tag">${esc(s.department.label)}</span>`:''}<span>${esc(s.text)}</span></li>`).join('')}</ol></div></section>`:'';
- const deptRows=d.departments?.length?d.departments.map(x=>`<div class="dept-row ${x.complete?'':'pending'}"><span class="dept-name">${esc(x.label)}</span><strong class="${Number(x.amount)>0?'negative':Number(x.amount)<0?'positive':''}">${signed(x.amount)}</strong><em>${x.shareOfIncrease!=null?`占增支 ${(Number(x.shareOfIncrease)*100).toFixed(1)}%`:x.complete?'无净增支':'部分归因待补齐'}</em><p>${x.items.length?x.items.map(i=>esc(i.label)).join('、'):'—'}${x.support.length?` · ${esc(x.support.join('、'))}协查`:''}</p></div>`).join(''):'';
- const deptHtml=d.departments?.length?`<section class="panel diagnosis-departments"><div class="panel-head"><h2>部门归因</h2><span class="muted">按成本项目归口</span></div><div class="panel-body"><div class="dept-list">${deptRows}</div><p class="footnote">${esc(d.rule?.departmentNote??'')}</p></div></section>`:'';
+ const advice=d.suggestions?.length?`<section class="panel diagnosis-advice"><div class="panel-head"><h2>建议核查</h2><span class="muted">针对上述原因，需进一步核实</span></div><div class="panel-body"><ol>${d.suggestions.map(s=>`<li><strong>${esc(s.label)}</strong><span>${esc(s.text)}</span></li>`).join('')}</ol></div></section>`:'';
+ const gapTop=d.increases?.slice(0,3)??[],gapRest=d.increases?.slice(3)??[];
+ const gapRestTotal=gapRest.reduce((s,c)=>s+Number(c.amount??0),0);
+ const gapMissing=d.unknowns?.filter(c=>c.kind==='production').map(c=>c.label)??[];
+ const gapRows=gapTop.map(c=>`<div class="gap-row"><div class="gap-top"><span class="gap-name">${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${share(c)||(d.attributionComplete?'增支项':'占比待补齐')}</em></div><p>${esc(c.fact)}</p>${c.kind==='production'&&c.amount!=null?`<button class="link cause-link" data-variance="${esc(c.key)}">查看逐日来源</button>`:''}</div>`).join('');
+ const gapIntro=!d.attributionComplete
+  ?`已确认少赚 ¥${fmt(d.total)}；${gapMissing.length?esc(gapMissing.join('、')):'部分成本项'}待补齐，暂不判断主因。${gapTop.length?'以下为已知增支项：':''}`
+  :gapTop.length
+   ?`少赚 ¥${fmt(d.total)} 主要由以下成本项造成（按增支金额排序）：`
+   :`未发现生产成本增支项；差额来自预算允许损耗、舍入或其他调整。`;
+ const gapHtml=d.state==='gap'?`<section class="panel diagnosis-causes"><div class="panel-head"><h2>差距原因</h2><span class="muted">${d.attributionComplete?'按成本项归因':'归因不完整'}</span></div><div class="panel-body"><p>${gapIntro}</p>${gapRows?`<div class="gap-list">${gapRows}</div>`:''}${gapRest.length?`<p class="footnote">另有 ${gapRest.length} 项增支合计 ¥${fmt(gapRestTotal)}，完整明细见下方“增加差距的项目”。</p>`:''}</div></section>`:'';
  const op=d.operating,opItems=op?.expenses?.filter(x=>x.amount!=null)??[];
- const opHtml=op?.loss&&d.state!=='gap'?`<section class="panel diagnosis-operating"><div class="panel-head"><h2>经营利润为负</h2><span class="muted">生产毛利未少赚</span></div><div class="panel-body"><p>累计经营利润 ${signed(op.profit)}；实际经营费用：</p><div class="dept-list">${opItems.map(x=>`<div class="dept-row"><span class="dept-name">${esc(x.label)}</span><strong>${signed(x.amount)}</strong><em>${esc(x.department?.label??'')}</em></div>`).join('')}</div><p class="footnote">${esc(op.note)}</p></div></section>`:'';
+ const opHtml=op?.loss&&d.state!=='gap'?`<section class="panel diagnosis-operating"><div class="panel-head"><h2>经营利润为负</h2><span class="muted">生产毛利未少赚</span></div><div class="panel-body"><p>累计经营利润 ${signed(op.profit)}；实际经营费用：</p><div class="op-list">${opItems.map(x=>`<div class="op-row"><span class="op-name">${esc(x.label)}</span><strong>${signed(x.amount)}</strong></div>`).join('')}</div><p class="footnote">${esc(op.note)}</p></div></section>`:'';
  const basisLabels={revenue:'预算理论收入',gross:'预算理论毛利',reserve:'预算损耗准备金',material:'预算材料',labor:'预算人工',quantity:'合同数量',unitCost:'材料及人工单位成本',allowedQuantity:'允许补产量',processed:'累计加工量',defects:'累计不良量'};
  const moneyKeys=new Set(['revenue','gross','reserve','material','labor','unitCost']);
  const basisRows=t=>Object.entries(t.basis??{}).map(([k,v])=>`<div><dt>${esc(basisLabels[k]??k)}</dt><dd>${v==null?'待补齐':(moneyKeys.has(k)?'¥'+fmt(v):v)}</dd></div>`).join('');
  const refCard=t=>{
   const bad=t.breached===true,known=t.status==='known',state=!known?'pending':bad?'bad':'ok';
   const verdict=!known?'待核算':bad?`${t.key==='margin'?'低于':'高于'}参考阈值 ${t.gapPp} 个百分点`:'未越过参考阈值';
-  return `<div class="limit ${state}"><span>${esc(t.label)}${t.department?`<span class="dept-tag">${esc(t.department.label)}</span>`:''}</span><strong>${t.actual==null?'待补齐':pct(t.actual)}<em> / 参考阈值 ${t.threshold==null?'待核算':pct(t.threshold)}</em></strong><p>${verdict}</p>${t.reasons?.length?`<p class="limit-reasons">${esc(t.reasons.join('；'))}</p>`:''}<details class="threshold-detail"><summary>查看公式与参数</summary><div class="threshold-body"><p>${esc(t.formula)}</p><dl class="threshold-kv">${basisRows(t)}</dl></div></details></div>`;
+  return `<div class="limit ${state}"><span>${esc(t.label)}</span><strong>${t.actual==null?'待补齐':pct(t.actual)}<em> / 参考阈值 ${t.threshold==null?'待核算':pct(t.threshold)}</em></strong><p>${verdict}</p>${t.reasons?.length?`<p class="limit-reasons">${esc(t.reasons.join('；'))}</p>`:''}<details class="threshold-detail"><summary>查看公式与参数</summary><div class="threshold-body"><p>${esc(t.formula)}</p><dl class="threshold-kv">${basisRows(t)}</dl></div></details></div>`;
  };
  const refState=ref?.state,refTitle=refState==='breach'?'参考阈值提示':refState==='ok'?'未越过参考阈值':'参考阈值待核算';
  const refLines=ref?[...(ref.breaches??[]),...(ref.unknownItems??[]).map(x=>`${x.label}：${x.reasons.join('；')}`)]:[];
@@ -54,7 +61,7 @@ export function renderImportedDiagnosis(a){
  const unknownProd=d.unknowns.filter(c=>c.kind==='production');
  const unknownHtml=unknownProd.length?`<section class="panel diagnosis-group"><div class="panel-head"><h2>待补齐项目</h2><span class="muted">资料不完整时不按零计</span></div><div class="panel-body">${causeGrid(unknownProd)}</div></section>`:'';
  const adjustHtml=`<section class="panel diagnosis-group"><div class="panel-head"><h2>基线调整与舍入</h2><span class="muted">对照口径，不计入生产原因</span></div><div class="panel-body"><div class="adjust-list">${[d.baseline,d.rounding].map(c=>`<div class="adjust-row ${c.amount==null?'pending':''}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><p>${esc(c.fact)}</p></div>`).join('')}</div></div></section>`;
- return `<section class="diagnosis-verdict ${verdictClass}"><div class="verdict-mark">${mark}</div><div><h2>${esc(verdictTitle)}</h2><p>${esc(verdictSub)}</p></div></section>${opHtml}${deptHtml}${advice}${increaseHtml}${offsetHtml}${unknownHtml}${adjustHtml}${refHtml}`;
+ return `<section class="diagnosis-verdict ${verdictClass}"><div class="verdict-mark">${mark}</div><div><h2>${esc(verdictTitle)}</h2><p>${esc(verdictSub)}</p></div></section>${opHtml}${gapHtml}${advice}${increaseHtml}${offsetHtml}${unknownHtml}${adjustHtml}${refHtml}`;
 }
 const pct=x=>x==null?'—':(Number(x)*100).toFixed(1)+'%';
 const stateText={complete:'资料完整',provisional:'含暂估资料',incomplete:'生产或成本待补齐',operating_incomplete:'经营费用待补齐',not_started:'尚未开工'};

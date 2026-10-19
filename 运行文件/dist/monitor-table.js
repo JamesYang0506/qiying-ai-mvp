@@ -10,9 +10,17 @@ export function renderScopeFilters(data,state,loading){
  return `<div class="bm-range-actions"><select class="control" id="bm-mode" aria-label="对照基线">${option('ideal','理想上界',state.mode)}${option('budget','含损耗预算',state.mode)}</select><input class="control" type="date" id="bm-date" aria-label="业务截至日期" value="${esc(state.asOf)}"><button class="button primary" id="bm-refresh" ${loading?'disabled':''}>${icon('refresh')}${loading?'读取中…':'刷新数据'}</button></div><section class="bm-filterbar" aria-label="订单监测范围"><select class="control" id="bm-customer" aria-label="客户">${option('','全部客户',state.customer)}${options.customers.map(c=>option(c,c,state.customer)).join('')}</select><select class="control" id="bm-status" aria-label="生产状态">${option('','全部状态',state.status)}${options.statuses.map(s=>option(s,s==='已完工'?'已完工':s,state.status)).join('')}</select><select class="control" id="bm-risk" aria-label="风险等级">${option('','全部风险',state.risk)}${risks.map(r=>option(r,r,state.risk)).join('')}</select><select class="control" id="bm-period" aria-label="趋势时间范围">${[7,14,30].map(n=>option(String(n),`近 ${n} 天趋势`,String(state.period))).join('')}</select><label class="bm-global-search">${icon('search')}<input class="control" id="bm-search" type="search" value="${esc(state.search)}" placeholder="搜索订单号、产品或客户" aria-label="搜索订单"></label><button class="bm-reset" id="bm-reset">重置筛选</button></section>`;
 }
 const badgeClass={'严重':'severe','重点':'key','注意':'attention','数据不足':'unknown','缺少基线':'unknown','不可评级':'unknown','正常':'normal','优于预期':'better'};
+const sharePct=v=>v==null?'':` ${(Number(v)*100).toFixed(0)}%`;
 const causeLine=row=>{
  const a=row.attribution;
- if(a?.state==='gap')return a.department?`<small class="bm-cause">主因 ${esc(a.primary?.label??'多项成本')} · ${esc(a.department.label)}${a.department.shareOfIncrease!=null?` ${(Number(a.department.shareOfIncrease)*100).toFixed(0)}%`:''}</small>`:'<small class="bm-cause pending">原因待补齐</small>';
+ if(a?.state==='gap'){
+  const inc=a.increases??[];
+  if(a.attributionComplete===false)return '<small class="bm-cause pending">差距已确认 · 归因待补齐</small>';
+  if(!inc.length)return '<small class="bm-cause pending">差距来自预算调整/舍入</small>';
+  const top=inc[0],topShare=top.shareOfIncrease==null?null:Number(top.shareOfIncrease);
+  if(inc.length===1||(topShare!=null&&topShare>=0.6))return `<small class="bm-cause">主因 ${esc(top.label)}${sharePct(top.shareOfIncrease)}</small>`;
+  return `<small class="bm-cause">主因 ${inc.slice(0,3).map(x=>`${esc(x.label)}${sharePct(x.shareOfIncrease)}`).join('、')}</small>`;
+ }
  if(row.operatingLoss)return '<small class="bm-cause pending">经营利润为负 · 查经营费用</small>';
  if(row.loss||row.cumulativeDeviation)return '<small class="bm-cause pending">原因待补齐</small>';
  return '';

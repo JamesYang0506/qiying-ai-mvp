@@ -1,7 +1,6 @@
 import {D} from './decimal.mjs';
 
 export const DIAGNOSIS_RULE_VERSION = 'DIAG-1.0';
-export const DEPARTMENT_RULE_VERSION = 'DEPT-1.0';
 export const REFERENCE_RULE_VERSION = 'REF-1.0';
 export const SEVERITY_RULE_VERSION = 'SEV-1.0';
 export const PRIMARY_SHARE_THRESHOLD = '0.60';
@@ -12,21 +11,10 @@ const amount = (d, places = 2) => d == null ? null : d.toFixed(places);
 const ratio = d => d == null ? null : d.toFixed(8);
 const pp = d => d == null ? null : d.times(100).toFixed(2);
 
-// 归口部门按成本项目映射，用于确定核查牵头方，不代表企业正式责任认定。
-const DEPARTMENTS = {
-  purchase: {key: 'purchase', label: '采购部'},
-  production: {key: 'production', label: '生产部'},
-  quality: {key: 'quality', label: '质量部'},
-  management: {key: 'management', label: '管理层'},
-  sales: {key: 'sales', label: '销售部'},
-  finance: {key: 'finance', label: '财务部'}
-};
-
 const COMPONENTS = {
   materialPrice: {
     label: '材料价格',
     kind: 'production',
-    department: DEPARTMENTS.purchase,
     increase: '实际采购单价合计高于理论基准，增加差距。',
     offset: '实际采购单价合计低于理论基准，抵消差距。',
     suggestion: '核对采购单价、供应商报价和调价生效日期，确认是否存在未同步到理论基准的涨价。',
@@ -35,8 +23,6 @@ const COMPONENTS = {
   materialUsage: {
     label: '材料耗用',
     kind: 'production',
-    department: DEPARTMENTS.production,
-    support: DEPARTMENTS.quality,
     increase: '实际材料净耗高于同进度标准，增加差距。',
     offset: '实际材料净耗低于同进度标准，抵消差距。',
     suggestion: '核对领退料、配方重量、计量口径和不良品耗料记录，确认净耗偏高的具体批次。',
@@ -45,7 +31,6 @@ const COMPONENTS = {
   labor: {
     label: '人工',
     kind: 'production',
-    department: DEPARTMENTS.production,
     increase: '实际人工费用高于同进度标准，增加差距。',
     offset: '实际人工费用低于同进度标准，抵消差距。',
     suggestion: '核对工价、计件量和人工归属期间，确认人工费用偏高的具体工序。',
@@ -54,7 +39,6 @@ const COMPONENTS = {
   energy: {
     label: '能源',
     kind: 'production',
-    department: DEPARTMENTS.production,
     increase: '实际能源费用高于同进度标准，增加差距。',
     offset: '实际能源费用低于同进度标准，抵消差距。',
     suggestion: '核对能源抄表、单价和分摊口径。',
@@ -63,7 +47,6 @@ const COMPONENTS = {
   otherManufacturing: {
     label: '其他制造',
     kind: 'production',
-    department: DEPARTMENTS.production,
     increase: '实际其他制造费用高于同进度标准，增加差距。',
     offset: '实际其他制造费用低于同进度标准，抵消差距。',
     suggestion: '核对制造费用项目、分摊口径与归属期间。',
@@ -72,7 +55,6 @@ const COMPONENTS = {
   otherProduction: {
     label: '其他生产',
     kind: 'production',
-    department: DEPARTMENTS.production,
     increase: '实际其他生产费用高于同进度标准，增加差距。',
     offset: '实际其他生产费用低于同进度标准，抵消差距。',
     suggestion: '核对其他生产费用项目与归属期间。',
@@ -81,7 +63,6 @@ const COMPONENTS = {
   budgetAdjustment: {
     label: '预算允许损耗',
     kind: 'baseline',
-    department: DEPARTMENTS.finance,
     increase: '预算允许损耗按基线计提，属于对照口径调整。',
     offset: '预算允许损耗按基线计提，属于对照口径调整。',
     suggestion: null,
@@ -90,7 +71,6 @@ const COMPONENTS = {
   rounding: {
     label: '舍入调整',
     kind: 'rounding',
-    department: DEPARTMENTS.finance,
     increase: '舍入调整，仅用于金额闭合。',
     offset: '舍入调整，仅用于金额闭合。',
     suggestion: null,
@@ -105,7 +85,7 @@ function classify(component, value) {
   return {effect: value.gt(0) ? 'increase' : 'offset', fact: value.gt(0) ? meta.increase : meta.offset};
 }
 
-function referenceItem({key, label, formula, unit, actual, threshold, actualKnown, thresholdKnown, reasons, basis, source, applicability, department, compare}) {
+function referenceItem({key, label, formula, unit, actual, threshold, actualKnown, thresholdKnown, reasons, basis, source, applicability, compare}) {
   const known = actualKnown && thresholdKnown && actual != null && threshold != null;
   const breached = known ? compare(actual, threshold) : null;
   return {
@@ -113,7 +93,7 @@ function referenceItem({key, label, formula, unit, actual, threshold, actualKnow
     actual: ratio(actual), threshold: ratio(threshold),
     breached, gapPp: known ? pp(actual.minus(threshold).abs()) : null,
     relation: known ? (breached ? (key === 'margin' ? 'below' : 'above') : (key === 'margin' ? 'at_or_above' : 'at_or_below')) : null,
-    reasons, formula, unit, basis, source, applicability, department: department ?? null
+    reasons, formula, unit, basis, source, applicability
   };
 }
 
@@ -136,7 +116,6 @@ export function buildReferenceThresholds({order, cumulative, theoreticalBudget, 
     basis: {revenue: amount(revenue), gross: amount(gross)},
     source: '成本模型 · 含损耗预算基线',
     applicability: '仅作预算模型参考，不是已核定的企业安全底线。',
-    department: DEPARTMENTS.finance,
     compare: (a, t) => a.lt(t)
   });
 
@@ -183,7 +162,6 @@ export function buildReferenceThresholds({order, cumulative, theoreticalBudget, 
     },
     source: '成本模型 · 含损耗预算基线中的生产损耗与不良损耗预算',
     applicability: '仅作预算模型参考，不是质量检验标准；材料、人工、收入或数量缺失、为零时不推导。',
-    department: DEPARTMENTS.quality,
     compare: (a, t) => a.gt(t)
   });
 
@@ -257,8 +235,7 @@ export function buildDiagnosis(analysis = {}) {
     return {
       key, label: meta.label, kind: meta.kind,
       amount: amount(value), effect: stated.effect, fact: stated.fact,
-      shareOfIncrease: null, evidence: meta.evidence,
-      department: meta.department ?? null, support: meta.support ?? null
+      shareOfIncrease: null, evidence: meta.evidence
     };
   });
   const production = components.filter(c => c.kind === 'production');
@@ -278,51 +255,15 @@ export function buildDiagnosis(analysis = {}) {
   }
   const primary = productionComplete && increasesTotal != null && increasesTotal.gt(0) && increases.length
     && new D(increases[0].shareOfIncrease).gte(PRIMARY_SHARE_THRESHOLD) ? increases[0] : null;
-  const departmentMap = new Map();
-  for (const c of production) {
-    if (!c.department) continue;
-    const entry = departmentMap.get(c.department.key) ?? {
-      key: c.department.key, label: c.department.label,
-      amount: new D(0), increase: new D(0), offset: new D(0),
-      items: [], support: [], known: 0, unknown: 0
-    };
-    if (c.amount == null) entry.unknown++;
-    else {
-      const value = new D(c.amount);
-      entry.amount = entry.amount.plus(value);
-      if (value.gt(0)) entry.increase = entry.increase.plus(value);
-      else if (value.lt(0)) entry.offset = entry.offset.plus(value);
-      if (!value.isZero()) entry.items.push({key: c.key, label: c.label, amount: c.amount, effect: c.effect});
-      entry.known++;
-    }
-    if (c.support && !entry.support.includes(c.support.label)) entry.support.push(c.support.label);
-    departmentMap.set(c.department.key, entry);
-  }
-  const departments = [...departmentMap.values()].map(e => ({
-    key: e.key, label: e.label,
-    amount: e.known ? amount(e.amount) : null,
-    increase: e.known ? amount(e.increase) : null,
-    offset: e.known ? amount(e.offset) : null,
-    shareOfIncrease: productionComplete && knownIncreasesTotal.gt(0) && e.increase.gt(0)
-      ? e.increase.div(knownIncreasesTotal).toFixed(8) : null,
-    items: e.items,
-    support: e.support,
-    complete: e.unknown === 0
-  })).filter(e => !(e.complete && e.amount != null && Number(e.amount) === 0 && e.items.length === 0))
-    .sort((a, b) => Number(b.amount ?? 0) - Number(a.amount ?? 0));
-  const primaryDepartment = primary
-    ? departments.find(d => d.key === primary.department?.key) ?? null
-    : productionComplete && knownIncreasesTotal.gt(0)
-      ? departments.find(d => d.amount != null && new D(d.amount).gt(0)) ?? null : null;
   const operating = dec(analysis.cumulative?.actual?.operating);
   const costOf = key => dec(analysis.cumulative?.actual?.costs?.[key]);
   const operatingInfo = {
     profit: amount(operating),
     loss: operating != null && operating.lt(0),
     expenses: [
-      {key: 'management', label: '管理', department: DEPARTMENTS.management, amount: amount(costOf('管理'))},
-      {key: 'sales', label: '销售', department: DEPARTMENTS.sales, amount: amount(costOf('销售'))},
-      {key: 'finance', label: '财务', department: DEPARTMENTS.finance, amount: amount(costOf('财务'))}
+      {key: 'management', label: '管理', amount: amount(costOf('管理'))},
+      {key: 'sales', label: '销售', amount: amount(costOf('销售'))},
+      {key: 'finance', label: '财务', amount: amount(costOf('财务'))}
     ],
     note: '经营费用为实际发生额，未做同进度理论分解，仅用于说明经营亏损构成。'
   };
@@ -365,8 +306,6 @@ export function buildDiagnosis(analysis = {}) {
     ? increases.slice(0, 3).map(c => ({
       key: c.key, label: c.label, amount: c.amount,
       shareOfIncrease: c.shareOfIncrease,
-      department: COMPONENTS[c.key].department ?? null,
-      support: COMPONENTS[c.key].support ?? null,
       text: COMPONENTS[c.key].suggestion,
       evidence: {
         asOf: analysis.asOf ?? null,
@@ -393,9 +332,7 @@ export function buildDiagnosis(analysis = {}) {
     offsetsTotal: amount(offsetsTotal),
     knownIncreasesTotal: amount(knownIncreasesTotal),
     knownOffsetsTotal: amount(knownOffsetsTotal),
-    primary: primary ? {key: primary.key, label: primary.label, amount: primary.amount, shareOfIncrease: primary.shareOfIncrease, department: primary.department ?? null} : null,
-    departments,
-    primaryDepartment,
+    primary: primary ? {key: primary.key, label: primary.label, amount: primary.amount, shareOfIncrease: primary.shareOfIncrease} : null,
     operating: operatingInfo,
     summary: {title, sub},
     suggestions,
@@ -406,12 +343,10 @@ export function buildDiagnosis(analysis = {}) {
     },
     rule: {
       version: DIAGNOSIS_RULE_VERSION,
-      departmentVersion: DEPARTMENT_RULE_VERSION,
       primaryShareThreshold: PRIMARY_SHARE_THRESHOLD,
       shareDenominator: '正向增支合计',
       shareLabel: '占增支',
-      note: '主因仅在单一增支项占正向增支合计不低于60%时标识；否则按多项共同造成展示。该阈值是展示规则，不是企业已确认的风险标准。',
-      departmentNote: '归口部门按成本项目映射，用于确定核查牵头方，不替代企业正式责任认定；部门金额为已知归因项净额。'
+      note: '主因仅在单一增支项占正向增支合计不低于60%时标识；否则按多项共同造成展示。该阈值是展示规则，不是企业已确认的风险标准。'
     }
   };
 }

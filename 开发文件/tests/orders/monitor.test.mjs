@@ -132,21 +132,21 @@ test('scope filters keep cards, trends, distribution and attention on the same f
  const blank=await buildOverview([{dataset:a},{dataset:b}],{...options,search:'   '});assert.equal(blank.overview.coverage.total,2);
  const noMatches=await buildOverview([{dataset:a}],{...options,customer:'不存在'});assert.equal(noMatches.overview.coverage.total,0);assert.equal(noMatches.overview.summary.actualGross,null);
 });
-test('monitor rows attribute a price-driven loss to procurement and render the cause in the list',async()=>{
+test('monitor rows name the cost item behind a loss and render it in the list',async()=>{
  const {overview:o}=await buildOverview([{dataset:dataset('ORDER-A',[30,30])}],options);
  const row=o.orders[0];
  assert.equal(row.attribution.state,'gap');
- assert.equal(row.attribution.primary.department.label,'采购部');
- assert.equal(row.attribution.department.label,'采购部');
- assert.equal(row.attribution.departments[0].label,'采购部');
+ assert.equal(row.attribution.increases[0].label,'材料价格');
+ assert.equal(row.attribution.increases[0].shareOfIncrease,'1.00000000');
+ assert.equal(row.attribution.department,undefined);
  assert.equal(row.operatingLoss,true);
  const html=renderOrdersTable(o,[row],[row],1,{page:1,filter:null,sort:'risk'},0,0);
- assert.ok(html.includes('主因 材料价格 · 采购部 100%'));
+ assert.ok(html.includes('主因 材料价格 100%'));
  const pendingRow={...row,attribution:null,loss:false,cumulativeDeviation:false,operatingLoss:true};
  const pending=renderOrdersTable(o,[pendingRow],[pendingRow],1,{page:1,filter:null,sort:'risk'},0,0);
  assert.ok(pending.includes('经营利润为负 · 查经营费用'));
- const incompleteRow={...row,attribution:{state:'gap',primary:null,department:null,departments:[]},loss:false,cumulativeDeviation:true,operatingLoss:true};
+ const incompleteRow={...row,attribution:{state:'gap',primary:null,increases:[{key:'labor',label:'人工',amount:'10.00',shareOfIncrease:null}],attributionComplete:false},loss:false,cumulativeDeviation:true,operatingLoss:true};
  const incomplete=renderOrdersTable(o,[incompleteRow],[incompleteRow],1,{page:1,filter:null,sort:'risk'},0,0);
- assert.ok(incomplete.includes('原因待补齐'));
+ assert.ok(incomplete.includes('差距已确认 · 归因待补齐'));
  assert.ok(!incomplete.includes('经营利润为负'));
 });
