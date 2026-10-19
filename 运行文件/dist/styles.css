@@ -82,7 +82,6 @@ button.variance-row:focus-visible{outline:2px solid #2868ed;outline-offset:1px}
 .cause strong{display:block;font-size:20px;margin:10px 0 4px;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
 .cause.bad strong{color:#dd5965}
 .cause em{font-style:normal;font-size:10px;color:#9aa6b7}
-.cause p{font-size:11px;line-height:1.7;color:#8491a5;margin-top:10px}
 .gap-list{display:grid;gap:8px}
 .gap-row{display:grid;gap:4px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}
 .gap-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}

@@ -27,7 +27,7 @@ export function renderImportedDiagnosis(a){
  }
  const signed=v=>v==null?'待补齐':(Number(v)>0?'+¥':Number(v)<0?'−¥':'¥')+fmt(Math.abs(Number(v)));
  const share=c=>c.shareOfIncrease==null?'':`占增支 ${(Number(c.shareOfIncrease)*100).toFixed(1)}%`;
- const cause=c=>`<article class="cause ${c.effect==='increase'?'bad':c.effect==='offset'?'ok':'pending'}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${c.effect==='increase'?(share(c)||'增支项'):c.effect==='offset'?'抵消差距':c.effect==='neutral'?'无净影响':'待补齐'}</em><p>${esc(c.fact)}</p></article>`;
+ const cause=c=>`<article class="cause ${c.effect==='increase'?'bad':c.effect==='offset'?'ok':'pending'}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${c.effect==='increase'?(share(c)||'增支项'):c.effect==='offset'?'抵消差距':c.effect==='neutral'?'无净影响':'待补齐'}</em></article>`;
  const causeGrid=list=>`<div class="cause-grid">${list.map(cause).join('')}</div>`;
  const incNote=d.increasesTotal!=null?`增支合计 ¥${fmt(d.increasesTotal)}`:`已知增支合计 ¥${fmt(d.knownIncreasesTotal)}，归因不完整`;
  const offNote=d.offsetsTotal!=null?`抵消合计 ${signed(d.offsetsTotal)}`:`已知抵消合计 ${signed(d.knownOffsetsTotal)}，归因不完整`;
