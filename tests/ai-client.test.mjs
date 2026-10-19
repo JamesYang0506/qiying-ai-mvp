@@ -1,7 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createAiTransport} from '../dist/ai-client.js';
-import {messageMarkup} from '../dist/ai-page.js';
+import {messageMarkup,renderAiWorkspace} from '../dist/ai-page.js';
+
+test('AI workspace retains scoped inputs and escapes drafts and imported names',()=>{
+ const html=renderAiWorkspace({scope:{asOf:'2026-10-19',orderId:'A'},orders:[{id:'A',product:'<img src=x>'}],messages:[],draft:'</textarea><script>bad</script>',online:false,checked:true});
+ assert.match(html,/id="ai-date"[^>]*value="2026-10-19"/);assert.match(html,/value="A" selected/);
+ assert.doesNotMatch(html,/<img|<script/);assert.match(html,/&lt;script/);
+ assert.match(html,/id="ai-send"[^>]*disabled/);assert.match(html,/id="ai-recheck"/);
+});
 
 test('AI and user messages are rendered as text after streaming or remounting',()=>{
  const html=messageMarkup([{role:'assistant',text:'<img src=x onerror=alert(1)>'},{role:'user',text:'<script>test</script>'}]);

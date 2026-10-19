@@ -24,6 +24,13 @@ const entries=`
 AI 订单助手|AI order assistant
 围绕订单利润与成本提问。|Ask questions about order profit and costs.
 AI 对话|AI assistant
+AI 对话工作区|AI conversation workspace
+企盈 AI|Qiying AI
+让每一次决策，都有依据|Make every decision informed
+从订单出发，聊聊利润、成本与下一步行动。|Start with an order. Explore profit, costs and your next step.
+问问订单利润，或聊聊下一步怎么做…|Ask about order profit, or explore your next step…
+快捷提问|Quick questions
+分析范围与使用说明|Scope and usage notes
 分析上下文|Analysis context
 按业务日期读取已导入订单，使用网站统一核算口径。|Use imported orders and the app's calculations for the selected business date.
 业务日期|Business date
