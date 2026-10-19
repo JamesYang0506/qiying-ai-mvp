@@ -123,7 +123,6 @@ AI 服务尚未接入|AI service is not connected
 低毛利订单|Low-margin orders
 亏损订单|Loss-making orders
 无法计算|Unavailable
-列表筛选|Filter list
 点击分类仅筛选全部订单；分布不代表相对预期风险等级。|Selecting a segment filters the order list only. Margin bands are separate from risk ratings.
 今日重点核查|Priority checks today
 查看全部|View all
@@ -134,12 +133,9 @@ AI 服务尚未接入|AI service is not connected
 较昨日变化|Change vs yesterday
 操作|Actions
 累计亏损|Cumulative loss
-查看建议|View suggestions
 暂无可确认的今日恶化订单|No confirmed deterioration today
 累计偏离和缺项保留在其他提醒中。|Cumulative deviations and missing data remain in other reminders.
 经营核查建议|Business review suggestions
-规则生成|Rule-based
-数据线索与核查方向 · 原因待核实|Data signals and review directions · Causes need verification
 选择一笔订单，查看对应的核查建议|Select an order to view its suggestions
 查看依据|View evidence
 暂无足够依据生成具体建议|Not enough evidence for specific suggestions
