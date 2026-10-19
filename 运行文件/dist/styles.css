@@ -90,6 +90,7 @@ button.variance-row:focus-visible{outline:2px solid #2868ed;outline-offset:1px}
 .gap-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
 .gap-row .gap-name{font-size:13px;font-weight:600;color:#244c7b}
 .gap-row strong{font-size:15px;font-variant-numeric:tabular-nums;color:#dd5965}
+.gap-row strong.ok{color:#199b7e}
 .gap-row em{font-style:normal;font-size:11px;color:#9aa6b7}
 .op-list{display:grid;gap:8px}
 .op-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}

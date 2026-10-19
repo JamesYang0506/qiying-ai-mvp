@@ -29,18 +29,21 @@ export function renderImportedDiagnosis(a){
  const share=c=>c.shareOfIncrease==null?'':`占增支 ${(Number(c.shareOfIncrease)*100).toFixed(1)}%`;
  const cause=c=>`<article class="cause ${c.effect==='increase'?'bad':c.effect==='offset'?'ok':'pending'}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${c.effect==='increase'?(share(c)||'增支项'):c.effect==='offset'?'抵消差距':c.effect==='neutral'?'无净影响':'待补齐'}</em></article>`;
  const causeGrid=list=>`<div class="cause-grid">${list.map(cause).join('')}</div>`;
- const incNote=d.increasesTotal!=null?`增支合计 ¥${fmt(d.increasesTotal)}`:`已知增支合计 ¥${fmt(d.knownIncreasesTotal)}，归因不完整`;
- const offNote=d.offsetsTotal!=null?`抵消合计 ${signed(d.offsetsTotal)}`:`已知抵消合计 ${signed(d.knownOffsetsTotal)}，归因不完整`;
- const gapTop=d.increases?.slice(0,3)??[],gapRest=d.increases?.slice(3)??[];
- const gapRestTotal=gapRest.reduce((s,c)=>s+Number(c.amount??0),0);
+ const gapIncreases=d.increases??[],gapOffsets=d.offsets??[];
+ const gapItems=[...gapIncreases,...gapOffsets];
  const gapMissing=d.unknowns?.filter(c=>c.kind==='production').map(c=>c.label)??[];
- const gapRows=gapTop.map(c=>`<div class="gap-row"><div class="gap-top"><span class="gap-name">${esc(c.label)}</span><strong>${signed(c.amount)}</strong><em>${share(c)||(d.attributionComplete?'增支项':'占比待补齐')}</em></div></div>`).join('');
+ const gapRows=gapItems.map(c=>`<div class="gap-row"><div class="gap-top"><span class="gap-name">${esc(c.label)}</span><strong class="${c.effect==='offset'?'ok':''}">${signed(c.amount)}</strong><em>${c.effect==='offset'?'抵消差距':share(c)||(d.attributionComplete?'增支项':'占比待补齐')}</em></div></div>`).join('');
+ const gapReconcile=[d.baseline,d.rounding].filter(c=>c?.amount!=null&&Number(c.amount)!==0).map(c=>`${esc(c.label)} ${signed(c.amount)}`);
  const gapIntro=!d.attributionComplete
-  ?`已确认少赚 ¥${fmt(d.total)}；${gapMissing.length?esc(gapMissing.join('、')):'部分成本项'}待补齐，暂不判断主因。${gapTop.length?'以下为已知增支项：':''}`
-  :gapTop.length
-   ?`少赚 ¥${fmt(d.total)} 主要由以下成本项造成（按增支金额排序）：`
-   :`未发现生产成本增支项；差额来自预算允许损耗、舍入或其他调整。`;
- const gapHtml=d.state==='gap'?`<section class="panel diagnosis-causes"><div class="panel-head"><h2>差距原因</h2><span class="muted">${d.attributionComplete?'按成本项归因':'归因不完整'}</span></div><div class="panel-body"><p>${gapIntro}</p>${gapRows?`<div class="gap-list">${gapRows}</div>`:''}${gapRest.length?`<p class="footnote">另有 ${gapRest.length} 项增支合计 ¥${fmt(gapRestTotal)}，完整明细见下方“增加差距的项目”。</p>`:''}</div></section>`:'';
+  ?`已确认少赚 ¥${fmt(d.total)}；${gapMissing.length?esc(gapMissing.join('、')):'部分成本项'}待补齐，暂不判断主因。${gapItems.length?'以下为已知成本项：':''}`
+  :gapIncreases.length&&gapOffsets.length
+   ?`少赚 ¥${fmt(d.total)}；各成本项影响如下（增支在前、抵消在后）：`
+   :gapIncreases.length
+    ?`少赚 ¥${fmt(d.total)} 主要由以下成本项造成：`
+    :gapOffsets.length
+     ?`少赚 ¥${fmt(d.total)}；以下抵消项缩小了差距：`
+     :`未发现生产成本增支项；差额来自预算允许损耗、舍入或其他调整。`;
+ const gapHtml=d.state==='gap'?`<section class="panel diagnosis-causes"><div class="panel-head"><h2>差距原因</h2><span class="muted">${d.attributionComplete?'按成本项归因':'归因不完整'}</span></div><div class="panel-body"><p>${gapIntro}</p>${gapRows?`<div class="gap-list">${gapRows}</div>`:''}${gapReconcile.length?`<p class="footnote">另含${gapReconcile.join('、')}，用于与总差距闭合，不属于生产增支项。</p>`:''}</div></section>`:'';
  const op=d.operating,opItems=op?.expenses?.filter(x=>x.amount!=null)??[];
  const opHtml=op?.loss&&d.state!=='gap'?`<section class="panel diagnosis-operating"><div class="panel-head"><h2>经营利润为负</h2><span class="muted">生产毛利未少赚</span></div><div class="panel-body"><p>累计经营利润 ${signed(op.profit)}；实际经营费用：</p><div class="op-list">${opItems.map(x=>`<div class="op-row"><span class="op-name">${esc(x.label)}</span><strong>${signed(x.amount)}</strong></div>`).join('')}</div><p class="footnote">${esc(op.note)}</p></div></section>`:'';
  const basisLabels={revenue:'预算理论收入',gross:'预算理论毛利',reserve:'预算损耗准备金',material:'预算材料',labor:'预算人工',quantity:'合同数量',unitCost:'材料及人工单位成本',allowedQuantity:'允许补产量',processed:'累计加工量',defects:'累计不良量'};
@@ -55,12 +58,9 @@ export function renderImportedDiagnosis(a){
  const refLines=ref?[...(ref.breaches??[]),...(ref.unknownItems??[]).map(x=>`${x.label}：${x.reasons.join('；')}`)]:[];
  const refAlert=`<div class="limit-alert ${refState==='breach'?'bad':refState==='ok'?'ok':''}"><h3>${esc(refTitle)}</h3><p>${refLines.length?esc(refLines.join('；'))+'。':'毛利率与不良率均未越过参考阈值。'}</p></div>`;
  const refHtml=ref?`<section class="panel diagnosis-limits"><div class="panel-head"><h2>预算模型参考阈值</h2></div><div class="panel-body"><div class="limit-grid">${refCard(ref.margin)}${refCard(ref.defect)}</div>${refAlert}</div></section>`:`<section class="panel diagnosis-limits"><div class="panel-head"><h2>预算模型参考阈值</h2></div><div class="panel-body"><div class="limit-alert"><h3>参考阈值待核算</h3><p>服务端未返回参考阈值结果。</p></div></div></section>`;
- const increaseHtml=d.increases.length?`<section class="panel diagnosis-group"><div class="panel-head"><h2>增加差距的项目</h2><span class="muted">${incNote}</span></div><div class="panel-body">${causeGrid(d.increases)}</div></section>`:'';
- const offsetHtml=d.offsets.length?`<section class="panel diagnosis-group"><div class="panel-head"><h2>抵消差距的项目</h2><span class="muted">${offNote}</span></div><div class="panel-body">${causeGrid(d.offsets)}</div></section>`:'';
  const unknownProd=d.unknowns.filter(c=>c.kind==='production');
  const unknownHtml=unknownProd.length?`<section class="panel diagnosis-group"><div class="panel-head"><h2>待补齐项目</h2><span class="muted">资料不完整时不按零计</span></div><div class="panel-body">${causeGrid(unknownProd)}</div></section>`:'';
- const adjustHtml=`<section class="panel diagnosis-group"><div class="panel-head"><h2>基线调整与舍入</h2><span class="muted">对照口径，不计入生产原因</span></div><div class="panel-body"><div class="adjust-list">${[d.baseline,d.rounding].map(c=>`<div class="adjust-row ${c.amount==null?'pending':''}"><span>${esc(c.label)}</span><strong>${signed(c.amount)}</strong><p>${esc(c.fact)}</p></div>`).join('')}</div></div></section>`;
- return `<section class="diagnosis-verdict ${verdictClass}"><div class="verdict-mark">${mark}</div><div><h2>${esc(verdictTitle)}</h2><p>${esc(verdictSub)}</p></div></section>${opHtml}${gapHtml}${increaseHtml}${offsetHtml}${unknownHtml}${adjustHtml}${refHtml}`;
+ return `<section class="diagnosis-verdict ${verdictClass}"><div class="verdict-mark">${mark}</div><div><h2>${esc(verdictTitle)}</h2><p>${esc(verdictSub)}</p></div></section>${opHtml}${gapHtml}${unknownHtml}${refHtml}`;
 }
 const pct=x=>x==null?'—':(Number(x)*100).toFixed(1)+'%';
 const stateText={complete:'资料完整',provisional:'含暂估资料',incomplete:'生产或成本待补齐',operating_incomplete:'经营费用待补齐',not_started:'尚未开工'};

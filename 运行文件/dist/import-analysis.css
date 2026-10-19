@@ -49,12 +49,6 @@
 .analysis-page .cause.pending em{color:#8fa0b8}
 .analysis-page .diagnosis-group{margin-top:16px}
 .analysis-page .diagnosis-group .cause-grid{margin-top:0}
-.analysis-page .adjust-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.analysis-page .adjust-row{border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:#fbfcfe}
-.analysis-page .adjust-row.pending{background:#f8fafd}
-.analysis-page .adjust-row span{font-size:11px;color:#718197}
-.analysis-page .adjust-row strong{display:block;font-size:18px;margin:6px 0 3px;font-variant-numeric:tabular-nums}
-.analysis-page .adjust-row p{font-size:11px;color:#8491a5;line-height:1.7}
 .analysis-page .limit.pending{border-color:#dce4ef;background:#f8fafd}
 .analysis-page .limit.pending strong{color:#5b6b82}
 .analysis-page .limit-reasons{font-size:10px!important;color:#b34a54!important;margin-top:8px;line-height:1.6}
@@ -70,7 +64,7 @@
 .analysis-page .threshold-kv dd{color:#3f5068;font-variant-numeric:tabular-nums;text-align:right}
 @media(max-width:700px){.analysis-page .cause-grid{grid-template-columns:1fr}
 .analysis-page .limit-grid{grid-template-columns:1fr}
-.analysis-page .adjust-list,.analysis-page .threshold-kv{grid-template-columns:1fr}
+.analysis-page .threshold-kv{grid-template-columns:1fr}
 .analysis-page .diagnosis-verdict{padding:16px}
 .analysis-page .diagnosis-verdict h2{font-size:17px}
 .analysis-page .imported-stats .stat-card{border-top-width:3px}

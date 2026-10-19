@@ -341,12 +341,8 @@ Excel 来源|Excel source
 毛利率偏差较大|Significant gross margin deviation
 毛利率需要关注|Gross margin needs attention
 可能原因，需进一步核实|Possible causes require verification
-增加差距的项目|Items increasing the shortfall
-抵消差距的项目|Items offsetting the shortfall
 待补齐项目|Missing inputs
 资料不完整时不按零计|Incomplete data is not counted as zero
-基线调整与舍入|Baseline adjustments and rounding
-对照口径，不计入生产原因|Comparison adjustments, separate from production causes
 预算模型参考阈值|Budget model reference thresholds
 查看公式与参数|View formula and parameters
 材料价格|Material prices
