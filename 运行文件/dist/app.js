@@ -6,7 +6,7 @@ import {mountImported} from './imported-workspace.js';
 import {mountMonitor} from './monitor-workspace.js';
 import {monitorMasthead} from './monitor-dashboard.js';
 import {icon,esc} from './ui.js';
-import {mountAi} from './ai-page.js';
+import {mountAi,resetAiState} from './ai-page.js';
 
 const app=document.querySelector('#app');let cleanup=null;
 const titles={monitor:['订单动态监测','持续跟踪生产变化，让每一笔订单的利润可见。'],import:['标准数据导入','导入成本表与每日表，核对后生成订单。'],imported:['订单分析','按日期推进，比较实际利润与同进度理论利润。'],data:['订单详细数据','按订单与业务日期核查 Excel 中的生产、成本来源及补单记录。'],ai:['AI 订单助手','围绕订单利润与成本提问。']};
@@ -27,11 +27,11 @@ const originalFetch=window.fetch.bind(window);
 window.fetch=async(...args)=>{const response=await originalFetch(...args);const url=typeof args[0]==='string'?args[0]:args[0]?.url??'';if(authReady&&authRequired&&authUser&&response.status===401&&url.startsWith('/api/')&&!url.startsWith('/api/auth/')){authUser=null;authReady=false;pendingHash=location.hash;location.hash='#login';}return response;};
 async function render(){
  const sequence=++bootSequence;cleanup?.();cleanup=null;
- if(!authReady){try{const response=await originalFetch('/api/auth/session');if(!response.ok)throw new Error('session');const body=await response.json();if(sequence!==bootSequence)return;authRequired=body.required!==false;authUser=body.user;authReady=true;}catch{if(sequence!==bootSequence)return;authUser=null;authRequired=true;}}
+ if(!authReady){try{const response=await originalFetch('/api/auth/session');if(!response.ok)throw new Error('session');const body=await response.json();if(sequence!==bootSequence)return;authRequired=body.required!==false;authUser=body.user;authReady=true;window.__qiyingUser=body.user;}catch{if(sequence!==bootSequence)return;authUser=null;authRequired=true;}}
  const publicRoute=['#login','#register'].includes(location.hash);
- if(authRequired&&!authUser){if(!publicRoute){if(/^#(import|monitor|data|imported|ai)([/?]|$)/.test(location.hash))pendingHash=location.hash;history.replaceState(null,'','#login');}document.body.className='auth-page';cleanup=mountAuth(app,{initialMode:location.hash==='#register'?'register':'login',onLogin:user=>{authUser=user;authReady=true;location.hash=pendingHash;}});return;}
+ if(authRequired&&!authUser){if(!publicRoute){if(/^#(import|monitor|data|imported|ai)([/?]|$)/.test(location.hash))pendingHash=location.hash;history.replaceState(null,'','#login');}document.body.className='auth-page';cleanup=mountAuth(app,{initialMode:location.hash==='#register'?'register':'login',onLogin:user=>{authUser=user;authReady=true;window.__qiyingUser=user;location.hash=pendingHash;}});return;}
  if(publicRoute)history.replaceState(null,'','#import');renderBusiness();
- if(authUser){const actions=document.createElement('div');actions.className='auth-account-actions';actions.innerHTML='<span>'+esc(authUser.username)+'</span><button id="auth-logout" type="button">退出登录</button>';app.querySelector('.project-tools').appendChild(actions);actions.querySelector('button').onclick=async()=>{try{const r=await originalFetch('/api/auth/logout',{method:'POST'});if(!r.ok)throw new Error();authUser=null;authReady=false;pendingHash='#import';location.hash='#login';}catch{toast('退出失败，请重试');}};}
+ if(authUser){const actions=document.createElement('div');actions.className='auth-account-actions';actions.innerHTML='<span>'+esc(authUser.username)+'</span><button id="auth-logout" type="button">退出登录</button>';app.querySelector('.project-tools').appendChild(actions);actions.querySelector('button').onclick=async()=>{try{const r=await originalFetch('/api/auth/logout',{method:'POST'});if(!r.ok)throw new Error();authUser=null;authReady=false;window.__qiyingUser=null;try{resetAiState();}catch{}pendingHash='#import';location.hash='#login';}catch{toast('退出失败，请重试');}};}
  applyProjectLanguage();
 }
 installProjectLanguage();

@@ -277,3 +277,31 @@ test('SEV-1.0: better, flat and unknown margins are handled without a false warn
   assert.equal(missing.actual, null);
   assert.equal(missing.expected, null);
 });
+
+test('diagnosis keeps component-level causes without a department rollup', () => {
+  const d = buildDiagnosis(analysis('100', components({materialUsage: '200', materialPrice: '-100'})));
+  assert.equal(d.departments, undefined);
+  assert.equal(d.primaryDepartment, undefined);
+  assert.equal(d.primary.key, 'materialUsage');
+  assert.equal(d.primary.department, undefined);
+  assert.equal(d.components.find(c => c.key === 'materialUsage').department, undefined);
+  assert.equal(d.components.find(c => c.key === 'materialUsage').support, undefined);
+  assert.equal(d.suggestions[0].department, undefined);
+  assert.equal(d.rule.departmentVersion, undefined);
+  const r = reference();
+  assert.equal(r.margin.department, undefined);
+  assert.equal(r.defect.department, undefined);
+});
+
+test('operating loss exposes actual expense categories without inventing a gross gap', () => {
+  const d = buildDiagnosis(analysis('0', components({}), {
+    cumulative: {processed: 108, defects: 8, actual: {margin: '0.10000000', operating: '-40.00', costs: {'管理': '25', '销售': '10', '财务': '5'}}}
+  }));
+  assert.equal(d.state, 'at_target');
+  assert.equal(d.operating.loss, true);
+  assert.equal(d.operating.profit, '-40.00');
+  assert.deepEqual(d.operating.expenses.map(x => x.label), ['管理', '销售', '财务']);
+  assert.deepEqual(d.operating.expenses.map(x => x.amount), ['25.00', '10.00', '5.00']);
+  assert.equal(d.operating.expenses[0].department, undefined);
+  assert.ok(d.operating.note.includes('经营费用为实际发生额'));
+});

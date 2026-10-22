@@ -10,6 +10,7 @@ import {createMonitorRepository} from '../../server/monitor/storage.mjs';
 import {D,money} from '../../server/profit/decimal.mjs';
 import {evaluate} from '../../server/profit/evaluate.mjs';
 import {calculateSeries} from '../../server/profit/series.mjs';
+import {renderOrdersTable} from '../../../运行文件/dist/monitor-table.js';
 
 export function dataset(id='ORDER-A',prices=[17.2,17.2],quantities=[100,100]){
  const d=normalizePair(...pair()).dataset;d.order.id=id;d.order.start='2026-10-11';d.order.end='2026-10-12';
@@ -87,6 +88,8 @@ test('a review view sees the selected business day end while an explicit cutoff 
  assert.equal((await buildOverview([{dataset:d}],review)).overview.orders[0].cumulative.actual.gross,null);
 });
 test('default monitor views see records dated after the clock but within the selected day',async t=>{
+ // Keep both revision creation and service time within the selected business day.
+ t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-20T12:00:00+08:00')});
  const dir=await mkdtemp(path.join(os.tmpdir(),'b-monitor-'));t.after(()=>rm(dir,{recursive:true,force:true}));
  const store=createStore(dir),repo=createMonitorRepository(path.join(dir,'monitor-state')),d=dataset();
  d.order.end='2026-10-20';d.production.push({...d.production[0],id:'FUTURE-ROW',date:'2026-10-20',availableAt:'2026-10-20T23:59:59+08:00'});
@@ -130,4 +133,22 @@ test('scope filters keep cards, trends, distribution and attention on the same f
  const spaced=await buildOverview([{dataset:a},{dataset:b}],{...options,search:' 恒远   a '}),so=spaced.overview;assert.deepEqual(so.orders.map(r=>r.order.id),['A']);
  const blank=await buildOverview([{dataset:a},{dataset:b}],{...options,search:'   '});assert.equal(blank.overview.coverage.total,2);
  const noMatches=await buildOverview([{dataset:a}],{...options,customer:'不存在'});assert.equal(noMatches.overview.coverage.total,0);assert.equal(noMatches.overview.summary.actualGross,null);
+});
+test('monitor rows name the cost item behind a loss and render it in the list',async()=>{
+ const {overview:o}=await buildOverview([{dataset:dataset('ORDER-A',[30,30])}],options);
+ const row=o.orders[0];
+ assert.equal(row.attribution.state,'gap');
+ assert.equal(row.attribution.increases[0].label,'材料价格');
+ assert.equal(row.attribution.increases[0].shareOfIncrease,'1.00000000');
+ assert.equal(row.attribution.department,undefined);
+ assert.equal(row.operatingLoss,true);
+ const html=renderOrdersTable(o,[row],[row],1,{page:1,filter:null,sort:'risk'},0,0);
+ assert.ok(html.includes('主因 材料价格 100%'));
+ const pendingRow={...row,attribution:null,loss:false,cumulativeDeviation:false,operatingLoss:true};
+ const pending=renderOrdersTable(o,[pendingRow],[pendingRow],1,{page:1,filter:null,sort:'risk'},0,0);
+ assert.ok(pending.includes('经营利润为负 · 查经营费用'));
+ const incompleteRow={...row,attribution:{state:'gap',primary:null,increases:[{key:'labor',label:'人工',amount:'10.00',shareOfIncrease:null}],attributionComplete:false},loss:false,cumulativeDeviation:true,operatingLoss:true};
+ const incomplete=renderOrdersTable(o,[incompleteRow],[incompleteRow],1,{page:1,filter:null,sort:'risk'},0,0);
+ assert.ok(incomplete.includes('差距已确认 · 归因待补齐'));
+ assert.ok(!incomplete.includes('经营利润为负'));
 });

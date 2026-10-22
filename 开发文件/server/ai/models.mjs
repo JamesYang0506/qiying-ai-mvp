@@ -46,7 +46,12 @@ export const MODEL_ALIASES = {
   lite: 'qwen3.5:9b'
 };
 
-export const DEFAULT_MODEL = 'gpt-oss:20b';
+// 🔴 默认模型改为 qwen3.5:9b（2026-10-20 实测）：8 GB 显卡上
+//      qwen3.5:9b 权重 5.63 GB → 可 100% 上 GPU → 60.5 tok/s
+//      gpt-oss:20b 权重 13.79 GB → 最多 54% 上 GPU（再高会触发 WDDM 显存超卖，反而掉到 20 tok/s）
+//    冷加载成本也差一倍（28s vs 46s），且两者无法同时驻留，切一次就付一次。
+//    gpt-oss 仍然完全可用：显式传 model:'gpt-oss'（或 effort:'deep'）即可，回答规范与 qwen 共用同一份 persona。
+export const DEFAULT_MODEL = 'qwen3.5:9b';
 
 export function listModels() {
   return Object.values(MODELS);
@@ -139,11 +144,12 @@ export function pickModel({ requested, available = [], loaded = null, freeMemGb 
 export const EFFORTS = ['auto', 'lite', 'deep'];
 
 /** 判定为精活所需的最低分。低于它一律走 lite。 */
-// 🔴 阈值 35 → 60：35 分太低，"为什么毛利率下降了"（37 分）就会被判重活切到 gpt-oss，
-//    而 gpt-oss 冷加载 47s、常驻 14GB，还会把已加载的 qwen 挤出显存，下轮再切回来又 25s。
-//    用户感知就是"问个业务问题要等一分钟"。提到 60 后：纯推理+领域词(45 分)仍走 qwen，
-//    只有「结构化输出+推理」这类真正重的任务(80 分)才上 gpt-oss。
-export const DEEP_THRESHOLD = 60;
+// 🔴 阈值 60 → 999（2026-10-20）：auto 模式固定走 qwen。
+//    原因不是 gpt-oss 不可用，而是「切一次模型要付 28~46 秒冷加载」，而两个模型装不下同一张 8 GB 卡，
+//    auto 一旦按任务打分来回切换，用户感知就是「问一句等一分钟」。
+//    gpt-oss 保留两条显式入口：传 model:'gpt-oss:20b'，或 effort:'deep'。
+//    想恢复自动分流，把这里改回 60 即可（前提是接受切换成本）。
+export const DEEP_THRESHOLD = 999;
 
 // 命中即加分的语义特征；权重经过场景校准，改之前先对照下面的典型用例。
 const DEEP_SIGNALS = [

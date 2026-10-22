@@ -8,7 +8,7 @@ export function createAiTransport(fetcher=(...args)=>fetch(...args)){
     return {...body.data,status:body.data?.status==='ready'?'ready':'offline'};
    }catch(e){if(signal?.aborted)throw e;return {status:'offline',message:e.name==='TimeoutError'?'AI状态查询超时，请稍后重新检测':e.message};}
   },
-  async sendChat({message,history=[],asOf,orderId='',signal,onDelta=()=>{}}){
+  async sendChat({message,history=[],asOf,orderId='',signal,onDelta=()=>{},onThinking=()=>{},onQueue=()=>{},onNote=()=>{},onWarning=()=>{}}){
    if(!String(message??'').trim())throw new Error('问题不能为空');
    const response=await fetcher(BASE+'/answer',{method:'POST',headers:{'Content-Type':'application/json'},signal,body:JSON.stringify({question:String(message).trim(),history,asOf,orderId})});
    if(!response.ok){const body=await response.json().catch(()=>null);throw new Error(body?.error?.message||`AI服务返回HTTP ${response.status}`);}
@@ -20,6 +20,15 @@ export function createAiTransport(fetcher=(...args)=>fetch(...args)){
     const payload=line.trim().slice(5).trim();if(payload==='[DONE]'){completed=true;return;}
     let obj;try{obj=JSON.parse(payload);}catch{return;}
     if(obj.type==='delta'&&typeof obj.data?.text==='string'){full+=obj.data.text;onDelta(obj.data.text);}
+    // 推理模型（gpt-oss）在思考阶段只发 thinking、不发 delta。
+    // 原来这里直接丢弃，前端 20 多秒看不到任何变化，用户以为卡死了 —— 转出去给界面做进度提示。
+    else if(obj.type==='thinking'&&typeof obj.data?.text==='string'){onThinking(obj.data.text);}
+    // 排队位置：AI 一次只能答一个，这个数字告诉用户「前面还有几个人」（没有就别提，免得吓人）
+    else if(obj.type==='queue'&&typeof obj.data?.ahead==='number'){onQueue(obj.data.ahead);}
+    // 回答被长度上限截断 / 模型写了摘要里没有的数字。这两条是专门为业务问答做的护栏，
+    // 原来前端只认 delta/thinking/error/done，等于全丢了。
+    else if(obj.type==='note'){onNote(obj.data||{});}
+    else if(obj.type==='warning'){onWarning(obj.data||{});}
     else if(obj.type==='error')failure=obj.data?.message||'AI输出中断';
     else if(obj.type==='done'){completed=true;if(obj.data?.finish_reason==='error')failure||='AI输出中断';}
    };

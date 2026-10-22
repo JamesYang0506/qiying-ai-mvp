@@ -18,3 +18,6 @@ __pycache__/
 *.safetensors
 *.log
 .superpowers/
+
+# Local collaboration worktrees must not be published.
+.claude/

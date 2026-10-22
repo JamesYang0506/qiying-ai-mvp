@@ -34,7 +34,6 @@
 .analysis-page .diagnosis-verdict.caution h2{color:#8a5a00}
 .analysis-page .diagnosis-verdict.caution .verdict-mark{background:#d99a1b}
 .analysis-page .diagnosis-verdict .verdict-rule{margin-top:8px;font-size:10px;color:#8491a5;line-height:1.6}
-.analysis-page .cause-link{display:inline-block;margin-top:10px}
 .analysis-page .detail-return{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .analysis-page .detail-return span{font-size:11px;color:#8491a5}
 .analysis-page .detail-focus{display:flex;align-items:center;gap:10px;padding:10px 22px;background:#f5f8ff;border-top:1px solid #e8eef8;font-size:11px;color:#58739b}
@@ -50,19 +49,6 @@
 .analysis-page .cause.pending em{color:#8fa0b8}
 .analysis-page .diagnosis-group{margin-top:16px}
 .analysis-page .diagnosis-group .cause-grid{margin-top:0}
-.analysis-page .diagnosis-advice{margin-top:16px}
-.analysis-page .diagnosis-advice ol{display:grid;gap:12px;padding-left:0;list-style:none;counter-reset:advice}
-.analysis-page .diagnosis-advice li{position:relative;padding:12px 14px 12px 38px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe}
-.analysis-page .diagnosis-advice li:before{counter-increment:advice;content:counter(advice);position:absolute;left:12px;top:12px;width:18px;height:18px;border-radius:50%;background:#eef3fa;color:#5b6b82;font-size:10px;display:grid;place-items:center}
-.analysis-page .diagnosis-advice strong{display:block;font-size:13px;margin-bottom:4px}
-.analysis-page .diagnosis-advice span{display:block;font-size:12px;color:#5b6b82;line-height:1.7}
-.analysis-page .diagnosis-advice small{display:block;margin-top:7px;font-size:10px;color:#9aa6b7;line-height:1.6}
-.analysis-page .adjust-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.analysis-page .adjust-row{border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:#fbfcfe}
-.analysis-page .adjust-row.pending{background:#f8fafd}
-.analysis-page .adjust-row span{font-size:11px;color:#718197}
-.analysis-page .adjust-row strong{display:block;font-size:18px;margin:6px 0 3px;font-variant-numeric:tabular-nums}
-.analysis-page .adjust-row p{font-size:11px;color:#8491a5;line-height:1.7}
 .analysis-page .limit.pending{border-color:#dce4ef;background:#f8fafd}
 .analysis-page .limit.pending strong{color:#5b6b82}
 .analysis-page .limit-reasons{font-size:10px!important;color:#b34a54!important;margin-top:8px;line-height:1.6}
@@ -78,7 +64,7 @@
 .analysis-page .threshold-kv dd{color:#3f5068;font-variant-numeric:tabular-nums;text-align:right}
 @media(max-width:700px){.analysis-page .cause-grid{grid-template-columns:1fr}
 .analysis-page .limit-grid{grid-template-columns:1fr}
-.analysis-page .adjust-list,.analysis-page .threshold-kv{grid-template-columns:1fr}
+.analysis-page .threshold-kv{grid-template-columns:1fr}
 .analysis-page .diagnosis-verdict{padding:16px}
 .analysis-page .diagnosis-verdict h2{font-size:17px}
 .analysis-page .imported-stats .stat-card{border-top-width:3px}
@@ -94,7 +80,6 @@
 .analysis-page table tbody tr:nth-child(even),.import-page table tbody tr:nth-child(even){background:#f8fbff}
 .analysis-page .imported-stats .stat-card{border-radius:12px;padding:24px;box-shadow:0 5px 15px #1f65ae05}
 .analysis-page .diagnosis-group .cause-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-.analysis-page .cause p{line-height:1.8}
 .analysis-page .donut-legend em.donut-amount{font-size:11px;text-align:left;min-width:0;color:#758ba5}
 .import-page .import-intro>h2{font-size:20px;color:#15385f}
 .import-page .file-card{border-color:#b9d4f4;background:linear-gradient(130deg,#f8fbff,#edf5ff);padding:26px}

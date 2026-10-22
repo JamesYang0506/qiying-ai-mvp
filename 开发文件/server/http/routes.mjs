@@ -1,5 +1,6 @@
 import {randomUUID,randomBytes} from 'node:crypto';
 import {readXlsx} from '../import/xlsx.mjs';import {normalizePair,FIX_HINTS} from '../import/normalize.mjs';import {evaluate} from '../profit/evaluate.mjs';import {calculateSeries} from '../profit/series.mjs';import {createCalculationCache} from '../profit/cache.mjs';import {createStore,digest} from '../storage/store.mjs';import {readUpload,readJson} from './uploads.mjs';
+import {isAllowedHost,isAllowedOrigin} from './access.mjs';
 import {D,money,sum} from '../profit/decimal.mjs';import {CATEGORIES} from '../model.mjs';
 import path from 'node:path';
 import {createRepository} from '../orders/repository.mjs';
@@ -26,8 +27,8 @@ export function createRoutes({dataDir,clock=Date.now,calculateOrder,allocateManu
   const prefix='/api/import-v1';if(!url.pathname.startsWith(prefix+'/'))return false;
   try{
    const route=url.pathname.slice(prefix.length),parts=route.split('/').filter(Boolean).map(decodeURIComponent),host=req.headers.host??'';
-   if(!/^(127\.0\.0\.1|localhost):\d+$/.test(host))throw Object.assign(new Error('只允许本机访问'),{status:403});
-   if(req.method==='POST'&&(req.headers.origin!==`http://${host}`||req.headers['x-qiying-token']!==token))throw Object.assign(new Error('请从本站页面提交，或刷新页面后重试'),{status:403});
+   if(!isAllowedHost(host))throw Object.assign(new Error('只允许本机或内网设备访问'),{status:403});
+   if(req.method==='POST'&&((req.headers.origin!==`http://${host}`&&!isAllowedOrigin(req,host))||req.headers['x-qiying-token']!==token))throw Object.assign(new Error('请从本站页面提交，或刷新页面后重试'),{status:403});
    if(req.method==='GET'&&route==='/session'){send(res,200,{token,version:'import-v1',templateVersion:'A-ORDER-0.2',capabilities:['monitor-scope-v2','order-diagnosis-v3']});return true;}
    if(req.method==='GET'&&route==='/monitor'){send(res,200,await monitor.browse({asOf:url.searchParams.get('asOf')||undefined,period:Number(url.searchParams.get('period')??7),baselineMode:url.searchParams.get('baselineMode')??'ideal',knownAt:url.searchParams.get('knownAt')||undefined,customer:url.searchParams.get('customer')??'',status:url.searchParams.get('status')??'',risk:url.searchParams.get('risk')??'',search:url.searchParams.get('search')??''}));return true;}
    if(req.method==='GET'&&parts[0]==='monitor'&&parts[1]==='views'&&parts.length===3){send(res,200,await monitor.get(parts[2]));return true;}

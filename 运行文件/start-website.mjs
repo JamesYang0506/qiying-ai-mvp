@@ -3,8 +3,26 @@ import {fileURLToPath} from 'node:url';
 import {access} from 'node:fs/promises';
 import path from 'node:path';
 import net from 'node:net';
+import os from 'node:os';
 
 const root=fileURLToPath(new URL('./',import.meta.url));
+
+// 取本机局域网 IPv4：同事要用的就是这一条，光给 127.0.0.1 他们打不开
+function lanIPv4(){
+ const prefer=/^(以太网|Ethernet|WLAN|Wi-?Fi|eth|en)/i;
+ const skip=/(vEthernet|VMware|VirtualBox|Hyper-V|Loopback|Tailscale|ZeroTier|docker|veth|br-)/i;
+ const list=[];
+ for(const [name,addrs] of Object.entries(os.networkInterfaces())){
+  if(skip.test(name))continue;
+  for(const a of addrs||[]){
+   if(a.family!=='IPv4'||a.internal)continue;
+   if(String(a.address).startsWith('169.254.'))continue;
+   list.push({name,address:a.address,preferred:prefer.test(name)});
+  }
+ }
+ list.sort((x,y)=>Number(y.preferred)-Number(x.preferred));
+ return list[0]||null;
+}
 const args=process.argv.slice(2);
 const portArgs=args.filter(arg=>arg!=='--no-browser');
 const explicitPort=portArgs.length>0;
@@ -33,22 +51,35 @@ async function isWebsiteReady(){
   }catch{return false;}
 }
 function openBrowser(){
-  console.log('网站 IP：127.0.0.1');
-  console.log(`网站端口：${port}`);
-  console.log(`网站地址：${url}`);
-  if(noBrowser||process.platform!=='win32')return;
-  const opener=spawn(path.join(process.env.SystemRoot||'C:\\Windows','System32','rundll32.exe'),['url.dll,FileProtocolHandler',url],{stdio:'ignore',windowsHide:true});
-  opener.on('error',()=>console.log('未能自动打开浏览器，请手动打开上面的网址。'));
-  opener.unref();
+ const lan=lanIPv4();
+ console.log('网站 IP：127.0.0.1');
+ console.log(`网站端口：${port}`);
+ console.log(`网站地址：${url}`);
+ if(lan)console.log(`局域网地址：http://${lan.address}:${port}/   ← 同一网络的同事用这个（${lan.name}）`);
+ else console.log('局域网地址：未检测到（网线/WiFi 未连？）');
+ if(noBrowser||process.platform!=='win32')return;
+ const opener=spawn(path.join(process.env.SystemRoot||'C:\\Windows','System32','rundll32.exe'),['url.dll,FileProtocolHandler',url],{stdio:'ignore',windowsHide:true});
+ opener.on('error',()=>console.log('未能自动打开浏览器，请手动打开上面的网址。'));
+ opener.unref();
 }
+// 判断端口能不能用。必须两重探测，缺一不可：
+//   ① 连一下 127.0.0.1：Windows 允许 0.0.0.0:P 与 127.0.0.1:P 同时 bind，
+//      此时我们绑得上 0.0.0.0，但用户访问 127.0.0.1 会被对方的 socket 接走（更具体的地址优先）。
+//   ② 试绑 0.0.0.0：防止有进程绑在具体网卡地址（如 10.x.x.x:P）上，那种情况连接回环探测不到。
 async function portInUse(){
-  return new Promise(resolve=>{
-    const socket=net.createConnection({host:'127.0.0.1',port});
-    const finish=value=>{socket.destroy();resolve(value);};
-    socket.setTimeout(700,()=>finish(false));
-    socket.once('connect',()=>finish(true));
-    socket.once('error',()=>finish(false));
-  });
+ const listening=await new Promise(resolve=>{
+  const socket=net.createConnection({host:'127.0.0.1',port});
+  socket.setTimeout(700,()=>{socket.destroy();resolve(false);});
+  socket.once('connect',()=>{socket.destroy();resolve(true);});
+  socket.once('error',()=>{socket.destroy();resolve(false);});
+ });
+ if(listening)return true;
+ return new Promise(resolve=>{
+  const server=net.createServer();
+  server.once('error',()=>resolve(true));
+  server.once('listening',()=>{server.close(()=>resolve(false));});
+  server.listen(port,'0.0.0.0');
+ });
 }
 try{
   await access(path.join(root,'serve.mjs'));

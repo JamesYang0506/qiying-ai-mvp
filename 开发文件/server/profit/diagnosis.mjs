@@ -255,6 +255,18 @@ export function buildDiagnosis(analysis = {}) {
   }
   const primary = productionComplete && increasesTotal != null && increasesTotal.gt(0) && increases.length
     && new D(increases[0].shareOfIncrease).gte(PRIMARY_SHARE_THRESHOLD) ? increases[0] : null;
+  const operating = dec(analysis.cumulative?.actual?.operating);
+  const costOf = key => dec(analysis.cumulative?.actual?.costs?.[key]);
+  const operatingInfo = {
+    profit: amount(operating),
+    loss: operating != null && operating.lt(0),
+    expenses: [
+      {key: 'management', label: '管理', amount: amount(costOf('管理'))},
+      {key: 'sales', label: '销售', amount: amount(costOf('销售'))},
+      {key: 'finance', label: '财务', amount: amount(costOf('财务'))}
+    ],
+    note: '经营费用为实际发生额，未做同进度理论分解，仅用于说明经营亏损构成。'
+  };
   const baseline = components.find(c => c.key === 'budgetAdjustment');
   const rounding = components.find(c => c.key === 'rounding');
   const top = increases[0] ?? null;
@@ -321,6 +333,7 @@ export function buildDiagnosis(analysis = {}) {
     knownIncreasesTotal: amount(knownIncreasesTotal),
     knownOffsetsTotal: amount(knownOffsetsTotal),
     primary: primary ? {key: primary.key, label: primary.label, amount: primary.amount, shareOfIncrease: primary.shareOfIncrease} : null,
+    operating: operatingInfo,
     summary: {title, sub},
     suggestions,
     evidence: {
